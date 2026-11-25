@@ -1,0 +1,69 @@
+name: 编一个我自己的 Rikka
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出我的补丁文件
+        uses: actions/checkout@v4
+        with:
+          path: mine
+
+      - name: 下载官方源码（锁定版本）
+        uses: actions/checkout@v4
+        with:
+          repository: rikkahub/rikkahub
+          ref: 1fb09152942a0f3ae46bf796fe17eeaf2b022f19
+          path: src
+
+      - name: 打上美化补丁
+        run: |
+          cd src
+          if [ -f ../mine/beautify.patch ]; then
+            git apply -v ../mine/beautify.patch
+          else
+            echo "没有 beautify.patch，先编原版"
+          fi
+
+      - name: 装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+
+      - name: 装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 装 web-ui 依赖
+        working-directory: src/web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: 接受 Android SDK 许可
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: 造一个占位 google-services.json
+        run: |
+          echo '{"project_info":{"project_number":"123456789012","project_id":"rikka-local","storage_bucket":"rikka-local.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:aaaaaaaaaaaaaaaaaaaaaa","android_client_info":{"package_name":"me.rerere.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}},{"client_info":{"mobilesdk_app_id":"1:123456789012:android:bbbbbbbbbbbbbbbbbbbbbb","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > src/app/google-services.json
+
+      - name: 编译
+        working-directory: src
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikka-apk
+          path: src/app/build/outputs/apk/debug/*.apk
