@@ -2929,7 +2929,7 @@ index a316327..aaef8ab 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..a48d6aa
+index 0000000..c303b28
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 @@ -0,0 +1,614 @@
@@ -3333,7 +3333,7 @@ index 0000000..a48d6aa
 + *   然后 `for (line in firstLine..lastLine)` 逐行处理，跨多行时每一行都必然被画到；
 + * - **底色**：每行的上下边界直接取 `getLineTop(line)` / `getLineBottom(line)`，
 + *   左右边界取「该行内被区间覆盖的字符子区间」= `max(rangeStart, getLineStart(line))` ..
-+ *   `min(rangeEnd, getLineEnd(line))`，再对这个子区间用 `getHorizontalPosition(...)` 算 x 范围
++ *   `min(rangeEnd, getLineEnd(line))`，再对这个子区间用 `getHorizontalPosition(..., usePrimaryDirection = false)` 算 x 范围
 + *   （首字符的 x 当左边、末字符的右边缘当右边，兜底再和 `getBoundingBox` 取一次 min/max）；
 + *   子区间为空（这一行没有引号字符，属于跨行延续 / 空行）就**整行铺满**
 + *   （`getLineLeft(line)` .. `getLineRight(line)`），所以跨行必然每行都有底色；
@@ -3435,8 +3435,8 @@ index 0000000..a48d6aa
 +                var right: Float
 +                if (segEnd > segStart) {
 +                    // 正常情况：区间在这行有真正的字符，用水平位置定左右边界
-+                    val headX = layoutResult.getHorizontalPosition(segStart)
-+                    val tailX = layoutResult.getHorizontalPosition(segEnd.coerceAtMost(textLength))
++                    val headX = layoutResult.getHorizontalPosition(segStart, usePrimaryDirection = false)
++                    val tailX = layoutResult.getHorizontalPosition(segEnd.coerceAtMost(textLength), usePrimaryDirection = false)
 +                    val tailBox = layoutResult.getBoundingBox(segEnd - 1)
 +                    left = minOf(headX, tailBox.left)
 +                    right = maxOf(tailX, tailBox.right)
@@ -3452,8 +3452,8 @@ index 0000000..a48d6aa
 +                    right = layoutResult.getLineRight(line)
 +                } else if (rawEnd > rawStart) {
 +                    // 末行只剩标点后的空白 / 换行：按未裁剪的原始子区间画，不去铺满整行
-+                    val headX = layoutResult.getHorizontalPosition(rawStart)
-+                    val tailX = layoutResult.getHorizontalPosition(rawEnd.coerceAtMost(textLength))
++                    val headX = layoutResult.getHorizontalPosition(rawStart, usePrimaryDirection = false)
++                    val tailX = layoutResult.getHorizontalPosition(rawEnd.coerceAtMost(textLength), usePrimaryDirection = false)
 +                    left = minOf(headX, tailX)
 +                    right = maxOf(headX, tailX)
 +                } else {
