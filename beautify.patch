@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..7145d1b 100644
+index 205e822..16126e7 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1601,7 +1601,7 @@ index 205e822..7145d1b 100644
 +    val quoteUnderlineDotted: Boolean = false,
 +    // 对白样式·点线下划线颜色：null 表示跟随文字颜色
 +    val quoteUnderlineDottedColor: Long? = null,
-+    // 对白样式·行首竖线：每个引号区间起点那一行左侧画一根 2dp 竖线
++    // 对白样式·行首竖线：每个引号区间起点（开引号）左边画一根 2dp 短竖线，高度只覆盖那一行
 +    val quoteLeadingBar: Boolean = false,
 +    // 对白样式·行首竖线颜色：null 表示跟随文字颜色
 +    val quoteLeadingBarColor: Long? = null,
@@ -1611,7 +1611,7 @@ index 205e822..7145d1b 100644
 +    val quoteBackgroundGap: Int = 2,
 +    // 对白样式·下划线与文字的距离（dp，0..10）：三条下划线的 y 起点 = baseline + 这个值
 +    val quoteUnderlineOffset: Int = 2,
-+    // 对白样式·虚线与点线的疏密（0.5f..2.5f，步进 0.1）：dash 段与间隔都乘这个系数，1f = 原样
++    // 对白样式·虚线与点线的疏密（0.3f..3.0f，步进 0.1）：dash 段与间隔都乘这个系数，1f = 原样
 +    val quoteDashScale: Float = 1f,
 +    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
 +    val recentColors: List<Long> = emptyList(),
@@ -2076,7 +2076,7 @@ index 45c3d83..e4d8057 100644
              }
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..ffd9bc5 100644
+index a18dd69..b9507f1 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -2121,7 +2121,7 @@ index a18dd69..ffd9bc5 100644
  import kotlinx.coroutines.FlowPreview
  import kotlinx.coroutines.flow.debounce
  import kotlinx.serialization.json.jsonArray
-@@ -75,6 +82,7 @@ import me.rerere.hugeicons.stroke.MusicNote03
+@@ -75,10 +82,12 @@ import me.rerere.hugeicons.stroke.MusicNote03
  import me.rerere.hugeicons.stroke.Video01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
@@ -2129,7 +2129,12 @@ index a18dd69..ffd9bc5 100644
  import me.rerere.rikkahub.data.model.Assistant
  import me.rerere.rikkahub.data.model.AssistantAffectScope
  import me.rerere.rikkahub.data.model.MessageNode
-@@ -89,6 +97,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
+ import me.rerere.rikkahub.data.model.replaceRegexes
++import me.rerere.rikkahub.ui.components.richtext.LocalQuoteStyleEnabled
+ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+ import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
+ import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
+@@ -89,6 +98,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
  import me.rerere.rikkahub.ui.modifier.shimmer
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
@@ -2141,7 +2146,7 @@ index a18dd69..ffd9bc5 100644
  import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
  import me.rerere.rikkahub.ui.theme.extendColors
  import me.rerere.rikkahub.utils.JsonInstant
-@@ -121,6 +134,8 @@ fun ChatMessage(
+@@ -121,6 +135,8 @@ fun ChatMessage(
      val message = node.messages[node.selectIndex]
      val settings = LocalSettings.current.displaySetting
      val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
@@ -2150,7 +2155,7 @@ index a18dd69..ffd9bc5 100644
      val textStyle = LocalTextStyle.current.copy(
          fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
          lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
-@@ -137,45 +152,62 @@ fun ChatMessage(
+@@ -137,45 +153,67 @@ fun ChatMessage(
          verticalArrangement = Arrangement.spacedBy(4.dp)
      ) {
          if (!message.parts.isEmptyUIMessage()) {
@@ -2239,15 +2244,20 @@ index a18dd69..ffd9bc5 100644
                  )
 +
 +                message.translation?.let { translation ->
-+                    CollapsibleTranslationText(
-+                        content = translation,
-+                        onClickCitation = {}
-+                    )
++                    // 译文同样按角色门禁：用户消息的译文也不套「对白样式」
++                    CompositionLocalProvider(
++                        LocalQuoteStyleEnabled provides (message.role == MessageRole.ASSISTANT)
++                    ) {
++                        CollapsibleTranslationText(
++                            content = translation,
++                            onClickCitation = {}
++                        )
++                    }
 +                }
              }
          }
  
-@@ -261,6 +293,100 @@ fun ChatMessage(
+@@ -261,6 +299,100 @@ fun ChatMessage(
      }
  }
  
@@ -2348,7 +2358,7 @@ index a18dd69..ffd9bc5 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -281,6 +407,20 @@ private fun MessagePartsBlock(
+@@ -281,6 +413,20 @@ private fun MessagePartsBlock(
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
      val partsState by rememberUpdatedState(parts)
@@ -2369,7 +2379,7 @@ index a18dd69..ffd9bc5 100644
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +464,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +470,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -2382,7 +2392,7 @@ index a18dd69..ffd9bc5 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,39 +509,63 @@ private fun MessagePartsBlock(
+@@ -365,39 +515,67 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
@@ -2431,8 +2441,9 @@ index a18dd69..ffd9bc5 100644
 +                                                    scope = AssistantAffectScope.USER,
                                                      visual = true,
                                                  ),
--                                                onClickCitation = handleClickCitation,
-+                                                onClickCitation = handleClickCitation
+                                                 onClickCitation = handleClickCitation,
++                                                // 用户自己发的话不套「对白样式」
++                                                enableQuoteStyle = role == MessageRole.ASSISTANT,
 +                                            )
 +                                        }
 +                                    }
@@ -2463,11 +2474,22 @@ index a18dd69..ffd9bc5 100644
 +                                                        visual = true,
 +                                                    ),
 +                                                    onClickCitation = handleClickCitation,
++                                                    // 只有 AI 消息吃「对白样式」
++                                                    enableQuoteStyle = role == MessageRole.ASSISTANT,
 +                                                )
 +                                            }
                                          }
                                      }
                                  } else {
+@@ -408,6 +586,8 @@ private fun MessagePartsBlock(
+                                             visual = true,
+                                         ),
+                                         onClickCitation = handleClickCitation,
++                                        // 只有 AI 消息吃「对白样式」
++                                        enableQuoteStyle = role == MessageRole.ASSISTANT,
+                                         modifier = Modifier
+                                             .animateContentSize()
+                                     )
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt
 index 20f0c33..015bddc 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt
@@ -2690,10 +2712,66 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..819e86e 100644
+index 3d21e9f..f84d6f3 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-@@ -623,7 +623,7 @@ private fun MarkdownNode(
+@@ -235,7 +235,11 @@ fun MarkdownBlock(
+     content: String,
+     modifier: Modifier = Modifier,
+     style: TextStyle = LocalTextStyle.current,
+-    onClickCitation: (String) -> Unit = {}
++    onClickCitation: (String) -> Unit = {},
++    // 对白样式（引号高亮）只给 AI 消息开：聊天正文按 message.role 传进来，
++    // 用户自己发的话传 false，整棵子树都不上色（等于这条消息关掉了这个功能）。
++    // 默认 true 让设置页预览 / 导出页 / 调试页这些非聊天正文的地方保持原样。
++    enableQuoteStyle: Boolean = true,
+ ) {
+     var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
+ 
+@@ -251,22 +255,26 @@ fun MarkdownBlock(
+             .collect { setData(it) }
+     }
+ 
+-    if (data.hasHtml) {
+-        MarkdownNew(
+-            content = content,
+-            modifier = modifier,
+-            style = style,
+-            onClickCitation = onClickCitation,
+-        )
+-    } else {
+-        ProvideTextStyle(style) {
+-            Column(
+-                modifier = modifier.padding(horizontal = 4.dp)
+-            ) {
+-                data.astTree.children.fastForEach { child ->
+-                    MarkdownNode(
+-                        node = child, content = data.preprocessed, onClickCitation = onClickCitation
+-                    )
++    // 角色门禁从这里往下传：Paragraph / MarkdownNew / 行内文本节点都在这个子树里，
++    // quoteStyleOrNull() 会读这个 Local，所以不用给递归的 MarkdownNode 逐个加参数
++    CompositionLocalProvider(LocalQuoteStyleEnabled provides enableQuoteStyle) {
++        if (data.hasHtml) {
++            MarkdownNew(
++                content = content,
++                modifier = modifier,
++                style = style,
++                onClickCitation = onClickCitation,
++            )
++        } else {
++            ProvideTextStyle(style) {
++                Column(
++                    modifier = modifier.padding(horizontal = 4.dp)
++                ) {
++                    data.astTree.children.fastForEach { child ->
++                        MarkdownNode(
++                            node = child, content = data.preprocessed, onClickCitation = onClickCitation
++                        )
++                    }
+                 }
+             }
+         }
+@@ -623,7 +631,7 @@ private fun MarkdownNode(
          MarkdownTokenTypes.TEXT -> {
              val text = node.getTextInNode(content)
              Text(
@@ -2702,7 +2780,7 @@ index 3d21e9f..819e86e 100644
                  modifier = modifier,
              )
          }
-@@ -790,6 +790,9 @@ private fun Paragraph(
+@@ -790,6 +798,9 @@ private fun Paragraph(
          node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
      }
      val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
@@ -2712,7 +2790,7 @@ index 3d21e9f..819e86e 100644
  
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
-@@ -800,7 +803,8 @@ private fun Paragraph(
+@@ -800,7 +811,8 @@ private fun Paragraph(
              else Modifier
          )
      ) {
@@ -2722,7 +2800,7 @@ index 3d21e9f..819e86e 100644
              buildAnnotatedString {
                  node.children.fastForEach { child ->
                      appendMarkdownNodeContent(
-@@ -814,16 +818,33 @@ private fun Paragraph(
+@@ -814,16 +826,38 @@ private fun Paragraph(
                          trim = trim,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2731,10 +2809,15 @@ index 3d21e9f..819e86e 100644
                  }
              }
          }
-+        // 引号区间（自绘用）：从 AnnotatedString 的注解里捞，key 是拼好的字符串，只在重建时算一次
++        // 引号区间（自绘用）：从 AnnotatedString 的注解里捞，key 是拼好的字符串，只在重建时算一次。
++        // 这里顺手把首尾相接的区间合并掉：引号符号是单独一段、后面紧跟正文，不合并的话同一行会被画成
++        // 两个各带 2dp 内缩的底色矩形，中间露一条缝（用户看到的「中间断开了」）。
 +        val quoteRanges = remember(annotatedString, quoteStyle) {
-+            if (quoteStyle?.needsDecoration == true) annotatedString.collectQuoteRanges()
-+            else EMPTY_QUOTE_RANGES
++            if (quoteStyle?.needsDecoration == true) {
++                mergeTouchingRanges(annotatedString.collectQuoteRanges())
++            } else {
++                EMPTY_QUOTE_RANGES
++            }
 +        }
 +        // 布局结果只写在 onTextLayout 里、只在 drawBehind 里读，改动它只会让绘制失效，不会引起重组
 +        val quoteLayout = rememberQuoteLayoutHolder()
@@ -2757,7 +2840,7 @@ index 3d21e9f..819e86e 100644
              style = LocalTextStyle.current.copy(
                  lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
              )
-@@ -999,6 +1020,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -999,6 +1033,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
      enableLatexRendering: Boolean = true,
      latexColorArgb: Int = 0,
      onClickCitation: (String) -> Unit = {},
@@ -2766,7 +2849,7 @@ index 3d21e9f..819e86e 100644
  ) {
      when {
          node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
-@@ -1020,9 +1043,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1020,9 +1056,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      it
                  }.replace(BREAK_LINE_REGEX, "\n")
              }
@@ -2779,7 +2862,7 @@ index 3d21e9f..819e86e 100644
          }
  
          node.type == MarkdownElementTypes.EMPH -> {
-@@ -1037,7 +1060,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1037,7 +1073,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2789,7 +2872,7 @@ index 3d21e9f..819e86e 100644
                      )
                  }
              }
-@@ -1055,7 +1079,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1055,7 +1092,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2799,7 +2882,7 @@ index 3d21e9f..819e86e 100644
                      )
                  }
              }
-@@ -1073,7 +1098,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1073,7 +1111,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2809,7 +2892,7 @@ index 3d21e9f..819e86e 100644
                      )
                  }
              }
-@@ -1240,7 +1266,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1240,7 +1279,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      style = style,
                      enableLatexRendering = enableLatexRendering,
                      latexColorArgb = latexColorArgb,
@@ -2929,14 +3012,15 @@ index a316327..aaef8ab 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..c303b28
+index 0000000..b1fc895
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,614 @@
+@@ -0,0 +1,712 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.runtime.Composable
++import androidx.compose.runtime.compositionLocalOf
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
@@ -2947,8 +3031,10 @@ index 0000000..c303b28
 +import androidx.compose.ui.geometry.Offset
 +import androidx.compose.ui.geometry.Size
 +import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.Path
 +import androidx.compose.ui.graphics.PathEffect
 +import androidx.compose.ui.graphics.StrokeCap
++import androidx.compose.ui.graphics.drawscope.Stroke
 +import androidx.compose.ui.platform.LocalDensity
 +import androidx.compose.ui.text.AnnotatedString
 +import androidx.compose.ui.text.SpanStyle
@@ -2971,9 +3057,13 @@ index 0000000..c303b28
 + * 2. 底色 / 下划线（实线、虚线、点线，可以同时画）/ 行首竖线全部由 [Modifier.quoteDecoration] 在
 + *    `Text` 的 `drawBehind` 里自绘：靠 `TextLayoutResult` 的**行 API**（`getLineTop` / `getLineBottom` /
 + *    `getLineLeft` / `getLineRight` / `getLineStart` / `getLineEnd` + `getHorizontalPosition`）
-+ *    逐行算几何，一行一个圆角矩形、一行几条线——所以行与行之间天然留白（不再靠字符包围盒去猜，
-+ *    行首是标点 / 空白或区间跨行时也不会漏画），下划线颜色也不再被 `TextDecoration` 锁死在文字颜色上。
-+ *    行首竖线按「引言块」语义**整段只画一根**，从第一行顶端连到最后一行底端。
++ *    逐行算几何（不再靠字符包围盒去猜，行首是标点 / 空白或区间跨行时也不会漏画），
++ *    下划线颜色也不再被 `TextDecoration` 锁死在文字颜色上。
++ *    首尾相接的区间先合并（[mergeTouchingRanges]），同一行里「开引号 + 正文 + 闭引号」是一整块底色，
++ *    行与行之间仍按「行间空隙」留白；
++ *    下划线的实线 / 虚线 / 点线各自攒成一条 Path 一次画完，dash 相位连续、长度才均匀；
++ *    行首竖线只画**开引号所在那一行**的短竖条，x 取开引号字符的左边缘 - 2dp（紧贴引号），
++ *    跨行对白不往下延伸。
 + * 3. 引号区间从 [AnnotatedString] 的字符串注解（[QUOTE_RANGE_ANNOTATION]）里捞回来，
 + *    这样不用给 `appendMarkdownNodeContent` 那一串递归调用再加一个出参，
 + *    消息原文一个字符都不改，位置一一对应。
@@ -2981,7 +3071,9 @@ index 0000000..c303b28
 + * - 不新增任何 markdown 语法，消息原文不改，复制/导出拿到的还是用户看到的原文；
 + * - 代码天然不受影响：行内代码（CODE_SPAN / `<code>`）和代码块（CODE_FENCE / `<pre>`）在渲染器里
 + *   都有独立分支，文本压根不经过 [appendQuotedText]，不需要正则去跳过 ``` 围栏；
-+ * - 关闭开关时 [quoteStyleOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
++ * - 只对 AI 消息生效：聊天正文按 `message.role` 把 [LocalQuoteStyleEnabled] 提供下去，
++ *   用户自己发的消息整棵子树都是 false，SpanStyle 和自绘都不挂；
++ * - 关闭开关（或角色门禁为 false）时 [quoteStyleOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
 + *   渲染路径连 `onTextLayout` / `drawBehind` 都不加，与改动前的输出逐像素一致。
 + */
 +
@@ -2995,6 +3087,18 @@ index 0000000..c303b28
 +
 +/** 空区间表（共享常量，任何地方都不许改它的元素） */
 +internal val EMPTY_QUOTE_RANGES: IntArray = IntArray(0)
++
++/**
++ * 当前子树要不要吃「对白样式」。
++ *
++ * 默认 `true`，让设置页预览 / 调试页 / 导出页这些直接调 `MarkdownBlock` 的地方保持原来的表现；
++ * 聊天正文按**消息角色**由调用方显式提供：AI 消息 true、用户消息 false（用户自己发的话不染色）。
++ *
++ * 走 CompositionLocal 而不是给递归的 `MarkdownNode` / `Paragraph` 逐个加参数：
++ * `MarkdownBlock` 里提供一次，整棵子树（含 `MarkdownNew` 的 HTML 兜底路径、行内文本节点）都能读到，
++ * `quoteStyleOrNull()` 在最里层直接判断，不用改十几处递归签名。
++ */
++internal val LocalQuoteStyleEnabled = compositionLocalOf { true }
 +
 +/**
 + * 纯函数：把一段纯文本按引号切成若干段，标出哪几段在引号内。
@@ -3105,10 +3209,15 @@ index 0000000..c303b28
 +    val leadingBar: Boolean = false,
 +    val leadingBarColor: Color? = null,
 +    val backgroundCorner: Int = 4,
++    /**
++     * 行与行之间底色留白（dp），**上下各取一半**（默认 2dp）。
++     * 注意它只管「行与行」之间；同一行里开引号 / 闭引号和里面的文字永远是一整块
++     * （首尾相接的区间在绘制前会先合并，见 [mergeTouchingRanges]）。
++     */
 +    val backgroundGap: Int = 2,
 +    /** 下划线与文字的距离（dp，0..10）：第一条线的 y = baseline + 这个值 */
 +    val underlineOffset: Int = 2,
-+    /** 虚线与点线的疏密（0.5f..2.5f，滑块步进 0.1）：dash 段和间隔都乘这个系数 */
++    /** 虚线与点线的疏密（0.3f..3.0f，滑块步进 0.1）：dash 段和间隔都乘这个系数 */
 +    val dashScale: Float = 1f,
 +    val selfDrawn: Boolean = false,
 +) {
@@ -3198,6 +3307,38 @@ index 0000000..c303b28
 +}
 +
 +/**
++ * 把首尾相接（`前一段.end == 后一段.start`）的区间合并成一个。
++ *
++ * 为什么需要：[splitQuotedSegments] 把**开引号 / 闭引号各自单独算一段**、引号里的正文再算一段，
++ * 于是「“你好”」会产出三个相邻区间（引号、正文、引号），每个区间在绘制阶段都要各自画一个
++ * 行矩形 + 左右各内缩 2dp，结果就是**同一行里引号和正文的底色被切成两个矩形，中间露一条缝**
++ * （用户报的「中间断开了」其实是这个，不是行与行之间的空隙）。
++ * 合并之后同一行只有一块底色，行与行之间仍然按 `backgroundGap` 留空隙。
++ *
++ * 纯函数、结果在组合期 remember，绘制阶段不额外分配。
++ */
++internal fun mergeTouchingRanges(ranges: IntArray): IntArray {
++    if (ranges.size < 4) return ranges
++    val merged = IntArray(ranges.size)
++    var outSize = 0
++    var i = 0
++    while (i + 1 < ranges.size) {
++        val start = ranges[i]
++        var end = ranges[i + 1]
++        i += 2
++        // 后面的区间只要和当前区间首尾相接（或已经重叠）就一路吞进来
++        while (i + 1 < ranges.size && ranges[i] <= end) {
++            if (ranges[i + 1] > end) end = ranges[i + 1]
++            i += 2
++        }
++        merged[outSize] = start
++        merged[outSize + 1] = end
++        outSize += 2
++    }
++    return if (outSize == ranges.size) merged else merged.copyOf(outSize)
++}
++
++/**
 + * 当前这条消息该用的对白样式：开关关掉就是 null（渲染路径完全不变）；
 + * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
 + *
@@ -3207,9 +3348,14 @@ index 0000000..c303b28
 + *
 + * [selfDrawn] 由调用方给：消息正文（[Markdown] 的 Paragraph）传 true，走自绘；
 + * HTML 兜底和独立文本节点不传，保持旧的 SpanStyle 行为。
++ *
++ * 角色门禁：[LocalQuoteStyleEnabled] 为 false 时直接返回 null（用户自己发的消息，
++ * 以及任何显式关闭的本子树），SpanStyle 和自绘都不会挂，渲染路径与没这个功能时一模一样。
 + */
 +@Composable
 +internal fun quoteStyleOrNull(selfDrawn: Boolean = false): QuoteStyle? {
++    // 用户消息不走这条路径：连颜色都不算，直接当作「功能关闭」
++    if (!LocalQuoteStyleEnabled.current) return null
 +    val displaySetting = LocalSettings.current.displaySetting
 +    if (!displaySetting.enableQuoteHighlight) return null
 +    val colorScheme = MaterialTheme.colorScheme
@@ -3238,8 +3384,9 @@ index 0000000..c303b28
 +        // 行首竖线用自己的颜色，不再借用下划线颜色
 +        leadingBarColor = displaySetting.quoteLeadingBarColor?.let { Color(it) },
 +        backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 64),
++        // 「整段上下的内缩」不再参与行间留白（行间永远无缝），只在首行之上 / 末行之下生效
 +        backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 24),
-+        // 「下划线与文字的距离」滑块（0..10dp）与「虚线与点线的疏密」滑块（0.5x..2.5x）
++        // 「下划线与文字的距离」滑块（0..10dp）与「虚线与点线的疏密」滑块（0.3x..3.0x）
 +        underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, MAX_UNDERLINE_OFFSET),
 +        dashScale = displaySetting.quoteDashScale.coerceIn(MIN_DASH_SCALE, MAX_DASH_SCALE),
 +        selfDrawn = selfDrawn,
@@ -3293,32 +3440,33 @@ index 0000000..c303b28
 +    }
 +}
 +
-+/** 虚线 / 点线疏密滑块的下限（1x 的一半），防止 dash 段被缩成 0 导致 PathEffect 画不出线 */
-+private const val MIN_DASH_SCALE = 0.5f
++/** 虚线 / 点线疏密滑块的下限（0.3x），再小 dash 段就细到看不见了 */
++private const val MIN_DASH_SCALE = 0.3f
 +
-+/** 虚线 / 点线疏密滑块的上限（2.5x），再大就变成稀疏的长划线了 */
-+private const val MAX_DASH_SCALE = 2.5f
++/** 虚线 / 点线疏密滑块的上限（3.0x），再大就变成稀疏的长划线了 */
++private const val MAX_DASH_SCALE = 3.0f
 +
 +/** 下划线与文字距离滑块的上限（dp），和设置页的滑块范围一致 */
 +private const val MAX_UNDERLINE_OFFSET = 10
 +
 +/**
-+ * 虚线的「线长 / 空档」：默认 6dp 线 + 4dp 空档，再整体乘上 [scale]（设置页「虚线与点线的疏密」，
-+ * 0.5x..2.5x），最后按屏幕密度折算成 px，避免高密度屏上糊成实线。
-+ * 只有虚线下划线用得到，实线是纯 drawLine（不带 PathEffect）。
++ * 虚线的「线长 / 空档」：默认 **3dp 线 + 2dp 空档**，再整体乘上 [scale]（设置页「虚线与点线的疏密」，
++ * 0.3x..3.0x），最后按屏幕密度折算成 px，避免高密度屏上糊成实线。
++ * 比早先的 6dp/4dp 短一半以上，看上去才是细密的虚线而不是几根长划线。
++ * 只有虚线下划线用得到，实线是纯 Path（不带 PathEffect）。
 + */
 +private fun dashedPathEffect(density: Density, scale: Float): PathEffect {
 +    val unit = density.density * scale.coerceIn(MIN_DASH_SCALE, MAX_DASH_SCALE)
-+    return PathEffect.dashPathEffect(floatArrayOf(6f * unit, 4f * unit))
++    return PathEffect.dashPathEffect(floatArrayOf(3f * unit, 2f * unit))
 +}
 +
 +/**
-+ * 点线的「线长 / 空档」：默认 1dp 点 + 3dp 空档，同样乘 [scale]，折算成 px 后看上去就是一串小点。
++ * 点线的「线长 / 空档」：默认 **1dp 点 + 1.5dp 空档**，同样乘 [scale]，折算成 px 后看上去就是一串小点。
 + * 只有点线下划线用得到。
 + */
 +private fun dottedPathEffect(density: Density, scale: Float): PathEffect {
 +    val unit = density.density * scale.coerceIn(MIN_DASH_SCALE, MAX_DASH_SCALE)
-+    return PathEffect.dashPathEffect(floatArrayOf(1f * unit, 3f * unit))
++    return PathEffect.dashPathEffect(floatArrayOf(1f * unit, 1.5f * unit))
 +}
 +
 +/**
@@ -3329,31 +3477,39 @@ index 0000000..c303b28
 + * 首字符的包围盒会窄成一条线甚至量到别的行上，那一行就整块漏画，用户看到的就是「同一段对白里
 + * 中间几行没有底色」）。
 + *
++ * - **区间先合并**：进来的 [ranges] 已经过 [mergeTouchingRanges] 处理，同一行里
++ *   「开引号 + 正文 + 闭引号」是一整段（不然会被画成好几个各带 2dp 内缩的矩形，中间露缝）；
 + * - **起止行**：`getLineForOffset(rangeStart)` / `getLineForOffset(rangeEnd - 1)`，
 + *   然后 `for (line in firstLine..lastLine)` 逐行处理，跨多行时每一行都必然被画到；
-+ * - **底色**：每行的上下边界直接取 `getLineTop(line)` / `getLineBottom(line)`，
++ * - **底色**：每行的上下边界取 `getLineTop(line)` / `getLineBottom(line)` 后**上下各内缩
++ *   `backgroundGap / 2`**（默认 2dp），所以行与行之间仍然留白；**同一行只画一个圆角矩形**，
++ *   引号和正文共用同一块（区间已在入口合并，不会再被切成两段）；
++ *   左右各内缩 2dp，圆角统一取 `backgroundCorner`；
 + *   左右边界取「该行内被区间覆盖的字符子区间」= `max(rangeStart, getLineStart(line))` ..
-+ *   `min(rangeEnd, getLineEnd(line))`，再对这个子区间用 `getHorizontalPosition(..., usePrimaryDirection = false)` 算 x 范围
-+ *   （首字符的 x 当左边、末字符的右边缘当右边，兜底再和 `getBoundingBox` 取一次 min/max）；
++ *   `min(rangeEnd, getLineEnd(line))`，再对这个子区间用 `getHorizontalPosition(..., usePrimaryDirection = false)`
++ *   算 x 范围（首字符的 x 当左边、末字符的右边缘当右边，兜底再和 `getBoundingBox` 取一次 min/max）；
 + *   子区间为空（这一行没有引号字符，属于跨行延续 / 空行）就**整行铺满**
 + *   （`getLineLeft(line)` .. `getLineRight(line)`），所以跨行必然每行都有底色；
-+ *   每行上下各内缩 `backgroundGap / 2`，左右各内缩 2dp，画一个圆角矩形；
-+ * - **下划线**：一行若干条 `drawLine`，粗细 1dp，实线 / 虚线 / 点线**各画各的**：
++ * - **下划线：整段一次性画**。实线 / 虚线 / 点线**各自一个独立的 [Path]**（不共用），把所有行的
++ *   `moveTo(left, y)` / `lineTo(right, y)` 攒在同一个 Path 里，最后各 `drawPath(..., style = Stroke(...))`
++ *   一次。早先是每行 `drawLine` + `pathEffect`，每行的 dash 相位都从 0 重新开始、每行长度又不一样，
++ *   看上去一段长一段短；现在整段共用一条连续路径 + 一个 PathEffect，相位连续、dash 长度均匀：
 + *   - y 起点 = `getLineBaseline(line) + underlineOffset.dp`，之后每多开一条再往下错 2dp
 + *     （实线 → 虚线 → 点线），三条全开就是三条分开的线，互不重叠；
 + *   - 实线：不带 `PathEffect`，颜色 `solidUnderlineColor ?: 文字色`；
-+ *   - 虚线：`dashPathEffect(6dp * dashScale, 4dp * dashScale)`，颜色 `dashedUnderlineColor ?: 文字色`；
-+ *   - 点线：`dashPathEffect(1dp * dashScale, 3dp * dashScale)`，颜色 `dottedUnderlineColor ?: 文字色`；
-+ * - **行首竖线**：**整段只画一根**——x 取 `getLineLeft(firstLine)` 再往左偏 4dp（不压在字符上），
-+ *   左边距不够（`getLineLeft < 4dp`）时改画在 `getLineLeft` 内侧 2dp，避免被父布局裁掉；
-+ *   高度从 `getLineTop(firstLine)` 一直连到 `getLineBottom(lastLine)`，一条连续的竖线盖住整段，
-+ *   不再「每行画一段压在引号旁边」；宽度 2dp，颜色 `leadingBarColor ?: 文字色`；
-+ * - **层序**：底色（`drawRoundRect`）在最底层 → 下划线（`drawLine`）→ 行首竖线（`drawRect`）在最上层，
-+ *   三层互相独立、可以同时开启；竖线最后画，所以它永远压在底色之上（不会引号旁画完又被底色盖掉）；
-+ * - 绘制阶段不创建集合 / 不拼字符串：区间是组合期算好的 IntArray，`Offset` / `Size` /
-+ *   `CornerRadius` 都是 value class，不产生堆分配。
++ *   - 虚线：`dashPathEffect(3dp * dashScale, 2dp * dashScale)`，颜色 `dashedUnderlineColor ?: 文字色`；
++ *   - 点线：`dashPathEffect(1dp * dashScale, 1.5dp * dashScale)`，颜色 `dottedUnderlineColor ?: 文字色`；
++ * - **行首竖线（紧贴开引号的那一小段）**：x 取区间起点（也就是**开引号字符**）的
++ *   `getBoundingBox(rangeStart).left` 再往左偏 2dp，所以竖线就在引号左边，不会跑到行首、
++ *   更不会落在段落左边缘（不 clamp 到 `getLineLeft`，引号在行中间时也照样贴着引号）；
++ *   高度**只覆盖开引号所在那一行**（`getLineTop(firstLine)` .. `getLineBottom(firstLine)`），
++ *   跨行对白**不**往下延伸；宽度 2dp、圆角 1dp，颜色 `leadingBarColor ?: 文字色`；
++ * - **层序**：底色（Path 填充）在最底层 → 下划线（三条 Path）→ 行首竖线在最上层，
++ *   三层互相独立、可以同时开启；竖线最后画，所以它永远压在底色之上；
++ * - 绘制阶段不拼字符串、不建集合：区间是组合期算好的 IntArray，`PathEffect` 在组合期 remember，
++ *   `Offset` / `Size` / `CornerRadius` / `Rect` 都是 value class；每段区间最多新建 4 个 Path。
 + *
-+ * `quoteRanges` 为空（没引号 / 关闭自绘）时调用方根本不会挂这个 Modifier。
++ * `quoteRanges` 为空（没引号 / 关闭自绘 / 用户消息）时调用方根本不会挂这个 Modifier。
 + */
 +@Composable
 +internal fun Modifier.quoteDecoration(
@@ -3372,7 +3528,9 @@ index 0000000..c303b28
 +    val dottedEffect = remember(style.dottedUnderline, dashScale, density) {
 +        if (style.dottedUnderline) dottedPathEffect(density, dashScale) else null
 +    }
++    // 行与行之间的留白（每行上下各取一半），默认 2dp；同一行内的引号与正文已经合并成一整段
 +    val gapPx = with(density) { style.backgroundGap.dp.toPx() }
++    val halfGapPx = gapPx / 2f
 +    val cornerPx = with(density) { style.backgroundCorner.dp.toPx() }
 +    // 「下划线与文字的距离」滑块：baseline 往下偏移多少 dp 才是第一条线的位置
 +    val underlineOffsetPx =
@@ -3393,9 +3551,9 @@ index 0000000..c303b28
 +        // 多条下划线同时打开时，每多一条就再往下让 2dp（实线 → 虚线 → 点线），不会糊在一起
 +        val lineStep = 2.dp.toPx()
 +        val barWidth = 2.dp.toPx()
-+        // 竖线默认画在行左边界往外 4dp（不压在字符上）；左边距不够时退回行内 2dp
-+        val barOuterGap = 4.dp.toPx()
-+        val barInnerGap = 2.dp.toPx()
++        // 竖线紧贴开引号字符：x = 开引号包围盒左边缘 - 2dp（不 clamp，引号在行中间时也贴着引号）
++        val barOuterGap = 2.dp.toPx()
++        val barCorner = CornerRadius(1.dp.toPx())
 +        val corner = CornerRadius(cornerPx)
 +        val textLength = text.length
 +        val drawSolid = style.solidUnderline
@@ -3414,6 +3572,11 @@ index 0000000..c303b28
 +            val firstLine = layoutResult.getLineForOffset(rangeStart)
 +            val lastLine = layoutResult.getLineForOffset(rangeEnd - 1)
 +            if (lastLine < firstLine) continue
++
++            // 三条下划线各自一条 Path（互不共用），整段攒完各画一次
++            val solidPath = if (drawSolid) Path() else null
++            val dashedPath = if (drawDashed) Path() else null
++            val dottedPath = if (drawDotted) Path() else null
 +
 +            var line = firstLine
 +            while (line <= lastLine) {
@@ -3462,10 +3625,12 @@ index 0000000..c303b28
 +                    continue
 +                }
 +
-+                val rowTop = lineTop + gapPx / 2f
-+                val rowBottom = lineBottom - gapPx / 2f
++                // 行与行之间仍然留白：每行上下各内缩 backgroundGap / 2（默认 2dp）；
++                // 同一行里引号和正文已经合并（见 mergeTouchingRanges），所以这一行只画一块
++                val rowTop = lineTop + halfGapPx
++                val rowBottom = lineBottom - halfGapPx
 +                if (rowBottom > rowTop && right > left) {
-+                    // ① 底色：行上下边界直接来自 getLineTop / getLineBottom
++                    // ① 底色：这一行一块圆角矩形（引号和正文共用同一块，见 mergeTouchingRanges）
 +                    if (backgroundColor != null) {
 +                        val backgroundLeft = left + horizontalInset
 +                        val backgroundRight = right - horizontalInset
@@ -3478,69 +3643,85 @@ index 0000000..c303b28
 +                            )
 +                        }
 +                    }
-+                    // ② 下划线：实线 / 虚线 / 点线各画各的；
++                    // ② 下划线：三条线各攒各的 Path（同一个 Path 内的连续相位由 PathEffect 统一处理），
 +                    //    y 起点 = baseline + 「下划线与文字的距离」滑块值，之后每条再往下错 2dp
-+                    if (drawSolid || drawDashed || drawDotted) {
++                    if (solidPath != null || dashedPath != null || dottedPath != null) {
 +                        val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
 +                        var slot = 0
-+                        if (drawSolid) {
++                        if (solidPath != null) {
 +                            val y = baseY + lineStep * slot
 +                            slot++
-+                            drawLine(
-+                                color = solidColor,
-+                                start = Offset(left, y),
-+                                end = Offset(right, y),
-+                                strokeWidth = strokeWidth,
-+                                cap = StrokeCap.Butt,
-+                                pathEffect = null,
-+                            )
++                            solidPath.moveTo(left, y)
++                            solidPath.lineTo(right, y)
 +                        }
-+                        if (drawDashed) {
++                        if (dashedPath != null) {
 +                            val y = baseY + lineStep * slot
 +                            slot++
-+                            drawLine(
-+                                color = dashedColor,
-+                                start = Offset(left, y),
-+                                end = Offset(right, y),
-+                                strokeWidth = strokeWidth,
-+                                cap = StrokeCap.Butt,
-+                                pathEffect = dashedEffect,
-+                            )
++                            dashedPath.moveTo(left, y)
++                            dashedPath.lineTo(right, y)
 +                        }
-+                        if (drawDotted) {
++                        if (dottedPath != null) {
 +                            val y = baseY + lineStep * slot
-+                            slot++
-+                            drawLine(
-+                                color = dottedColor,
-+                                start = Offset(left, y),
-+                                end = Offset(right, y),
-+                                strokeWidth = strokeWidth,
-+                                cap = StrokeCap.Butt,
-+                                pathEffect = dottedEffect,
-+                            )
++                            dottedPath.moveTo(left, y)
++                            dottedPath.lineTo(right, y)
 +                        }
 +                    }
 +                }
 +                line++
 +            }
 +
-+            // ③ 行首竖线：整段只画一根，从第一行 top 连到最后一行 bottom；
-+            //    放在底色 / 下划线之后画，保证它永远在最上层（不会被第一行的底色盖住）。
-+            //    x 从行左边界往外偏 4dp，左边距不够时退回行内 2dp，避免被父布局裁掉
++            // 下划线：整段各画一次，相位连续 → dash 长度均匀；实线不带 PathEffect
++            if (solidPath != null) {
++                drawPath(
++                    path = solidPath,
++                    color = solidColor,
++                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt),
++                )
++            }
++            if (dashedPath != null) {
++                drawPath(
++                    path = dashedPath,
++                    color = dashedColor,
++                    style = Stroke(
++                        width = strokeWidth,
++                        cap = StrokeCap.Butt,
++                        pathEffect = dashedEffect,
++                    ),
++                )
++            }
++            if (dottedPath != null) {
++                drawPath(
++                    path = dottedPath,
++                    color = dottedColor,
++                    style = Stroke(
++                        width = strokeWidth,
++                        cap = StrokeCap.Butt,
++                        pathEffect = dottedEffect,
++                    ),
++                )
++            }
++
++            // ③ 行首竖线：只画**短的一段**，紧贴开引号字符左侧，高度就是开引号所在那一行的
++            //    行高（跨行对白也不往下延伸：跨行位置不规整，延伸反而会压在别的段落上）；
++            //    放在底色 / 下划线之后画，保证它永远在最上层。
 +            if (drawBar) {
-+                val lineLeft = layoutResult.getLineLeft(firstLine)
-+                val barX = if (lineLeft >= barOuterGap) {
-+                    lineLeft - barOuterGap
++                // x = 开引号字符（区间起点）的包围盒左边缘 - 2dp：
++                // 引号从行中间开始时也贴着引号，不会被拽到行首 / 段落边缘，也不 clamp
++                val quoteBox = layoutResult.getBoundingBox(rangeStart)
++                val barX = if (quoteBox.width > 0f) {
++                    quoteBox.left - barOuterGap
 +                } else {
-+                    lineLeft + barInnerGap
++                    layoutResult.getHorizontalPosition(rangeStart, usePrimaryDirection = false) - barOuterGap
 +                }
++                // 只覆盖开引号所在那一行，不再延伸到整段末尾
 +                val barTop = layoutResult.getLineTop(firstLine)
-+                val barBottom = layoutResult.getLineBottom(lastLine)
++                val barBottom = layoutResult.getLineBottom(firstLine)
 +                if (barBottom > barTop) {
-+                    drawRect(
++                    drawRoundRect(
 +                        color = barColor,
 +                        topLeft = Offset(barX, barTop),
 +                        size = Size(barWidth, barBottom - barTop),
++                        cornerRadius = barCorner,
 +                    )
 +                }
 +            }
@@ -6081,7 +6262,7 @@ index c296a24..f747ad6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..98dfd7c
+index 0000000..8ebfe02
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 @@ -0,0 +1,600 @@
@@ -6165,7 +6346,7 @@ index 0000000..98dfd7c
 + *              点线                [开关]
 + *              颜色                红 ●     ← 只在「点线」打开时出现
 + *              下划线与文字的距离   2dp      ← 滑块 0–10dp
-+ *              虚线与点线的疏密     1.0x     ← 滑块 0.5–2.5，步进 0.1
++ *              虚线与点线的疏密     1.0x     ← 滑块 0.3–3.0，步进 0.1
 + * ［行首竖线］ 行首竖线            [开关]
 + *              竖线颜色            红 ●     ← null 表示跟随文字颜色
 + * ```
@@ -6199,7 +6380,7 @@ index 0000000..98dfd7c
 +    val backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 12)
 +    // 下划线两条滑块：和文字的距离（dp）、虚线点线的疏密（倍数）
 +    val underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, 10)
-+    val dashScale = displaySetting.quoteDashScale.coerceIn(0.5f, 2.5f)
++    val dashScale = displaySetting.quoteDashScale.coerceIn(0.3f, 3.0f)
 +
 +    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
 +    val textColorField = ColorField(
@@ -6564,7 +6745,7 @@ index 0000000..98dfd7c
 +                        headlineContent = { Text("虚线与点线的疏密") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("调小更密、调大更疏，只影响虚线和点线")
++                                Text("调小更密、调大更疏（0.3–3.0 倍），只影响虚线和点线")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -6581,8 +6762,8 @@ index 0000000..98dfd7c
 +                                                )
 +                                            }
 +                                        },
-+                                        valueRange = 0.5f..2.5f,
-+                                        steps = 19,
++                                        valueRange = 0.3f..3.0f,
++                                        steps = 26,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
 +                                    Text(text = "%.1fx".format(dashScale))
@@ -6611,7 +6792,7 @@ index 0000000..98dfd7c
 +                    item(
 +                        headlineContent = { Text("行首竖线") },
 +                        supportingContent = {
-+                            Text("整段引号只画一根竖线：从第一行顶端连到最后一行底端，画在文字左边 4dp 处")
++                            Text("在开引号紧左边画一条 2dp 短竖线，高度只覆盖引号所在那一行")
 +                        },
 +                        trailingContent = {
 +                            Switch(
