@@ -56,10 +56,27 @@ index bef7871..b56ecb8 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..45deb36 100644
+index 205e822..32c87c1 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-@@ -604,6 +604,41 @@ enum class BackgroundEffectType {
+@@ -595,6 +595,16 @@ enum class ChatFontFamily {
+     CUSTOM,
+ }
+ 
++/**
++ * 字体库条目：name 是导入时的显示名，relativePath 是相对 filesDir 的字体文件路径。
++ * chatCustomFontPath 指向其中一条时就是正在使用的字体。
++ */
++@Serializable
++data class CustomFontEntry(
++    val name: String = "",
++    val relativePath: String = "",
++)
++
+ @Serializable
+ enum class BackgroundEffectType {
+     @SerialName("blur")
+@@ -604,6 +614,41 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -101,8 +118,23 @@ index 205e822..45deb36 100644
  @Serializable
  data class DisplaySetting(
      val userAvatar: Avatar = Avatar.Dummy,
-@@ -644,6 +679,42 @@ data class DisplaySetting(
+@@ -615,6 +660,10 @@ data class DisplaySetting(
+     val showModelIcon: Boolean = true,
+     val showModelName: Boolean = true,
+     val showDateTimeInMessage: Boolean = false,
++    // 消息时间：完整格式（yyyy年M月d日 HH:mm:ss）
++    val messageTimeFullFormat: Boolean = false,
++    // 消息时间：显示在昵称/头像那一行下面
++    val messageTimeUnderName: Boolean = false,
+     val showTokenUsage: Boolean = true,
+     val showThinkingContent: Boolean = true,
+     val autoCloseThinking: Boolean = true,
+@@ -642,8 +691,46 @@ data class DisplaySetting(
+     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+     val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
++    // 字体库：导入过的所有自定义字体，chatCustomFontPath 指向当前正在使用的那一个
++    val customFonts: List<CustomFontEntry> = emptyList(),
      val enableVolumeKeyScroll: Boolean = false,
      val volumeKeyScrollRatio: Float = 1.0f,
 +    // 颜色自定义：null 表示跟随主题，取值统一是 ARGB（0xAARRGGBB）
@@ -570,7 +602,7 @@ index 45c3d83..51811b5 100644
              }
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..c01b8b1 100644
+index a18dd69..2dbfc40 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -644,7 +676,54 @@ index a18dd69..c01b8b1 100644
      val textStyle = LocalTextStyle.current.copy(
          fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
          lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
-@@ -159,23 +174,27 @@ fun ChatMessage(
+@@ -137,45 +152,56 @@ fun ChatMessage(
+         verticalArrangement = Arrangement.spacedBy(4.dp)
+     ) {
+         if (!message.parts.isEmptyUIMessage()) {
+-            Row(
+-                modifier = Modifier
+-                    .fillMaxWidth(),
+-                verticalAlignment = Alignment.CenterVertically,
+-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
++            Column(
++                modifier = Modifier.fillMaxWidth(),
++                horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
+             ) {
+-                ChatMessageAssistantAvatar(
+-                    message = message,
+-                    model = model,
+-                    assistant = assistant,
+-                    loading = loading,
+-                    modifier = Modifier.weight(1f)
+-                )
+-                ChatMessageUserAvatar(
+-                    message = message,
+-                    avatar = settings.userAvatar,
+-                    nickname = settings.userNickname,
+-                    modifier = Modifier.weight(1f)
+-                )
++                Row(
++                    modifier = Modifier
++                        .fillMaxWidth(),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
++                ) {
++                    ChatMessageAssistantAvatar(
++                        message = message,
++                        model = model,
++                        assistant = assistant,
++                        loading = loading,
++                        modifier = Modifier.weight(1f)
++                    )
++                    ChatMessageUserAvatar(
++                        message = message,
++                        avatar = settings.userAvatar,
++                        nickname = settings.userNickname,
++                        modifier = Modifier.weight(1f)
++                    )
++                }
++                // 时间显示在昵称/头像那一行下面（开关在「界面偏好设置」里）
++                ChatMessageHeaderTime(message = message)
              }
          }
          ProvideTextStyle(textStyle) {
@@ -688,7 +767,7 @@ index a18dd69..c01b8b1 100644
              }
          }
  
-@@ -261,6 +280,100 @@ fun ChatMessage(
+@@ -261,6 +287,100 @@ fun ChatMessage(
      }
  }
  
@@ -789,7 +868,7 @@ index a18dd69..c01b8b1 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -281,6 +394,20 @@ private fun MessagePartsBlock(
+@@ -281,6 +401,20 @@ private fun MessagePartsBlock(
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
      val partsState by rememberUpdatedState(parts)
@@ -810,7 +889,7 @@ index a18dd69..c01b8b1 100644
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +451,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +458,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -823,7 +902,7 @@ index a18dd69..c01b8b1 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,41 +496,65 @@ private fun MessagePartsBlock(
+@@ -365,39 +503,63 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
@@ -874,9 +953,9 @@ index a18dd69..c01b8b1 100644
                                                  ),
 -                                                onClickCitation = handleClickCitation,
 +                                                onClickCitation = handleClickCitation
-                                             )
-                                         }
-                                     }
++                                            )
++                                        }
++                                    }
 +                                }
 +                            } else {
 +                                if (settings.displaySetting.showAssistantBubble) {
@@ -895,7 +974,7 @@ index a18dd69..c01b8b1 100644
 +                                                image = rememberBubbleImage(settings.displaySetting.assistantBubbleImage),
 +                                                maskColor = assistantBubbleColor.copy(alpha = 0.72f),
 +                                                tint = settings.displaySetting.backgroundImageTint,
-+                                            )
+                                             )
 +                                            Column(modifier = Modifier.padding(8.dp)) {
 +                                                MarkdownBlock(
 +                                                    content = part.text.replaceRegexes(
@@ -906,11 +985,92 @@ index a18dd69..c01b8b1 100644
 +                                                    onClickCitation = handleClickCitation,
 +                                                )
 +                                            }
-+                                        }
-+                                    }
+                                         }
+                                     }
                                  } else {
-                                     MarkdownBlock(
-                                         content = part.text.replaceRegexes(
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt
+index 20f0c33..015bddc 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt
+@@ -63,6 +63,7 @@ import me.rerere.rikkahub.utils.copyMessageToClipboard
+ import me.rerere.rikkahub.utils.extractQuotedContentAsText
+ import me.rerere.rikkahub.utils.removeBracketedContent
+ import me.rerere.rikkahub.utils.toLocalString
++import me.rerere.rikkahub.utils.toMessageTimeFullString
+ import me.rerere.rikkahub.utils.toMessageTimeString
+ import java.util.Locale
+ 
+@@ -200,9 +201,18 @@ fun ColumnScope.ChatMessageActionButtons(
+             onUpdate = onUpdate,
+         )
+ 
+-        if (settings.displaySetting.showDateTimeInMessage) {
++        // 时间挪到昵称下方显示时，操作栏这行就不再重复显示
++        if (settings.displaySetting.showDateTimeInMessage && !settings.displaySetting.messageTimeUnderName) {
++            val messageTimeText = remember(message.createdAt, settings.displaySetting.messageTimeFullFormat) {
++                val localDateTime = message.createdAt.toJavaLocalDateTime()
++                if (settings.displaySetting.messageTimeFullFormat) {
++                    localDateTime.toMessageTimeFullString()
++                } else {
++                    localDateTime.toMessageTimeString()
++                }
++            }
+             Text(
+-                text = message.createdAt.toJavaLocalDateTime().toMessageTimeString(),
++                text = messageTimeText,
+                 style = MaterialTheme.typography.labelSmall,
+                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                 maxLines = 1,
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
+index b66320e..ab35be9 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
+@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.res.stringResource
+@@ -21,6 +22,8 @@ import me.rerere.rikkahub.data.model.Avatar
+ import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+ import me.rerere.rikkahub.ui.components.ui.UIAvatar
+ import me.rerere.rikkahub.ui.context.LocalSettings
++import me.rerere.rikkahub.utils.toMessageTimeFullString
++import kotlinx.datetime.toJavaLocalDateTime
+ 
+ @Composable
+ fun ChatMessageUserAvatar(
+@@ -116,3 +119,28 @@ fun ChatMessageAssistantAvatar(
+         }
+     }
+ }
++
++/**
++ * 昵称/头像那一行下面的一行消息时间。
++ * 只在「在消息中显示日期和时间」和「时间显示在昵称下方」都打开时出现，格式固定为 2026年5月20日 23:06:49。
++ */
++@Composable
++fun ChatMessageHeaderTime(
++    message: UIMessage,
++    modifier: Modifier = Modifier,
++) {
++    val settings = LocalSettings.current.displaySetting
++    if (!settings.showDateTimeInMessage || !settings.messageTimeUnderName) {
++        return
++    }
++    val timeText = remember(message.createdAt) {
++        message.createdAt.toJavaLocalDateTime().toMessageTimeFullString()
++    }
++    Text(
++        text = timeText,
++        style = MaterialTheme.typography.labelSmall,
++        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
++        maxLines = 1,
++        modifier = modifier,
++    )
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 index 3d21e9f..3dccced 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
@@ -3734,6 +3894,368 @@ index c296a24..7910ae0 100644
                      item(
                          onClick = { navController.navigate(Screen.SettingPreferencesNotification) },
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
+index 2ee9d11..3ddf860 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
+@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.LargeFlexibleTopAppBar
+ import androidx.compose.material3.LocalTextStyle
++import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.Slider
+ import androidx.compose.material3.Switch
+@@ -34,6 +36,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.res.stringResource
+ import androidx.compose.ui.text.font.FontFamily
++import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.dokar.sonner.ToastType
+@@ -43,8 +46,10 @@ import kotlinx.coroutines.withContext
+ import me.rerere.hugeicons.HugeIcons
+ import me.rerere.hugeicons.stroke.Delete02
+ import me.rerere.hugeicons.stroke.FileImport
++import me.rerere.hugeicons.stroke.Tick01
+ import me.rerere.rikkahub.R
+ import me.rerere.rikkahub.data.datastore.ChatFontFamily
++import me.rerere.rikkahub.data.datastore.CustomFontEntry
+ import me.rerere.rikkahub.data.datastore.DisplaySetting
+ import me.rerere.rikkahub.data.files.FileFolders
+ import me.rerere.rikkahub.data.files.FileUtils
+@@ -55,6 +60,7 @@ import me.rerere.rikkahub.ui.components.ui.Select
+ import me.rerere.rikkahub.ui.context.LocalToaster
+ import me.rerere.rikkahub.ui.theme.CustomColors
+ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
++import me.rerere.rikkahub.ui.theme.rememberCustomFontFamily
+ import me.rerere.rikkahub.utils.plus
+ import org.koin.androidx.compose.koinViewModel
+ import java.io.File
+@@ -86,11 +92,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+                     importCustomChatFontInternal(context, uri)
+                 }
+             }.onSuccess { importedFont ->
++                val newEntry = CustomFontEntry(
++                    name = importedFont.displayName,
++                    relativePath = importedFont.relativePath,
++                )
++                // 老版本的单个字体只有 path，先把它当成一条记录收进字体库，免得升级后找不到
++                val legacyFonts = if (
++                    displaySetting.chatCustomFontPath.isNotBlank() &&
++                    displaySetting.customFonts.none { it.relativePath == displaySetting.chatCustomFontPath }
++                ) {
++                    listOf(
++                        CustomFontEntry(
++                            name = displaySetting.chatCustomFontName.ifBlank {
++                                displaySetting.chatCustomFontPath.substringAfterLast('/').substringAfterLast('\\')
++                            },
++                            relativePath = displaySetting.chatCustomFontPath,
++                        )
++                    )
++                } else {
++                    emptyList()
++                }
++                val baseFonts = displaySetting.customFonts + legacyFonts
++                // 同名去重，保留最新：同名但换了文件的旧字体顺手从磁盘清掉
++                baseFonts
++                    .filter { it.name == newEntry.name && it.relativePath != newEntry.relativePath }
++                    .forEach { old -> deleteCustomChatFontInternal(context, old.relativePath) }
+                 updateDisplaySetting(
+                     displaySetting.copy(
+                         chatFontFamily = ChatFontFamily.CUSTOM,
+-                        chatCustomFontPath = importedFont.relativePath,
+-                        chatCustomFontName = importedFont.displayName,
++                        chatCustomFontPath = newEntry.relativePath,
++                        chatCustomFontName = newEntry.name,
++                        customFonts = baseFonts.filterNot { it.name == newEntry.name } + newEntry,
+                     )
+                 )
+                 toaster.show(importSuccessMsg, type = ToastType.Success)
+@@ -209,6 +241,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+                             )
+                         },
+                     )
++                    item(
++                        headlineContent = { Text("完整时间格式") },
++                        supportingContent = { Text("显示成 2026年5月20日 23:06:49 这样带年月日和秒的完整时间（需先开启上面的显示日期和时间）") },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.messageTimeFullFormat,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(messageTimeFullFormat = it))
++                                }
++                            )
++                        },
++                    )
++                    item(
++                        headlineContent = { Text("时间显示在昵称下方") },
++                        supportingContent = { Text("时间单独显示在昵称/头像那一行下面，操作栏里不再重复显示（需先开启上面的显示日期和时间）") },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.messageTimeUnderName,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(messageTimeUnderName = it))
++                                }
++                            )
++                        },
++                    )
+                     item(
+                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
+                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
+@@ -283,40 +339,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+                             )
+                         }
+                     )
+-                    item(
+-                        headlineContent = { Text(stringResource(R.string.setting_display_page_custom_font_title)) },
+-                        supportingContent = {
+-                            Text(
+-                                if (displaySetting.chatCustomFontName.isNotBlank()) {
+-                                    displaySetting.chatCustomFontName
+-                                } else {
+-                                    stringResource(R.string.setting_display_page_custom_font_not_imported)
++                    // 自定义字体：字体库为空时只给「导入字体」入口；有字体时按列表显示，点一行即切换
++                    if (displaySetting.customFonts.isEmpty()) {
++                        item(
++                            headlineContent = { Text(stringResource(R.string.setting_display_page_custom_font_title)) },
++                            supportingContent = {
++                                Text(
++                                    if (displaySetting.chatCustomFontName.isNotBlank()) {
++                                        displaySetting.chatCustomFontName
++                                    } else {
++                                        stringResource(R.string.setting_display_page_custom_font_not_imported)
++                                    }
++                                )
++                            },
++                            trailingContent = {
++                                Row {
++                                    IconButton(
++                                        onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) }
++                                    ) {
++                                        Icon(
++                                            HugeIcons.FileImport,
++                                            contentDescription = stringResource(
++                                                R.string.setting_display_page_custom_font_import
++                                            )
++                                        )
++                                    }
++                                    if (displaySetting.chatCustomFontPath.isNotBlank()) {
++                                        IconButton(
++                                            onClick = {
++                                                deleteCustomChatFontInternal(context, displaySetting.chatCustomFontPath)
++                                                updateDisplaySetting(
++                                                    displaySetting.copy(
++                                                        chatFontFamily = ChatFontFamily.DEFAULT,
++                                                        chatCustomFontPath = "",
++                                                        chatCustomFontName = "",
++                                                    )
++                                                )
++                                            }
++                                        ) {
++                                            Icon(
++                                                HugeIcons.Delete02,
++                                                contentDescription = stringResource(
++                                                    R.string.setting_display_page_custom_font_remove
++                                                )
++                                            )
++                                        }
++                                    }
+                                 }
+-                            )
+-                        },
+-                        trailingContent = {
+-                            Row {
+-                                IconButton(
+-                                    onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) }
+-                                ) {
+-                                    Icon(
+-                                        HugeIcons.FileImport,
+-                                        contentDescription = stringResource(
+-                                            R.string.setting_display_page_custom_font_import
++                            }
++                        )
++                    } else {
++                        item(
++                            headlineContent = { Text(stringResource(R.string.setting_display_page_custom_font_title)) },
++                            supportingContent = {
++                                Text("字体库：共 ${displaySetting.customFonts.size} 个字体，点一下即可切换")
++                            },
++                        )
++                        displaySetting.customFonts.forEach { font ->
++                            val isCurrentFont = displaySetting.chatCustomFontPath == font.relativePath
++                            item(
++                                onClick = {
++                                    updateDisplaySetting(
++                                        displaySetting.copy(
++                                            chatFontFamily = ChatFontFamily.CUSTOM,
++                                            chatCustomFontPath = font.relativePath,
++                                            chatCustomFontName = font.name,
+                                         )
+                                     )
+-                                }
+-                                if (displaySetting.chatCustomFontPath.isNotBlank()) {
++                                },
++                                leadingContent = {
++                                    val previewFamily = rememberCustomFontFamily(font.relativePath)
++                                    Text(
++                                        text = "Aa",
++                                        fontFamily = previewFamily ?: FontFamily.Default,
++                                    )
++                                },
++                                headlineContent = {
++                                    Row(
++                                        verticalAlignment = Alignment.CenterVertically,
++                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
++                                    ) {
++                                        Text(
++                                            text = font.name.ifBlank { font.relativePath },
++                                            maxLines = 1,
++                                            overflow = TextOverflow.Ellipsis,
++                                        )
++                                        if (isCurrentFont) {
++                                            Icon(
++                                                imageVector = HugeIcons.Tick01,
++                                                contentDescription = null,
++                                                tint = MaterialTheme.colorScheme.primary,
++                                                modifier = Modifier.size(16.dp),
++                                            )
++                                        }
++                                    }
++                                },
++                                supportingContent = {
++                                    Text(if (isCurrentFont) "正在使用" else "点一下切换到该字体")
++                                },
++                                trailingContent = {
+                                     IconButton(
+                                         onClick = {
+-                                            deleteCustomChatFontInternal(context, displaySetting.chatCustomFontPath)
+-                                            updateDisplaySetting(
+-                                                displaySetting.copy(
+-                                                    chatFontFamily = ChatFontFamily.DEFAULT,
+-                                                    chatCustomFontPath = "",
+-                                                    chatCustomFontName = "",
++                                            scope.launch {
++                                                withContext(Dispatchers.IO) {
++                                                    deleteCustomChatFontInternal(context, font.relativePath)
++                                                }
++                                                val remainingFonts = displaySetting.customFonts
++                                                    .filterNot { it.relativePath == font.relativePath }
++                                                updateDisplaySetting(
++                                                    if (displaySetting.chatCustomFontPath == font.relativePath) {
++                                                        // 删掉的正好是正在用的，切回默认字体
++                                                        displaySetting.copy(
++                                                            customFonts = remainingFonts,
++                                                            chatFontFamily = ChatFontFamily.DEFAULT,
++                                                            chatCustomFontPath = "",
++                                                            chatCustomFontName = "",
++                                                        )
++                                                    } else {
++                                                        displaySetting.copy(customFonts = remainingFonts)
++                                                    }
+                                                 )
+-                                            )
++                                            }
+                                         }
+                                     ) {
+                                         Icon(
+@@ -326,10 +469,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+                                             )
+                                         )
+                                     }
+-                                }
+-                            }
++                                },
++                            )
+                         }
+-                    )
++                        item(
++                            onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) },
++                            headlineContent = { Text("导入新字体") },
++                            supportingContent = { Text("导入后加入上面的字体库，随时切换") },
++                            trailingContent = {
++                                Icon(
++                                    HugeIcons.FileImport,
++                                    contentDescription = stringResource(
++                                        R.string.setting_display_page_custom_font_import
++                                    )
++                                )
++                            },
++                        )
++                    }
+                     item(
+                         headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
+                         supportingContent = {
+@@ -466,7 +622,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+             throw IllegalArgumentException(error.message ?: "Invalid font file", error)
+         }
+ 
+-        replaceCustomChatFontInternal(fontDir, tempFile, targetFile)
++        saveCustomChatFontInternal(tempFile, targetFile)
+     } catch (error: Throwable) {
+         tempFile.delete()
+         throw error
+@@ -477,27 +633,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+     return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
+ }
+ 
+-private fun replaceCustomChatFontInternal(fontDir: File, tempFile: File, targetFile: File) {
+-    val existingFiles = fontDir.listFiles { file ->
+-        file.isFile && file.name.startsWith("chat_font.") && file != tempFile
+-    }?.toList().orEmpty()
+-    val backups = existingFiles.map { file ->
+-        file to File(fontDir, "previous_${file.name}").also { it.delete() }
+-    }
+-
++/**
++ * 字体库：只把新导入的字体落到字体目录里，之前导入过的字体一律保留，这样随时能切回去。
++ */
++private fun saveCustomChatFontInternal(tempFile: File, targetFile: File) {
+     try {
+-        backups.forEach { (file, backup) ->
+-            check(file.renameTo(backup)) { "Unable to prepare existing font for replacement" }
+-        }
+         check(tempFile.renameTo(targetFile)) { "Unable to save selected font" }
+-        backups.forEach { (_, backup) -> backup.delete() }
+     } catch (error: Throwable) {
+         tempFile.delete()
+-        backups.forEach { (file, backup) ->
+-            if (!file.exists() && backup.exists()) {
+-                backup.renameTo(file)
+-            }
+-        }
+         throw error
+     }
+ }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/ChatFont.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/ChatFont.kt
+index baef938..8ff340d 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/theme/ChatFont.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/ChatFont.kt
+@@ -44,6 +44,17 @@ fun DisplaySetting.resolveChatFontFamily(context: Context): FontFamily = when (c
+     ChatFontFamily.CUSTOM -> loadCustomFontFamily(context, chatCustomFontPath) ?: FontFamily.Default
+ }
+ 
++/**
++ * 字体库里给单个条目做预览用：路径是相对 filesDir 的字体文件路径。
++ */
++@Composable
++fun rememberCustomFontFamily(relativePath: String): FontFamily? {
++    val context = LocalContext.current
++    return remember(relativePath) {
++        if (relativePath.isBlank()) null else loadCustomFontFamily(context, relativePath)
++    }
++}
++
+ private fun loadCustomFontFamily(context: Context, relativePath: String): FontFamily? {
+     val file = resolveFilesDirFile(context, relativePath) ?: return null
+     if (!file.isFile) return null
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/SeedColorScheme.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/SeedColorScheme.kt
 new file mode 100644
 index 0000000..a46bbb5
@@ -4026,6 +4548,27 @@ index 3d9a2e3..79bb0b9 100644
              typography = Typography,
              content = content,
              motionScheme = MotionScheme.expressive()
+diff --git a/app/src/main/java/me/rerere/rikkahub/utils/TimeUtil.kt b/app/src/main/java/me/rerere/rikkahub/utils/TimeUtil.kt
+index 1e6cdcf..8a538a5 100644
+--- a/app/src/main/java/me/rerere/rikkahub/utils/TimeUtil.kt
++++ b/app/src/main/java/me/rerere/rikkahub/utils/TimeUtil.kt
+@@ -56,6 +56,16 @@ fun LocalDateTime.toMessageTimeString(): String {
+     }
+ }
+ 
++/**
++ * 消息时间完整格式：2026年5月20日 23:06:49（年月日 + 时:分:秒，不省略任何部分）
++ */
++fun LocalDateTime.toMessageTimeFullString(): String {
++    return MessageTimeFullFormatter.format(this)
++}
++
++private val MessageTimeFullFormatter: DateTimeFormatter =
++    DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm:ss", Locale.getDefault())
++
+ fun LocalDate.toLocalString(includeYear: Boolean): String {
+     val locale = Locale.getDefault()
+     val formatter = if (includeYear) {
 diff --git a/app/src/main/res/mipmap-hdpi/ic_launcher.png b/app/src/main/res/mipmap-hdpi/ic_launcher.png
 index 5a05db3118955b29b9ea3957d39fb6177d9e05b6..26acdd8e552e700a62aa386838701c4670dcbca7 100644
 GIT binary patch
