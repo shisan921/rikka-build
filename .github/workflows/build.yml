@@ -56,15 +56,23 @@ jobs:
         run: |
           echo '{"project_info":{"project_number":"123456789012","project_id":"rikka-local","storage_bucket":"rikka-local.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789012:android:aaaaaaaaaaaaaaaaaaaaaa","android_client_info":{"package_name":"me.rerere.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}},{"client_info":{"mobilesdk_app_id":"1:123456789012:android:bbbbbbbbbbbbbbbbbbbbbb","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > src/app/google-services.json
 
-      - name: 编译
+      - name: 生成签名用的 keystore
+        run: |
+          keytool -genkeypair -v -keystore "$GITHUB_WORKSPACE/ci.jks" -alias ci \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass yg123456 -keypass yg123456 \
+            -dname "CN=Rikka Bei, OU=YG, O=YG, L=CN, S=CN, C=CN"
+          printf 'storeFile=%s/ci.jks\nstorePassword=yg123456\nkeyAlias=ci\nkeyPassword=yg123456\n' "$GITHUB_WORKSPACE" > src/local.properties
+
+      - name: 编译 release 版
         working-directory: src
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleGithubDebug --no-daemon
+          ./gradlew :app:assembleGithubRelease --no-daemon
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: rikka-apk
+          name: rikka-apk-release
           path: src/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
