@@ -60,10 +60,11 @@ jobs:
         working-directory: src
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          ./gradlew :app:assembleGithubDebug --no-daemon
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: rikka-apk
-          path: src/app/build/outputs/apk/debug/*.apk
+          path: src/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
