@@ -3284,10 +3284,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..4714b76
+index 0000000..38e52dc
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1037 @@
+@@ -0,0 +1,1038 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -3643,7 +3643,10 @@ index 0000000..4714b76
 +    val outerSpace = outerSpaceRaw.coerceAtLeast(0)
 +    val outerPull = (-outerSpaceRaw).coerceAtLeast(0)
 +    // 每档只收 0.035em：全角括号自带约 0.2em 的左右留白，收太多就会把引号压到括号下面
-+    val pullLetterSpacing = if (outerPull > 0) (-0.04f * outerPull).em else TextUnit.Unspecified
++    // 开符号这侧收得保守一点（收太狠会把 “ 压到 「 底下）
++    val pullOpenSpacing = if (outerPull > 0) (-0.07f * outerPull).em else TextUnit.Unspecified
++    // 闭符号这侧收得狠一点：作用在右侧引号 ” 的字距上，只把 」 往左拉，不动别的字
++    val pullCloseSpacing = if (outerPull > 0) (-0.13f * outerPull).em else TextUnit.Unspecified
 +    // 符号自己的 SpanStyle：**不能复用 spanStyle**（旧路径的 spanStyle 带底色 + 下划线，
 +    // 套在符号上会让符号也被涂上底色），这里只拼「颜色 + 字号」两样：
 +    // - 颜色：跟随高亮色时给 color，否则 Unspecified（= 沿用正文颜色）；
@@ -3654,7 +3657,7 @@ index 0000000..4714b76
 +        SpanStyle(
 +            color = if (quoteStyle.outerFollowHighlight) quoteStyle.color else Color.Unspecified,
 +            fontSize = quoteStyle.outerFontSize,
-+            letterSpacing = pullLetterSpacing,
++            letterSpacing = pullOpenSpacing,
 +        )
 +    } else {
 +        null
@@ -3673,7 +3676,14 @@ index 0000000..4714b76
 +            }
 +            val start = length
 +            withStyle(spanStyle) {
-+                append(segment.text)
++                if (outerPull > 0 && segment.text.isNotEmpty()) {
++                    append(segment.text.substring(0, segment.text.length - 1))
++                    withStyle(SpanStyle(letterSpacing = pullCloseSpacing)) {
++                        append(segment.text.substring(segment.text.length - 1))
++                    }
++                } else {
++                    append(segment.text)
++                }
 +            }
 +            if (tagRanges && length > start) {
 +                addStringAnnotation(
@@ -3689,12 +3699,6 @@ index 0000000..4714b76
 +                if (appendOuter) {
 +                    // ② 空隙 + 闭符号都插在区间**之后**，所以它们不参与任何自绘几何
 +                    appendOuterSpaces(outerSpace)
-+                    if (outerPull > 0) {
-+                        // 负间距只作用在这个零宽字符上：把闭符号往左拉，文字本身一点不动
-+                        withStyle(SpanStyle(letterSpacing = pullLetterSpacing)) {
-+                            append("\u200B")
-+                        }
-+                    }
 +                    appendOuterSymbol(quoteStyle.outerClose, outerSymbolStyle)
 +                }
 +            }
@@ -3705,9 +3709,6 @@ index 0000000..4714b76
 +    // 真出现「一段文字以引号内的内容结尾」这种极端情况，也把闭符号补齐，不留一个孤零零的开符号
 +    if (inQuotedRun && appendOuter) {
 +        appendOuterSpaces(outerSpace)
-+        if (outerPull > 0) {
-+            withStyle(SpanStyle(letterSpacing = pullLetterSpacing)) { append("\u200B") }
-+        }
 +        appendOuterSymbol(quoteStyle.outerClose, outerSymbolStyle)
 +    }
 +}
