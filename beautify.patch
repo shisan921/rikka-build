@@ -1461,7 +1461,7 @@ index bef7871..85f9034 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..e6dded6 100644
+index 205e822..6cbbef0 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1481,7 +1481,7 @@ index 205e822..e6dded6 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +614,73 @@ enum class BackgroundEffectType {
+@@ -604,17 +614,81 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -1523,8 +1523,10 @@ index 205e822..e6dded6 100644
 +/**
 + * 对白下划线样式。
 + *
-+ * 只做「无」和「实线」两种：Compose 的 `SpanStyle` 只能画实线下划线（`TextDecoration` 没有虚线能力），
-+ * 虚线必须自绘，风险太高，这一版明确不做。新增枚举值带 `@SerialName`，老数据反序列化不受影响。
++ * 四种：`NONE`（关闭下划线）/ 实线 / 虚线 / 点线。
++ * 后三种都靠 `QuoteHighlight.kt` 里的 `drawBehind` 自绘（`TextDecoration` 只能画实线，
++ * 虚线 / 点线用 `PathEffect.dashPathEffect` 画在 baseline 下方），所以这里能直接扩到四种。
++ * 新增枚举值带 `@SerialName`，老数据（只有 none / solid）反序列化不受影响。
 + */
 +@Serializable
 +enum class QuoteUnderline {
@@ -1533,6 +1535,12 @@ index 205e822..e6dded6 100644
 +
 +    @SerialName("solid")
 +    SOLID,
++
++    @SerialName("dashed")
++    DASHED,
++
++    @SerialName("dotted")
++    DOTTED,
 +}
 +
  @Serializable
@@ -1555,7 +1563,7 @@ index 205e822..e6dded6 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +708,56 @@ data class DisplaySetting(
+@@ -642,8 +716,64 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1580,12 +1588,20 @@ index 205e822..e6dded6 100644
 +    val quoteHighlightColor: Long? = null,
 +    // 对白样式·背景色：null 表示不加底色，取值是 ARGB（0xAARRGGBB），透明度由下面那项控制
 +    val quoteHighlightBackground: Long? = null,
-+    // 对白样式·背景透明度：0f = 完全透明，1f = 完全不透明，滑块步长 0.05
++    // 对白样式·底色总开关：关掉时完全不画底色（不用点进取色盘去「恢复默认」）
++    val quoteBackgroundEnabled: Boolean = false,
++    // 对白样式·背景透明度：0f = 完全透明，1f = 完全不透明，滑块步长 0.05（底色开关打开后才生效）
 +    val quoteHighlightBackgroundAlpha: Float = 0.18f,
-+    // 对白样式·下划线：NONE / SOLID（虚线这一版不做，见 QuoteUnderline）
++    // 对白样式·下划线：NONE 就是不画（关闭），SOLID / DASHED / DOTTED 由自绘实现
 +    val quoteUnderline: QuoteUnderline = QuoteUnderline.NONE,
-+    // 对白样式·下划线颜色：null 表示跟随文字颜色
++    // 对白样式·下划线颜色：null 表示跟随文字颜色；非 null 时下划线和行首竖线都用它
 +    val quoteUnderlineColor: Long? = null,
++    // 对白样式·行首竖线：每个引号区间起点那一行左侧画一根 2dp 竖线
++    val quoteLeadingBar: Boolean = false,
++    // 对白样式·底色圆角（dp），0 = 直角
++    val quoteBackgroundCorner: Int = 4,
++    // 对白样式·行间空隙（dp）：行与行的底色之间留白，0 = 紧贴
++    val quoteBackgroundGap: Int = 2,
 +    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
 +    val recentColors: List<Long> = emptyList(),
 +    // 气泡圆角（dp），-1 表示沿用默认圆角
@@ -2652,7 +2668,7 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..dce474f 100644
+index 3d21e9f..1bcff7e 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -623,7 +623,7 @@ private fun MarkdownNode(
@@ -2664,16 +2680,17 @@ index 3d21e9f..dce474f 100644
                  modifier = modifier,
              )
          }
-@@ -790,6 +790,8 @@ private fun Paragraph(
+@@ -790,6 +790,9 @@ private fun Paragraph(
          node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
      }
      val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
-+    // 对白样式（颜色 / 底色 / 下划线）：开关关掉时是 null，整条渲染路径与改动前一致
-+    val quoteStyle = quoteStyleOrNull()
++    // 对白样式：开关关掉时是 null，整条渲染路径与改动前一致。
++    // selfDrawn = true 表示 SpanStyle 只给文字颜色，底色 / 下划线 / 行首竖线由 quoteDecoration 自绘。
++    val quoteStyle = quoteStyleOrNull(selfDrawn = true)
  
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
-@@ -800,7 +802,8 @@ private fun Paragraph(
+@@ -800,7 +803,8 @@ private fun Paragraph(
              else Modifier
          )
      ) {
@@ -2683,7 +2700,7 @@ index 3d21e9f..dce474f 100644
              buildAnnotatedString {
                  node.children.fastForEach { child ->
                      appendMarkdownNodeContent(
-@@ -814,6 +817,7 @@ private fun Paragraph(
+@@ -814,16 +818,33 @@ private fun Paragraph(
                          trim = trim,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2691,7 +2708,34 @@ index 3d21e9f..dce474f 100644
                      )
                  }
              }
-@@ -999,6 +1003,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+         }
++        // 引号区间（自绘用）：从 AnnotatedString 的注解里捞，key 是拼好的字符串，只在重建时算一次
++        val quoteRanges = remember(annotatedString, quoteStyle) {
++            if (quoteStyle?.needsDecoration == true) annotatedString.collectQuoteRanges()
++            else EMPTY_QUOTE_RANGES
++        }
++        // 布局结果只写在 onTextLayout 里、只在 drawBehind 里读，改动它只会让绘制失效，不会引起重组
++        val quoteLayout = rememberQuoteLayoutHolder()
++        val quoteModifier = if (quoteStyle == null || quoteRanges.isEmpty()) Modifier else
++            Modifier.quoteDecoration(
++                style = quoteStyle,
++                text = annotatedString.text,
++                ranges = quoteRanges,
++                holder = quoteLayout,
++            )
+         Text(
+             text = annotatedString,
+-            modifier = Modifier,
++            modifier = quoteModifier,
+             inlineContent = inlineContents,
+             softWrap = true,
+             overflow = TextOverflow.Visible,
++            // 关闭对白样式 / 这条消息里没有成对引号时传 null：完全等同于改动前的 Text 调用
++            onTextLayout = rememberQuoteOnTextLayout(quoteLayout, quoteRanges.isNotEmpty()),
+             style = LocalTextStyle.current.copy(
+                 lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+             )
+@@ -999,6 +1020,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
      enableLatexRendering: Boolean = true,
      latexColorArgb: Int = 0,
      onClickCitation: (String) -> Unit = {},
@@ -2700,7 +2744,7 @@ index 3d21e9f..dce474f 100644
  ) {
      when {
          node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
-@@ -1020,9 +1026,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1020,9 +1043,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      it
                  }.replace(BREAK_LINE_REGEX, "\n")
              }
@@ -2713,7 +2757,7 @@ index 3d21e9f..dce474f 100644
          }
  
          node.type == MarkdownElementTypes.EMPH -> {
-@@ -1037,7 +1043,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1037,7 +1060,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2723,7 +2767,7 @@ index 3d21e9f..dce474f 100644
                      )
                  }
              }
-@@ -1055,7 +1062,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1055,7 +1079,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2733,7 +2777,7 @@ index 3d21e9f..dce474f 100644
                      )
                  }
              }
-@@ -1073,7 +1081,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1073,7 +1098,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2743,7 +2787,7 @@ index 3d21e9f..dce474f 100644
                      )
                  }
              }
-@@ -1240,7 +1249,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1240,7 +1266,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      style = style,
                      enableLatexRendering = enableLatexRendering,
                      latexColorArgb = latexColorArgb,
@@ -2863,43 +2907,71 @@ index a316327..aaef8ab 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..96cf4f5
+index 0000000..9e53f97
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,466 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.drawBehind
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
 +import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.PathEffect
++import androidx.compose.ui.graphics.StrokeCap
++import androidx.compose.ui.platform.LocalDensity
 +import androidx.compose.ui.text.AnnotatedString
 +import androidx.compose.ui.text.SpanStyle
++import androidx.compose.ui.text.TextLayoutResult
 +import androidx.compose.ui.text.buildAnnotatedString
 +import androidx.compose.ui.text.style.TextDecoration
 +import androidx.compose.ui.text.withStyle
++import androidx.compose.ui.unit.Density
++import androidx.compose.ui.unit.dp
 +import me.rerere.rikkahub.data.datastore.QuoteUnderline
 +import me.rerere.rikkahub.ui.context.LocalSettings
 +
 +/**
-+ * 引号内文字高亮。
++ * 引号内文字高亮（「对白样式」）。
 + *
 + * 2.5.3 的 markdown 渲染没有「主题」对象可以配置（`com.github.rikkahub:markdown` 只提供
 + * org.intellij.markdown 的解析器，AST → Compose 的渲染全部在 [Markdown] / [MarkdownNew] 里），
-+ * 所以这里不走「把引号内容伪装成别的内联元素」的预处理，直接在渲染层的文本追加点上给引号内的
-+ * 那一段文字套一个完整的 `SpanStyle`（文字色 + 半透明底色 + 实线下划线，见 [QuoteStyle.toSpanStyle]）：
++ * 所以这里不走「把引号内容伪装成别的内联元素」的预处理，直接在渲染层的文本追加点上处理：
++ *
++ * 1. 引号内的那一段文字仍然用 `SpanStyle`，但 **SpanStyle 只负责文字颜色**；
++ * 2. 底色 / 下划线（实线 · 虚线 · 点线）/ 行首竖线全部由 [Modifier.quoteDecoration] 在
++ *    `Text` 的 `drawBehind` 里自绘：靠 `TextLayoutResult` 拿到每个字符的包围盒，
++ *    按「行」算出左右边界，一行一个圆角矩形、一行一条线——所以行与行之间天然留白，
++ *    下划线颜色也不再被 `TextDecoration` 锁死在文字颜色上。
++ * 3. 引号区间从 [AnnotatedString] 的字符串注解（[QUOTE_RANGE_ANNOTATION]）里捞回来，
++ *    这样不用给 `appendMarkdownNodeContent` 那一串递归调用再加一个出参，
++ *    消息原文一个字符都不改，位置一一对应。
 + *
 + * - 不新增任何 markdown 语法，消息原文不改，复制/导出拿到的还是用户看到的原文；
 + * - 代码天然不受影响：行内代码（CODE_SPAN / `<code>`）和代码块（CODE_FENCE / `<pre>`）在渲染器里
 + *   都有独立分支，文本压根不经过 [appendQuotedText]，不需要正则去跳过 ``` 围栏；
 + * - 关闭开关时 [quoteStyleOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
-+ *   与改动前的输出逐像素一致。
++ *   渲染路径连 `onTextLayout` / `drawBehind` 都不加，与改动前的输出逐像素一致。
 + */
 +
 +/** 中文左引号、中文右引号、英文双引号。单引号 / 「」不处理，避免把英文撇号和日式引用一起染上色。 */
 +private const val QUOTE_OPEN = '\u201C'   // “
 +private const val QUOTE_CLOSE = '\u201D'  // ”
 +private const val QUOTE_ASCII = '"'
++
++/** 引号区间用的字符串注解 tag：AnnotatedString 建好后再按它把区间取回来 */
++internal const val QUOTE_RANGE_ANNOTATION = "rikka.quote.range"
++
++/** 空区间表（共享常量，任何地方都不许改它的元素） */
++internal val EMPTY_QUOTE_RANGES: IntArray = IntArray(0)
 +
 +/**
 + * 纯函数：把一段纯文本按引号切成若干段，标出哪几段在引号内。
@@ -2984,47 +3056,64 @@ index 0000000..96cf4f5
 +)
 +
 +/**
-+ * 一条消息的「对白样式」：引号内文字的颜色 + 可选底色 + 可选下划线。
++ * 一条消息的「对白样式」。
 + *
-+ * [background] 是已经乘好透明度的颜色（见 [quoteStyleOrNull]），null 表示不加底色；
-+ * [underlineColor] null 表示跟随文字颜色。整个对象是不可变 data class，可以直接当 `remember` 的 key 用
-+ * （Compose 的 `Color` 是值类，比较的是 ARGB），改任何一个字段都会让缓存失效重新拼 AnnotatedString。
++ * [color]：引号内文字颜色（永远走 SpanStyle）；
++ * [background]：已经乘好透明度的底色（见 [quoteStyleOrNull]），null 表示不加底色；
++ * [underlineColor] null 表示下划线 / 竖线跟随 [color]；
++ * [leadingBar] 行首竖线开关；[backgroundCorner] 底色圆角（dp，0 = 直角）；
++ * [backgroundGap] 行与行底色之间的留白（dp，上下各一半）；
++ * [selfDrawn] 表示这条渲染路径会把底色 / 下划线 / 竖线交给 [quoteDecoration] 自绘，
++ * SpanStyle 就只输出文字颜色（[MarkdownNew] 的 HTML 兜底路径仍然是 false，走旧的 SpanStyle）。
++ *
++ * 整个对象是不可变 data class，可以直接当 `remember` 的 key 用（Compose 的 `Color` 是值类，
++ * 比较的是 ARGB），改任何一个字段都会让缓存失效重新拼 AnnotatedString。
 + */
 +internal data class QuoteStyle(
 +    val color: Color,
 +    val background: Color? = null,
 +    val underline: QuoteUnderline = QuoteUnderline.NONE,
 +    val underlineColor: Color? = null,
++    val leadingBar: Boolean = false,
++    val backgroundCorner: Int = 4,
++    val backgroundGap: Int = 2,
++    val selfDrawn: Boolean = false,
 +) {
-+    /** 只有 SOLID 才画下划线 */
-+    val hasUnderline: Boolean get() = underline == QuoteUnderline.SOLID
++    /** 有没有要画的下划线（实线 / 虚线 / 点线都算） */
++    val hasUnderline: Boolean get() = underline != QuoteUnderline.NONE
++
++    /** 自绘路径上真有东西要画吗：三样装饰全无时连 drawBehind 都不挂 */
++    val needsDecoration: Boolean
++        get() = selfDrawn && (background != null || hasUnderline || leadingBar)
 +}
 +
 +/**
-+ * 把 [QuoteStyle] 拼成真正交给渲染层的 `SpanStyle`。
++ * 把 [QuoteStyle] 拼成交给渲染层的 `SpanStyle`。
 + *
-+ * - `color`：引号内文字颜色；
-+ * - `background`：带 alpha 的颜色就是「半透明底色」，`Color.Unspecified` 等价于不设背景；
-+ * - `textDecoration`：只在实线时给 `TextDecoration.Underline`，不设时传 null（继承外层样式）。
++ * - 自绘路径（[QuoteStyle.selfDrawn] = true）：**只给文字颜色**，底色 / 下划线 / 竖线全部由
++ *   [quoteDecoration] 画，SpanStyle 不再画整块矩形背景，也不再受 `TextDecoration` 只能实线的限制；
++ * - 旧路径（HTML 兜底）：保持原样——颜色 + 半透明底色 + 实线下划线（虚线 / 点线在旧路径上没有，
++ *   这是 `TextDecoration` 的能力边界，报告里记为降级项）。
 + *
-+ * 刻意只动这三样：fontFamily / fontSize / fontWeight / fontStyle / shadow 都不碰，外面已有的加粗、
-+ * 斜体、删除线、链接、行内公式样式不会被破坏。
-+ *
-+ * 明确不做虚线：`TextDecoration` 只有实线，虚线要自绘，风险太高。
-+ * 同理 `SpanStyle` 没有「独立下划线颜色」槽位，下划线永远和这个 span 的文字同色，
-+ * 所以 [QuoteStyle.underlineColor] 只做落库和界面预览，不进 SpanStyle（见报告说明）。
++ * 刻意只动这几样：fontFamily / fontSize / fontWeight / fontStyle / shadow 都不碰，
++ * 外面已有的加粗、斜体、删除线、链接、行内公式样式不会被破坏。
 + */
 +internal fun QuoteStyle.toSpanStyle(): SpanStyle {
++    if (selfDrawn) {
++        return SpanStyle(color = color)
++    }
 +    return SpanStyle(
 +        color = color,
 +        background = background ?: Color.Unspecified,
-+        textDecoration = if (hasUnderline) TextDecoration.Underline else null,
++        textDecoration = if (underline == QuoteUnderline.SOLID) TextDecoration.Underline else null,
 +    )
 +}
 +
 +/**
-+ * 往 AnnotatedString 里追加一段纯文本，[quoteStyle] 非 null 时给引号内的文字套上完整对白样式
-+ * （颜色 + 底色 + 下划线）。
++ * 往 AnnotatedString 里追加一段纯文本，[quoteStyle] 非 null 时给引号内的文字上样式。
++ *
++ * 自绘路径下会同时给每段引号区间打一个 [QUOTE_RANGE_ANNOTATION] 字符串注解，
++ * 事后用 [collectQuoteRanges] 取回来交给 [quoteDecoration]，避免给递归的 append 函数加出参。
 + *
 + * [quoteStyle] 为 null 时退化成 `append(text)`，逐像素与改动前的渲染一致。
 + */
@@ -3034,10 +3123,20 @@ index 0000000..96cf4f5
 +        return
 +    }
 +    val spanStyle = quoteStyle.toSpanStyle()
++    val tagRanges = quoteStyle.selfDrawn
 +    splitQuotedSegments(text).forEach { segment ->
 +        if (segment.quoted) {
++            val start = length
 +            withStyle(spanStyle) {
 +                append(segment.text)
++            }
++            if (tagRanges && length > start) {
++                addStringAnnotation(
++                    tag = QUOTE_RANGE_ANNOTATION,
++                    annotation = "",
++                    start = start,
++                    end = length,
++                )
 +            }
 +        } else {
 +            append(segment.text)
@@ -3046,14 +3145,36 @@ index 0000000..96cf4f5
 +}
 +
 +/**
++ * 从建好的 AnnotatedString 里把引号区间捞出来，压成 `[start0, end0, start1, end1, ...]` 的 IntArray。
++ *
++ * 用 IntArray 而不是 `List<IntRange>`：`drawBehind` 里按下标遍历不会创建任何装箱对象，
++ * 结果本身在组合期算一次、交给 `remember` 缓存，绘制阶段零分配。
++ */
++internal fun AnnotatedString.collectQuoteRanges(): IntArray {
++    if (length == 0) return EMPTY_QUOTE_RANGES
++    val found = getStringAnnotations(QUOTE_RANGE_ANNOTATION, 0, length)
++    if (found.isEmpty()) return EMPTY_QUOTE_RANGES
++    val ranges = IntArray(found.size * 2)
++    found.forEachIndexed { index, range ->
++        ranges[index * 2] = range.start
++        ranges[index * 2 + 1] = range.end
++    }
++    return ranges
++}
++
++/**
 + * 当前这条消息该用的对白样式：开关关掉就是 null（渲染路径完全不变）；
 + * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
 + *
-+ * 底色的最终 alpha 直接取「背景透明度」滑块（取色盘里那个 alpha 不参与，避免两处透明度打架），
-+ * 滑块为 0 时视为「不加底色」。
++ * 底色要过三道关：「启用对白底色」开关打开、选了颜色、透明度大于 0；任意一条不满足就不画底色
++ * （不再需要让用户点进取色盘「恢复默认」来关掉底色）。底色的最终 alpha 直接取「背景透明度」滑块
++ * （取色盘里那个 alpha 不参与，避免两处透明度打架）。
++ *
++ * [selfDrawn] 由调用方给：消息正文（[Markdown] 的 Paragraph）传 true，走自绘；
++ * HTML 兜底和独立文本节点不传，保持旧的 SpanStyle 行为。
 + */
 +@Composable
-+internal fun quoteStyleOrNull(): QuoteStyle? {
++internal fun quoteStyleOrNull(selfDrawn: Boolean = false): QuoteStyle? {
 +    val displaySetting = LocalSettings.current.displaySetting
 +    if (!displaySetting.enableQuoteHighlight) return null
 +    val colorScheme = MaterialTheme.colorScheme
@@ -3062,7 +3183,9 @@ index 0000000..96cf4f5
 +        if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
 +    val textColor = displaySetting.quoteHighlightColor?.let { Color(it) } ?: themeQuoteColor
 +    val backgroundAlpha = displaySetting.quoteHighlightBackgroundAlpha.coerceIn(0f, 1f)
++    // 底色要三道关：底色总开关打开 + 选了颜色 + 透明度大于 0，否则一律当作「不加底色」
 +    val backgroundColor = displaySetting.quoteHighlightBackground
++        ?.takeIf { displaySetting.quoteBackgroundEnabled }
 +        ?.let { Color(it) }
 +        ?.takeIf { backgroundAlpha > 0f }
 +        ?.copy(alpha = backgroundAlpha)
@@ -3071,6 +3194,10 @@ index 0000000..96cf4f5
 +        background = backgroundColor,
 +        underline = displaySetting.quoteUnderline,
 +        underlineColor = displaySetting.quoteUnderlineColor?.let { Color(it) },
++        leadingBar = displaySetting.quoteLeadingBar,
++        backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 64),
++        backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 24),
++        selfDrawn = selfDrawn,
 +    )
 +}
 +
@@ -3084,6 +3211,170 @@ index 0000000..96cf4f5
 +    val quoteStyle = quoteStyleOrNull()
 +    return remember(text, quoteStyle) {
 +        buildAnnotatedString { appendQuotedText(text = text, quoteStyle = quoteStyle) }
++    }
++}
++
++// ---------------------------------------------------------------------------------------------
++// 自绘：行级底色 / 下划线（实线 · 虚线 · 点线）/ 行首竖线
++// ---------------------------------------------------------------------------------------------
++
++/**
++ * `TextLayoutResult` 的持有者。
++ *
++ * `Text` 的 `onTextLayout` 回调里写、`drawBehind` 的绘制阶段读：只登记读在绘制阶段，
++ * 所以布局结果变化只会让绘制失效，不会反过来触发重组（避免「重组 → 重新布局 → 再写状态」的打转）。
++ */
++internal class QuoteLayoutHolder {
++    var layout: TextLayoutResult? by mutableStateOf(null)
++}
++
++/** 每条消息一个 holder（布局结果引用，重排时会被覆盖） */
++@Composable
++internal fun rememberQuoteLayoutHolder(): QuoteLayoutHolder = remember { QuoteLayoutHolder() }
++
++/**
++ * 给 `Text(onTextLayout = ...)` 用：没有要自绘的引号区间时返回 null，
++ * 这时 `Text` 连一次布局回调都不会挂，与改动前的渲染完全一致。
++ */
++@Composable
++internal fun rememberQuoteOnTextLayout(
++    holder: QuoteLayoutHolder,
++    enabled: Boolean,
++): ((TextLayoutResult) -> Unit)? = remember(holder, enabled) {
++    if (enabled) {
++        { result: TextLayoutResult -> holder.layout = result }
++    } else {
++        null
++    }
++}
++
++/** 虚线 / 点线的疏密：规格是 px，这里按屏幕密度折算，避免高密度屏上糊成实线 */
++private fun QuoteUnderline.dashIntervals(density: Density): FloatArray? = when (this) {
++    QuoteUnderline.NONE, QuoteUnderline.SOLID -> null
++    QuoteUnderline.DASHED -> floatArrayOf(6f, 4f).scaleBy(density.density)
++    QuoteUnderline.DOTTED -> floatArrayOf(1f, 3f).scaleBy(density.density)
++}
++
++private fun FloatArray.scaleBy(scale: Float): FloatArray = FloatArray(size) { this[it] * scale }
++
++private fun QuoteUnderline.toPathEffect(density: Density): PathEffect? =
++    dashIntervals(density)?.let { PathEffect.dashPathEffect(it) }
++
++/**
++ * 对白样式的自绘装饰层。
++ *
++ * 挂在 `Text` 的 `Modifier` 上，用 [TextLayoutResult] 逐行算几何：
++ *
++ * - **底色**：对每个引号区间的每一行，取行内首字符与末字符的包围盒，得到这一行的左右边界、
++ *   上下边界，画一个圆角矩形（左右各内缩 2dp，上下各内缩 `gap/2`）。**一行一个矩形**，
++ *   行与行之间就自然留出 `gap` 的缝——不再是一整块连着的矩形；
++ * - **下划线**：一行一条 `drawLine`，y 取该行 baseline 下方 2dp，粗细 1dp；
++ *   实线不带 `PathEffect`，虚线 `dashPathEffect(6f, 4f)`，点线 `dashPathEffect(1f, 3f)`；
++ *   颜色取 `quoteUnderlineColor ?: 文字色`，所以「下划线颜色」是真的生效了；
++ * - **行首竖线**：每个引号区间只在它起点所在那一行的左侧画一根 2dp 宽的竖线，
++ *   高度取该行底色矩形的高度，颜色同样跟随下划线颜色；
++ * - 绘制阶段不创建集合 / 不拼字符串：区间是组合期算好的 IntArray，`Offset` / `Size` /
++ *   `CornerRadius` 都是 value class，不产生堆分配。
++ *
++ * `quoteRanges` 为空（没引号 / 关闭自绘）时调用方根本不会挂这个 Modifier。
++ */
++@Composable
++internal fun Modifier.quoteDecoration(
++    style: QuoteStyle,
++    text: String,
++    ranges: IntArray,
++    holder: QuoteLayoutHolder,
++): Modifier {
++    val density = LocalDensity.current
++    val pathEffect = remember(style.underline, density) { style.underline.toPathEffect(density) }
++    val gapPx = with(density) { style.backgroundGap.dp.toPx() }
++    val cornerPx = with(density) { style.backgroundCorner.dp.toPx() }
++
++    return this.drawBehind {
++        val layoutResult = holder.layout ?: return@drawBehind
++        if (ranges.size < 2 || layoutResult.lineCount <= 0) return@drawBehind
++
++        val backgroundColor = style.background
++        val underlineColor = style.underlineColor ?: style.color
++        val horizontalInset = 2.dp.toPx()
++        val strokeWidth = 1.dp.toPx()
++        val underlineOffset = 2.dp.toPx()
++        val barWidth = 2.dp.toPx()
++        val barGap = 3.dp.toPx()
++        val corner = CornerRadius(cornerPx)
++        val textLength = text.length
++        val drawUnderline = style.hasUnderline
++
++        var index = 0
++        while (index + 1 < ranges.size) {
++            val rangeStart = ranges[index].coerceIn(0, textLength)
++            val rangeEnd = ranges[index + 1].coerceIn(rangeStart, textLength)
++            index += 2
++            if (rangeEnd <= rangeStart) continue
++
++            val firstLine = layoutResult.getLineForOffset(rangeStart)
++            val lastLine = layoutResult.getLineForOffset(rangeEnd - 1)
++            // 竖线挂在区间起点那一行（起点在行中间时就是那个字符的左侧），后面的行不再画
++            var barPending = style.leadingBar
++            var line = firstLine
++            while (line <= lastLine) {
++                val lineStart = maxOf(rangeStart, layoutResult.getLineStart(line))
++                var lineEnd = minOf(rangeEnd, layoutResult.getLineEnd(line))
++                // 行尾的空白（含换行符）不算进底色，否则底色会被尾随空格 / 换行拉长一截
++                while (lineEnd > lineStart && text[lineEnd - 1].isWhitespace()) {
++                    lineEnd--
++                }
++                if (lineEnd > lineStart) {
++                    val headBox = layoutResult.getBoundingBox(lineStart)
++                    val tailBox = layoutResult.getBoundingBox(lineEnd - 1)
++                    val left = minOf(headBox.left, tailBox.left)
++                    val right = maxOf(headBox.right, tailBox.right)
++                    var top = minOf(headBox.top, tailBox.top)
++                    var bottom = maxOf(headBox.bottom, tailBox.bottom)
++                    if (bottom <= top) {
++                        // 纯空白 / 零宽字符的兜底：用整行的上下边界
++                        top = layoutResult.getLineTop(line)
++                        bottom = layoutResult.getLineBottom(line)
++                    }
++                    val rowTop = top + gapPx / 2f
++                    val rowBottom = bottom - gapPx / 2f
++                    if (rowBottom > rowTop) {
++                        if (barPending) {
++                            drawRect(
++                                color = underlineColor,
++                                topLeft = Offset(left - barGap - barWidth, rowTop),
++                                size = Size(barWidth, rowBottom - rowTop),
++                            )
++                            barPending = false
++                        }
++                        if (backgroundColor != null) {
++                            val backgroundLeft = left + horizontalInset
++                            val backgroundRight = right - horizontalInset
++                            if (backgroundRight > backgroundLeft) {
++                                drawRoundRect(
++                                    color = backgroundColor,
++                                    topLeft = Offset(backgroundLeft, rowTop),
++                                    size = Size(backgroundRight - backgroundLeft, rowBottom - rowTop),
++                                    cornerRadius = corner,
++                                )
++                            }
++                        }
++                        if (drawUnderline) {
++                            val y = layoutResult.getLineBaseline(line) + underlineOffset
++                            drawLine(
++                                color = underlineColor,
++                                start = Offset(left, y),
++                                end = Offset(right, y),
++                                strokeWidth = strokeWidth,
++                                cap = StrokeCap.Butt,
++                                pathEffect = pathEffect,
++                            )
++                        }
++                    }
++                }
++                line++
++            }
++        }
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt
@@ -5500,10 +5791,10 @@ index c296a24..dafc2e6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..fbefb78
+index 0000000..4b6e318
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,312 @@
+@@ -0,0 +1,437 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -5556,19 +5847,32 @@ index 0000000..fbefb78
 +private const val DEFAULT_QUOTE_BACKGROUND_ALPHA = 0.18f
 +private val DEFAULT_QUOTE_UNDERLINE = QuoteUnderline.NONE
 +
-+/** 下划线的两个选项（虚线这一版明确不做，所以只有两项） */
++/** 底色圆角默认值（dp），和 DisplaySetting.quoteBackgroundCorner 一致 */
++private const val DEFAULT_QUOTE_BACKGROUND_CORNER = 4
++
++/** 行间空隙默认值（dp），和 DisplaySetting.quoteBackgroundGap 一致 */
++private const val DEFAULT_QUOTE_BACKGROUND_GAP = 2
++
++/** 下划线四种：选「无」就是关闭，不再有第五种「关」的开关 */
 +private val QUOTE_UNDERLINE_OPTIONS = listOf(
 +    QuoteUnderline.NONE to "无",
 +    QuoteUnderline.SOLID to "实线",
++    QuoteUnderline.DASHED to "虚线",
++    QuoteUnderline.DOTTED to "点线",
 +)
 +
 +/**
 + * 对白样式页：AI 回复里被 “引号” 包住的文字怎么画。
 + *
-+ * 六行：高亮开关 → 文字颜色 → 背景色 → 背景透明度 → 下划线样式 → 下划线颜色。
-+ * 所有字段都带默认值（开关关、无底色、无下划线），默认状态下渲染结果与没有这个功能时逐像素一致。
++ * 结构：高亮开关 → 文字颜色 / 底色开关 / 背景色 / 背景透明度 / 底色圆角 / 行间空隙
++ * → 下划线样式（无 · 实线 · 虚线 · 点线）/ 下划线颜色 / 行首竖线。
 + *
-+ * 明确不做虚线：`SpanStyle` 的 `TextDecoration` 只有实线，虚线必须自绘，风险太高。
++ * 底色与下划线都是自绘的（`QuoteHighlight.kt` 的 `drawBehind`），所以：
++ * - 底色是「每行一个圆角矩形」，行与行之间留 `行间空隙`，不再是一整块连在一起的矩形；
++ * - 下划线支持实线 / 虚线 / 点线，颜色取「下划线颜色」，没选时跟随文字颜色；
++ * - 「下划线颜色」只有**一处**入口（原来重复出现的两处已合并成这一处），而且是真的生效的。
++ *
++ * 所有字段都带默认值（开关关、无底色、无下划线），默认状态下渲染结果与没有这个功能时逐像素一致。
 + */
 +@Composable
 +fun SettingPreferencesQuotePage(vm: SettingVM = koinViewModel()) {
@@ -5585,6 +5889,8 @@ index 0000000..fbefb78
 +
 +    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 +    val backgroundAlpha = displaySetting.quoteHighlightBackgroundAlpha.coerceIn(0f, 1f)
++    val backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 24)
++    val backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 12)
 +
 +    val textColorField = ColorField(
 +        key = "quoteText",
@@ -5599,22 +5905,27 @@ index 0000000..fbefb78
 +        title = "背景色",
 +        value = displaySetting.quoteHighlightBackground,
 +        preview = MaterialTheme.colorScheme.surfaceContainerHigh,
-+        supporting = { it?.toHexArgb() ?: "不加底色" },
++        supporting = {
++            if (!displaySetting.quoteBackgroundEnabled) {
++                "未启用底色，先打开上面的「启用对白底色」"
++            } else {
++                it?.toHexArgb() ?: "还没选颜色，选了才会画底色"
++            }
++        },
 +        apply = { setting, value -> setting.copy(quoteHighlightBackground = value) },
 +    )
-+    // 下划线颜色只做记录：Compose 的 SpanStyle 没有独立的下划线颜色槽位，下划线永远跟文字同色，
-+    // 想真正染上颜色只能自绘下划线，这一版不做，所以副标题里直接写明，别让用户以为是没生效的 bug
++    // 下划线颜色：只有这一处（左右两处重复入口已合并），自绘下划线 / 行首竖线都取它
 +    val underlineColorField = ColorField(
 +        key = "quoteUnderlineColor",
 +        title = "下划线颜色",
 +        value = displaySetting.quoteUnderlineColor,
 +        preview = MaterialTheme.colorScheme.tertiary,
 +        supporting = { value ->
-+            value?.let { "${it.toHexArgb()}（下划线与文字同色，这一版不单独上色）" } ?: "跟随文字颜色"
++            value?.toHexArgb() ?: "跟随文字颜色（也会用在行首竖线上）"
 +        },
 +        apply = { setting, value -> setting.copy(quoteUnderlineColor = value) },
 +    )
-+    val colorFields = listOf(textColorField, backgroundColorField, underlineColorField)
++    val colorFields = listOf(textColorField, backgroundColorField)
 +
 +    Scaffold(
 +        topBar = {
@@ -5661,24 +5972,60 @@ index 0000000..fbefb78
 +                    modifier = Modifier.padding(horizontal = 8.dp),
 +                    title = { Text("文字与底色") },
 +                ) {
-+                    colorFields.forEach { field ->
-+                        item(
-+                            onClick = { colorTargetKey = field.key },
-+                            headlineContent = { Text(field.title) },
-+                            supportingContent = {
-+                                Text(field.supporting(field.value))
-+                            },
-+                            trailingContent = {
-+                                Box(
-+                                    modifier = Modifier
-+                                        .size(28.dp)
-+                                        .clip(CircleShape)
-+                                        .background(field.value?.let { Color(it) } ?: field.preview),
-+                                )
-+                            },
-+                        )
-+                    }
-+                    // 背景透明度：只在设了背景色时才有意义，0% 等于不加底色
++                    item(
++                        onClick = { colorTargetKey = textColorField.key },
++                        headlineContent = { Text(textColorField.title) },
++                        supportingContent = {
++                            Text(textColorField.supporting(textColorField.value))
++                        },
++                        trailingContent = {
++                            Box(
++                                modifier = Modifier
++                                    .size(28.dp)
++                                    .clip(CircleShape)
++                                    .background(
++                                        textColorField.value?.let { Color(it) }
++                                            ?: textColorField.preview
++                                    ),
++                            )
++                        },
++                    )
++                    // 底色总开关：关掉就完全不画底色，不用点进取色盘「恢复默认」
++                    item(
++                        headlineContent = { Text("启用对白底色") },
++                        supportingContent = {
++                            Text("打开后才应用下面的背景色与透明度；关掉就完全不画底色")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteBackgroundEnabled,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteBackgroundEnabled = checked)
++                                    }
++                                },
++                            )
++                        },
++                    )
++                    item(
++                        onClick = { colorTargetKey = backgroundColorField.key },
++                        headlineContent = { Text(backgroundColorField.title) },
++                        supportingContent = {
++                            Text(backgroundColorField.supporting(backgroundColorField.value))
++                        },
++                        trailingContent = {
++                            Box(
++                                modifier = Modifier
++                                    .size(28.dp)
++                                    .clip(CircleShape)
++                                    .background(
++                                        backgroundColorField.value?.let { Color(it) }
++                                            ?: backgroundColorField.preview
++                                    ),
++                            )
++                        },
++                    )
++                    // 背景透明度：只在启用了底色、且设了背景色时才有意义，0% 等于不加底色
 +                    item(
 +                        headlineContent = { Text("背景透明度") },
 +                        supportingContent = {
@@ -5720,6 +6067,60 @@ index 0000000..fbefb78
 +                            }
 +                        },
 +                    )
++                    // 底色圆角：自绘的每行圆角矩形用这个半径，0 = 直角
++                    item(
++                        headlineContent = { Text("底色圆角") },
++                        supportingContent = {
++                            Column {
++                                Text("每行底色矩形的圆角，0 就是直角")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = backgroundCorner.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteBackgroundCorner = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 0f..24f,
++                                        steps = 23,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${backgroundCorner}dp")
++                                }
++                            }
++                        },
++                    )
++                    // 行间空隙：行与行的底色之间留多少白（上下各一半）
++                    item(
++                        headlineContent = { Text("行间空隙") },
++                        supportingContent = {
++                            Column {
++                                Text("换行后上下两块底色之间的空隙，0 就是贴在一起")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = backgroundGap.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteBackgroundGap = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 0f..12f,
++                                        steps = 11,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${backgroundGap}dp")
++                                }
++                            }
++                        },
++                    )
 +                }
 +            }
 +            item {
@@ -5731,7 +6132,7 @@ index 0000000..fbefb78
 +                        headlineContent = { Text("下划线样式") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("只支持实线；虚线需要自绘，这一版不做")
++                                Text("选「无」即关闭下划线；实线 / 虚线 / 点线都是自绘的，颜色见下面一项")
 +                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
 +                                    QUOTE_UNDERLINE_OPTIONS.forEachIndexed { index, (value, label) ->
 +                                        SegmentedButton(
@@ -5781,13 +6182,28 @@ index 0000000..fbefb78
 +                            )
 +                        },
 +                    )
++                    // 行首竖线：竖线颜色跟随上面的下划线颜色（没选就跟随文字颜色）
++                    item(
++                        headlineContent = { Text("行首竖线") },
++                        supportingContent = {
++                            Text("每个引号区间起点那一行的左侧画一根竖线，颜色跟随下划线颜色")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteLeadingBar,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting { it.copy(quoteLeadingBar = checked) }
++                                },
++                            )
++                        },
++                    )
 +                }
 +            }
 +        }
 +    }
 +
 +    val activeField = colorTargetKey?.let { key ->
-+        colorFields.firstOrNull { it.key == key }
++        (colorFields + underlineColorField).firstOrNull { it.key == key }
 +    }
 +    if (activeField != null) {
 +        ColorPickerDialog(
