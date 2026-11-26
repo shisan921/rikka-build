@@ -1,18 +1,19 @@
 diff --git a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-index bef7871..9717013 100644
+index bef7871..b56ecb8 100644
 --- a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-@@ -109,6 +109,9 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
+@@ -109,6 +109,10 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesColorsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAlphaPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesImagesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesMaterialPage
  import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
  import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
  import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
-@@ -424,6 +427,18 @@ class RouteActivity : ComponentActivity() {
+@@ -424,6 +428,22 @@ class RouteActivity : ComponentActivity() {
                                  SettingPreferencesUIPage()
                              }
  
@@ -28,10 +29,14 @@ index bef7871..9717013 100644
 +                                SettingPreferencesImagesPage()
 +                            }
 +
++                            entry<Screen.SettingPreferencesMaterial> {
++                                SettingPreferencesMaterialPage()
++                            }
++
                              entry<Screen.SettingPreferencesNetwork> {
                                  SettingPreferencesNetworkPage()
                              }
-@@ -657,6 +672,15 @@ sealed interface Screen : NavKey {
+@@ -657,6 +677,18 @@ sealed interface Screen : NavKey {
      @Serializable
      data object SettingPreferencesUI : Screen
  
@@ -44,14 +49,59 @@ index bef7871..9717013 100644
 +    @Serializable
 +    data object SettingPreferencesImages : Screen
 +
++    @Serializable
++    data object SettingPreferencesMaterial : Screen
++
      @Serializable
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..6825c46 100644
+index 205e822..e7b1ddd 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-@@ -644,6 +644,28 @@ data class DisplaySetting(
+@@ -604,6 +604,41 @@ enum class BackgroundEffectType {
+     GLASS,
+ }
+ 
++/**
++ * 界面材质：纯色 / 磨砂玻璃 / 液态玻璃。
++ *
++ * SOLID 保持原版纯色外观，FROSTED / LIQUID 才会真正接 haze 模糊。
++ */
++@Serializable
++enum class SurfaceMaterial {
++    @SerialName("solid")
++    SOLID,
++
++    @SerialName("frosted")
++    FROSTED,
++
++    @SerialName("liquid")
++    LIQUID,
++}
++
++/**
++ * 主题基色的配色算法：基色没彩度（白/灰）时统一退回中性灰阶，见 SeedColorScheme。
++ */
++@Serializable
++enum class ThemeSchemeStyle {
++    @SerialName("soft")
++    SOFT,
++
++    @SerialName("faithful")
++    FAITHFUL,
++
++    @SerialName("monochrome")
++    MONOCHROME,
++
++    @SerialName("neutral")
++    NEUTRAL,
++}
++
+ @Serializable
+ data class DisplaySetting(
+     val userAvatar: Avatar = Avatar.Dummy,
+@@ -644,6 +679,36 @@ data class DisplaySetting(
      val chatCustomFontName: String = "",
      val enableVolumeKeyScroll: Boolean = false,
      val volumeKeyScrollRatio: Float = 1.0f,
@@ -77,11 +127,19 @@ index 205e822..6825c46 100644
 +    val assistantBubbleImage: String = "",
 +    // 背景图是否叠加主题色遮罩（保证文字可读）
 +    val backgroundImageTint: Boolean = true,
++    // 界面材质：纯色 / 磨砂玻璃 / 液态玻璃，SOLID 与原来完全一致
++    val surfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    // 材质模糊强度（dp），0..40，滑块范围一致
++    val materialBlurRadius: Int = 16,
++    // 聊天气泡实时模糊：性能敏感，默认关闭
++    val bubbleRealtimeBlur: Boolean = false,
++    // 主题基色的配色算法
++    val themeSchemeStyle: ThemeSchemeStyle = ThemeSchemeStyle.SOFT,
  )
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..b669468 100644
+index 45c3d83..51811b5 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -100,16 +158,28 @@ index 45c3d83..b669468 100644
  import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  import androidx.compose.ui.platform.LocalFocusManager
  import androidx.compose.ui.platform.LocalHapticFeedback
-@@ -97,6 +99,8 @@ import me.rerere.hugeicons.stroke.Fullscreen
+@@ -97,7 +99,10 @@ import me.rerere.hugeicons.stroke.Fullscreen
  import me.rerere.hugeicons.stroke.Zap
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.datastore.BackgroundEffectType
 +import coil3.compose.AsyncImage
 +import java.io.File
  import me.rerere.rikkahub.data.datastore.Settings
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
  import me.rerere.rikkahub.data.datastore.getCurrentAssistant
  import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-@@ -153,7 +157,14 @@ fun ChatInput(
+ import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
+@@ -118,6 +123,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
+ import me.rerere.rikkahub.ui.context.LocalSettings
+ import me.rerere.rikkahub.ui.context.LocalToaster
+ import me.rerere.rikkahub.ui.hooks.ChatInputState
++import me.rerere.rikkahub.ui.theme.LiquidGlassHighlight
++import me.rerere.rikkahub.ui.theme.surfaceMaterialBorder
++import me.rerere.rikkahub.ui.theme.surfaceMaterialContainerColor
+ import me.rerere.rikkahub.utils.SoundEffectPlayer
+ import org.koin.compose.koinInject
+ import kotlin.time.Duration.Companion.seconds
+@@ -153,9 +161,21 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -122,12 +192,105 @@ index 45c3d83..b669468 100644
 +    val inputBackgroundImage = remember(inputImagePath) {
 +        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +    }
++    // 界面材质：纯色时和原版完全一致，磨砂 / 液态才换 style 和底色
++    val displaySetting = settings.displaySetting
++    val surfaceMaterial = displaySetting.surfaceMaterial
++    val materialBlurRadius = displaySetting.materialBlurRadius.coerceIn(0, 40)
      val inputHazeStyle = HazeBlurStyle.Material3 {
-         blurRadius(12.dp)
+-        blurRadius(12.dp)
++        // 老路径（enableBlurEffect）保持原来的 12dp，材质模式才用用户设的强度
++        blurRadius((if (surfaceMaterial == SurfaceMaterial.SOLID) 12 else materialBlurRadius).dp)
      }
-@@ -268,137 +279,156 @@ fun ChatInput(
-                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
+ 
+     val keyboardController = LocalSoftwareKeyboardController.current
+@@ -240,167 +260,224 @@ fun ChatInput(
+                     .fillMaxWidth()
+                     .clip(containerShape)
+                     .then(
+-                        if (settings.displaySetting.enableBlurEffect) {
+-                            when (settings.displaySetting.backgroundEffectType) {
+-                                BackgroundEffectType.BLUR -> Modifier.hazeBlur(
+-                                    input = HazeInput.Sources(hazeState),
+-                                    style = inputHazeStyle,
+-                                )
+-                                BackgroundEffectType.GLASS -> Modifier.hazeGlass(
+-                                    input = HazeInput.Sources(hazeState),
+-                                    style = GlassStyle.Material3(
+-                                        containerColor = hazeTintColor,
+-                                        tint = hazeTintColor.copy(alpha = 0.72f),
+-                                    ) {
+-                                        // Keep background text from competing with the input text.
+-                                        optics(GlassDefaults.optics.copy(
+-                                            blurRadius = OpticalSizeValue.Fixed(16.dp),
+-                                            depth = OpticalSizeValue.Fixed(0.5f),
+-                                        ))
+-                                        shape(containerShape)
+-                                    },
+-                                )
++                        when {
++                            // 磨砂玻璃：haze 模糊 + 半透明底，半径取材质设置
++                            surfaceMaterial == SurfaceMaterial.FROSTED -> Modifier.hazeBlur(
++                                input = HazeInput.Sources(hazeState),
++                                style = inputHazeStyle,
++                            )
++                            // 液态玻璃：haze-glass（更强模糊）+ 边缘高光描边
++                            surfaceMaterial == SurfaceMaterial.LIQUID -> Modifier.hazeGlass(
++                                input = HazeInput.Sources(hazeState),
++                                style = GlassStyle.Material3(
++                                    containerColor = hazeTintColor,
++                                    tint = hazeTintColor.copy(alpha = 0.72f),
++                                ) {
++                                    // Keep background text from competing with the input text.
++                                    optics(GlassDefaults.optics.copy(
++                                        blurRadius = OpticalSizeValue.Fixed(materialBlurRadius.coerceAtLeast(4).dp),
++                                        depth = OpticalSizeValue.Fixed(0.5f),
++                                    ))
++                                    shape(containerShape)
++                                },
++                            )
++                            // 纯色：原来的「背景模糊效果」开关照旧
++                            displaySetting.enableBlurEffect -> {
++                                when (displaySetting.backgroundEffectType) {
++                                    BackgroundEffectType.BLUR -> Modifier.hazeBlur(
++                                        input = HazeInput.Sources(hazeState),
++                                        style = inputHazeStyle,
++                                    )
++                                    BackgroundEffectType.GLASS -> Modifier.hazeGlass(
++                                        input = HazeInput.Sources(hazeState),
++                                        style = GlassStyle.Material3(
++                                            containerColor = hazeTintColor,
++                                            tint = hazeTintColor.copy(alpha = 0.72f),
++                                        ) {
++                                            // Keep background text from competing with the input text.
++                                            optics(GlassDefaults.optics.copy(
++                                                blurRadius = OpticalSizeValue.Fixed(16.dp),
++                                                depth = OpticalSizeValue.Fixed(0.5f),
++                                            ))
++                                            shape(containerShape)
++                                        },
++                                    )
++                                }
+                             }
+-                        } else Modifier
++                            else -> Modifier
++                        }
+                     ),
+                 shape = containerShape,
+                 tonalElevation = 0.dp,
+-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+-                color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
++                border = surfaceMaterialBorder(
++                    display = displaySetting,
++                    fallback = BorderStroke(
++                        1.dp,
++                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
++                    ),
++                ),
++                color = surfaceMaterialContainerColor(
++                    display = displaySetting,
++                    solid = if (displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
++                    frosted = hazeTintColor,
++                ),
              ) {
 -                Column(
 -                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -393,9 +556,15 @@ index 45c3d83..b669468 100644
 +                            }
                          }
                      }
++                    // 液态玻璃的轻微渐变高光：静态 brush，不参与触摸
++                    if (surfaceMaterial == SurfaceMaterial.LIQUID) {
++                        LiquidGlassHighlight(containerShape)
++                    }
                  }
+             }
+ 
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..ed8e555 100644
+index a18dd69..c01b8b1 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -448,7 +617,19 @@ index a18dd69..ed8e555 100644
  import me.rerere.rikkahub.data.model.Assistant
  import me.rerere.rikkahub.data.model.AssistantAffectScope
  import me.rerere.rikkahub.data.model.MessageNode
-@@ -121,6 +129,8 @@ fun ChatMessage(
+@@ -89,6 +97,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
+ import me.rerere.rikkahub.ui.modifier.shimmer
+ import me.rerere.rikkahub.ui.context.LocalSettings
+ import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
++import dev.chrisbanes.haze.HazeInput
++import dev.chrisbanes.haze.blur.HazeBlurStyle
++import dev.chrisbanes.haze.blur.hazeBlur
++import dev.chrisbanes.haze.blur.material3.Material3
++import me.rerere.rikkahub.ui.context.LocalChatHazeState
+ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
+ import me.rerere.rikkahub.ui.theme.extendColors
+ import me.rerere.rikkahub.utils.JsonInstant
+@@ -121,6 +134,8 @@ fun ChatMessage(
      val message = node.messages[node.selectIndex]
      val settings = LocalSettings.current.displaySetting
      val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
@@ -457,7 +638,7 @@ index a18dd69..ed8e555 100644
      val textStyle = LocalTextStyle.current.copy(
          fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
          lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
-@@ -159,23 +169,27 @@ fun ChatMessage(
+@@ -159,23 +174,27 @@ fun ChatMessage(
              }
          }
          ProvideTextStyle(textStyle) {
@@ -501,7 +682,7 @@ index a18dd69..ed8e555 100644
              }
          }
  
-@@ -261,6 +275,96 @@ fun ChatMessage(
+@@ -261,6 +280,100 @@ fun ChatMessage(
      }
  }
  
@@ -512,21 +693,25 @@ index a18dd69..ed8e555 100644
 +@Composable
 +private fun userBubbleContainer(setting: DisplaySetting): Color {
 +    val custom = setting.userBubbleColor
-+    return if (custom != null) {
++    val base = if (custom != null) {
 +        Color(custom)
 +    } else {
 +        MaterialTheme.colorScheme.primaryContainer.copy(alpha = setting.bubbleOpacity)
 +    }
++    // 开了气泡实时模糊就留一点透明度，否则气泡完全不透明，背后的模糊看不见
++    return if (setting.bubbleRealtimeBlur) base.copy(alpha = (base.alpha * 0.55f).coerceIn(0.05f, 1f)) else base
 +}
 +
 +@Composable
 +private fun assistantBubbleContainer(setting: DisplaySetting): Color {
 +    val custom = setting.assistantBubbleColor
-+    return if (custom != null) {
++    val base = if (custom != null) {
 +        Color(custom)
 +    } else {
 +        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = setting.bubbleOpacity)
 +    }
++    // 同上：气泡模糊开着时给模糊留出可见度
++    return if (setting.bubbleRealtimeBlur) base.copy(alpha = (base.alpha * 0.55f).coerceIn(0.05f, 1f)) else base
 +}
 +
 +/**
@@ -598,7 +783,28 @@ index a18dd69..ed8e555 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -324,7 +428,11 @@ private fun MessagePartsBlock(
+@@ -281,6 +394,20 @@ private fun MessagePartsBlock(
+     val hapticFeedback = LocalHapticFeedback.current
+     val settings = LocalSettings.current
+     val partsState by rememberUpdatedState(parts)
++    // 气泡实时模糊：默认关闭；只有开关打开且真的拿到了 haze 源才加，避免白算
++    val chatHazeState = LocalChatHazeState.current
++    val bubbleRealtimeBlur = settings.displaySetting.bubbleRealtimeBlur && chatHazeState != null
++    val bubbleHazeStyle = HazeBlurStyle.Material3 {
++        blurRadius(settings.displaySetting.materialBlurRadius.coerceIn(4, 40).dp)
++    }
++    val bubbleHazeModifier = if (bubbleRealtimeBlur && chatHazeState != null) {
++        Modifier.hazeBlur(
++            input = HazeInput.Sources(chatHazeState),
++            style = bubbleHazeStyle,
++        )
++    } else {
++        Modifier
++    }
+ 
+     val handleClickCitation: (String) -> Unit = remember {
+         handler@{ citationId ->
+@@ -324,7 +451,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -611,15 +817,18 @@ index a18dd69..ed8e555 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,39 +473,59 @@ private fun MessagePartsBlock(
+@@ -365,41 +496,65 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
 +                                val userBubbleColor = userBubbleContainer(settings.displaySetting)
                                  Surface(
-                                     modifier = Modifier.animateContentSize(),
+-                                    modifier = Modifier.animateContentSize(),
 -                                    shape = RoundedCornerShape(16.dp),
 -                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
++                                    modifier = Modifier
++                                        .animateContentSize()
++                                        .then(bubbleHazeModifier),
 +                                    shape = bubbleShape(settings.displaySetting.bubbleCornerRadius),
 +                                    color = userBubbleColor,
 +                                    contentColor = bubbleContentColor(settings.displaySetting, userBubbleColor),
@@ -640,44 +849,47 @@ index a18dd69..ed8e555 100644
 +                                            maskColor = userBubbleColor.copy(alpha = 0.72f),
 +                                            tint = settings.displaySetting.backgroundImageTint,
                                          )
-+                                        Column(modifier = Modifier.padding(8.dp)) {
-+                                            MarkdownBlock(
-+                                                content = part.text.replaceRegexes(
-+                                                    assistant = assistant,
-+                                                    scope = AssistantAffectScope.USER,
-+                                                    visual = true,
-+                                                ),
-+                                                onClickCitation = handleClickCitation
-+                                            )
-+                                        }
-                                     }
-                                 }
-                             } else {
-                                 if (settings.displaySetting.showAssistantBubble) {
-+                                    val assistantBubbleColor = assistantBubbleContainer(settings.displaySetting)
-                                     Surface(
-                                         modifier = Modifier.animateContentSize(),
+-                                    }
+-                                }
+-                            } else {
+-                                if (settings.displaySetting.showAssistantBubble) {
+-                                    Surface(
+-                                        modifier = Modifier.animateContentSize(),
 -                                        shape = RoundedCornerShape(16.dp),
 -                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
+-                                    ) {
+                                         Column(modifier = Modifier.padding(8.dp)) {
+                                             MarkdownBlock(
+                                                 content = part.text.replaceRegexes(
+                                                     assistant = assistant,
+-                                                    scope = AssistantAffectScope.ASSISTANT,
++                                                    scope = AssistantAffectScope.USER,
+                                                     visual = true,
+                                                 ),
+-                                                onClickCitation = handleClickCitation,
++                                                onClickCitation = handleClickCitation
+                                             )
+                                         }
+                                     }
++                                }
++                            } else {
++                                if (settings.displaySetting.showAssistantBubble) {
++                                    val assistantBubbleColor = assistantBubbleContainer(settings.displaySetting)
++                                    Surface(
++                                        modifier = Modifier
++                                            .animateContentSize()
++                                            .then(bubbleHazeModifier),
 +                                        shape = bubbleShape(settings.displaySetting.bubbleCornerRadius),
 +                                        color = assistantBubbleColor,
 +                                        contentColor = bubbleContentColor(settings.displaySetting, assistantBubbleColor),
-                                     ) {
--                                        Column(modifier = Modifier.padding(8.dp)) {
--                                            MarkdownBlock(
--                                                content = part.text.replaceRegexes(
--                                                    assistant = assistant,
--                                                    scope = AssistantAffectScope.ASSISTANT,
--                                                    visual = true,
--                                                ),
--                                                onClickCitation = handleClickCitation,
++                                    ) {
 +                                        // 气泡背景图垫在最底层，圆角交给 Surface 自己裁
 +                                        Box {
 +                                            BubbleImageLayer(
 +                                                image = rememberBubbleImage(settings.displaySetting.assistantBubbleImage),
 +                                                maskColor = assistantBubbleColor.copy(alpha = 0.72f),
 +                                                tint = settings.displaySetting.backgroundImageTint,
-                                             )
++                                            )
 +                                            Column(modifier = Modifier.padding(8.dp)) {
 +                                                MarkdownBlock(
 +                                                    content = part.text.replaceRegexes(
@@ -688,11 +900,32 @@ index a18dd69..ed8e555 100644
 +                                                    onClickCitation = handleClickCitation,
 +                                                )
 +                                            }
-                                         }
-                                     }
++                                        }
++                                    }
                                  } else {
+                                     MarkdownBlock(
+                                         content = part.text.replaceRegexes(
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt b/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt
+new file mode 100644
+index 0000000..806957f
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt
+@@ -0,0 +1,13 @@
++package me.rerere.rikkahub.ui.context
++
++import androidx.compose.runtime.staticCompositionLocalOf
++import dev.chrisbanes.haze.HazeState
++
++/**
++ * 聊天页共享的 haze 背景源。
++ *
++ * ChatPage 里把同一个 [HazeState] 交给输入框、顶栏、侧边栏和聊天气泡的实时模糊用，
++ * 这样气泡不需要再往下穿一层参数。不在聊天页（比如导出、预览）时是 null，
++ * 用到它的地方会自己跳过模糊。
++ */
++val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
-index 86fcdcf..0efe605 100644
+index 86fcdcf..b9166b7 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 @@ -1,6 +1,7 @@
@@ -711,9 +944,11 @@ index 86fcdcf..0efe605 100644
  import androidx.compose.foundation.layout.fillMaxWidth
  import androidx.compose.foundation.layout.heightIn
  import androidx.compose.foundation.layout.padding
-@@ -43,12 +45,15 @@ import androidx.compose.runtime.snapshotFlow
+@@ -42,13 +44,17 @@ import androidx.compose.runtime.setValue
+ import androidx.compose.runtime.snapshotFlow
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.graphics.vector.ImageVector
 +import androidx.compose.ui.layout.ContentScale
  import androidx.compose.ui.platform.LocalContext
@@ -727,30 +962,61 @@ index 86fcdcf..0efe605 100644
  import kotlinx.coroutines.delay
  import kotlinx.coroutines.flow.collectLatest
  import kotlinx.coroutines.flow.distinctUntilChanged
-@@ -81,6 +86,7 @@ import me.rerere.rikkahub.ui.components.ui.Greeting
+@@ -81,12 +87,17 @@ import me.rerere.rikkahub.ui.components.ui.Greeting
  import me.rerere.rikkahub.ui.components.ui.Tooltip
  import me.rerere.rikkahub.ui.components.ui.UIAvatar
  import me.rerere.rikkahub.ui.components.ui.UpdateCard
 +import androidx.compose.ui.draw.alpha
++import dev.chrisbanes.haze.HazeState
  import androidx.compose.ui.draw.clip
  import me.rerere.rikkahub.ui.context.LocalToaster
  import me.rerere.rikkahub.ui.context.Navigator
-@@ -181,240 +187,266 @@ fun ChatDrawerContent(
+ import com.dokar.sonner.ToastType
+ import me.rerere.rikkahub.ui.hooks.EditStateContent
+ import me.rerere.rikkahub.ui.hooks.readBooleanPreference
++import me.rerere.rikkahub.ui.theme.surfaceMaterialContainerColor
++import me.rerere.rikkahub.ui.theme.surfaceMaterialEffect
++import me.rerere.rikkahub.ui.theme.usesHazeSurfaceMaterial
+ import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
+ import me.rerere.rikkahub.ui.hooks.useEditState
+ import me.rerere.rikkahub.ui.modifier.onClick
+@@ -102,6 +113,7 @@ fun ChatDrawerContent(
+     vm: ChatVM,
+     settings: Settings,
+     current: Conversation,
++    hazeState: HazeState,
+ ) {
+     val scope = rememberCoroutineScope()
+     val context = LocalContext.current
+@@ -178,243 +190,294 @@ fun ChatDrawerContent(
+         }
+     }
+ 
++    // 界面材质：侧边栏背景走同一套 haze，纯色时不加任何绘制
++    val drawerDisplaySetting = settings.displaySetting
      ModalDrawerSheet(
          modifier = Modifier.width(300.dp)
      ) {
 -        Column(
 -            modifier = Modifier.padding(8.dp),
 -            verticalArrangement = Arrangement.spacedBy(8.dp),
--        ) {
--            if (updateChecksEnabled && !isPlayStore) {
--                UpdateCard(vm)
 +        // 侧边栏背景图：只有路径变化才重建 File，避免每帧新对象
 +        val drawerImagePath = settings.displaySetting.drawerBackgroundImage
 +        val drawerBackgroundImage = remember(drawerImagePath) {
 +            drawerImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +        }
-+        Box(modifier = Modifier.fillMaxSize()) {
++        Box(
++            modifier = Modifier
++                .fillMaxSize()
++                .surfaceMaterialEffect(
++                    state = hazeState,
++                    display = drawerDisplaySetting,
++                    shape = MaterialTheme.shapes.large,
++                    tint = MaterialTheme.colorScheme.surface,
++                )
+         ) {
+-            if (updateChecksEnabled && !isPlayStore) {
+-                UpdateCard(vm)
 +            if (drawerBackgroundImage != null) {
 +                AsyncImage(
 +                    model = drawerBackgroundImage,
@@ -775,17 +1041,12 @@ index 86fcdcf..0efe605 100644
 -
 -            // 用户头像和昵称自定义区域
 -            Row(
-+            Column(
-+                // 侧边栏元素透明度：1f 时和原来完全一致
-                 modifier = Modifier
+-                modifier = Modifier
 -                    .fillMaxWidth()
 -                    .padding(horizontal = 8.dp, vertical = 8.dp),
 -                verticalAlignment = Alignment.CenterVertically,
 -                horizontalArrangement = Arrangement.spacedBy(16.dp),
-+                    .padding(8.dp)
-+                    .alpha(settings.displaySetting.drawerElementAlpha.coerceIn(0f, 1f)),
-+                verticalArrangement = Arrangement.spacedBy(8.dp),
-             ) {
+-            ) {
 -                UIAvatar(
 -                    name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
 -                    value = settings.displaySetting.userAvatar,
@@ -795,10 +1056,29 @@ index 86fcdcf..0efe605 100644
 -                                displaySetting = settings.displaySetting.copy(
 -                                    userAvatar = newAvatar
 -                                )
--                            )
--                        )
++            // 磨砂 / 液态时压一层半透明底，让模糊出来的内容不像直接透过窗户
++            if (drawerDisplaySetting.usesHazeSurfaceMaterial()) {
++                Box(
++                    modifier = Modifier
++                        .matchParentSize()
++                        .background(
++                            surfaceMaterialContainerColor(
++                                display = drawerDisplaySetting,
++                                solid = Color.Transparent,
++                                frosted = MaterialTheme.colorScheme.surface,
+                             )
+                         )
 -                    },
 -                    modifier = Modifier.size(50.dp),
++                )
++            }
++            Column(
++                // 侧边栏元素透明度：1f 时和原来完全一致
++                modifier = Modifier
++                    .padding(8.dp)
++                    .alpha(settings.displaySetting.drawerElementAlpha.coerceIn(0f, 1f)),
++                verticalArrangement = Arrangement.spacedBy(8.dp),
++            ) {
 +                if (updateChecksEnabled && !isPlayStore) {
 +                    UpdateCard(vm)
 +                }
@@ -1199,11 +1479,193 @@ index 86fcdcf..0efe605 100644
              }
          }
      }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
+index 6f7f137..c135cf4 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
+@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.surfaceColorAtElevation
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.CompositionLocalProvider
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateListOf
+@@ -95,6 +96,7 @@ import me.rerere.rikkahub.data.model.Conversation
+ import me.rerere.rikkahub.data.model.MessageNode
+ import me.rerere.rikkahub.service.ChatError
+ import me.rerere.rikkahub.ui.components.message.ChatMessage
++import me.rerere.rikkahub.ui.context.LocalChatHazeState
+ import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
+ import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
+ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
+@@ -329,42 +331,45 @@ private fun ChatListNormal(
+                         selectedKeys = selectedItems,
+                         enabled = selecting,
+                     ) {
+-                        ChatMessage(
+-                            node = node,
+-                            model = node.currentMessage.modelId?.let(modelById::get),
+-                            assistant = assistant,
+-                            loading = loading && index == lastMessageIndex,
+-                            onRegenerate = {
+-                                onRegenerate(node.currentMessage)
+-                            },
+-                            onEdit = {
+-                                onEdit(node.currentMessage)
+-                            },
+-                            onFork = {
+-                                onForkMessage(node.currentMessage)
+-                            },
+-                            onDelete = {
+-                                onDelete(node.currentMessage)
+-                            },
+-                            onShare = {
+-                                selecting = true  // 使用 CoroutineScope 延迟状态更新
+-                                selectedItems.clear()
+-                                selectedItems.addAll(conversation.messageNodes.map { it.id }
+-                                    .subList(0, conversation.messageNodes.indexOf(node) + 1))
+-                            },
+-                            onUpdate = {
+-                                onUpdateMessage(it)
+-                            },
+-                            isFavorite = node.isFavorite,
+-                            onToggleFavorite = {
+-                                onToggleFavorite?.invoke(node)
+-                            },
+-                            onTranslate = onTranslate,
+-                            onClearTranslation = onClearTranslation,
+-                            onToolApproval = onToolApproval,
+-                            onToolAnswer = onToolAnswer,
+-                            lastMessage = index == lastMessageIndex,
+-                        )
++                        // 把 haze 背景源传给气泡：气泡实时模糊默认关闭，开着才真的用
++                        CompositionLocalProvider(LocalChatHazeState provides hazeState) {
++                            ChatMessage(
++                                node = node,
++                                model = node.currentMessage.modelId?.let(modelById::get),
++                                assistant = assistant,
++                                loading = loading && index == lastMessageIndex,
++                                onRegenerate = {
++                                    onRegenerate(node.currentMessage)
++                                },
++                                onEdit = {
++                                    onEdit(node.currentMessage)
++                                },
++                                onFork = {
++                                    onForkMessage(node.currentMessage)
++                                },
++                                onDelete = {
++                                    onDelete(node.currentMessage)
++                                },
++                                onShare = {
++                                    selecting = true  // 使用 CoroutineScope 延迟状态更新
++                                    selectedItems.clear()
++                                    selectedItems.addAll(conversation.messageNodes.map { it.id }
++                                        .subList(0, conversation.messageNodes.indexOf(node) + 1))
++                                },
++                                onUpdate = {
++                                    onUpdateMessage(it)
++                                },
++                                isFavorite = node.isFavorite,
++                                onToggleFavorite = {
++                                    onToggleFavorite?.invoke(node)
++                                },
++                                onTranslate = onTranslate,
++                                onClearTranslation = onClearTranslation,
++                                onToolApproval = onToolApproval,
++                                onToolAnswer = onToolAnswer,
++                                lastMessage = index == lastMessageIndex,
++                            )
++                        }
+                     }
+                 }
+             }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-index 5460f45..04f9cd4 100644
+index 5460f45..957a562 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-@@ -308,7 +308,9 @@ private fun ChatPageContent(
+@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.RectangleShape
+ import androidx.compose.ui.platform.LocalFocusManager
+ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+ import androidx.compose.ui.res.stringResource
+@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.dokar.sonner.ToastType
++import dev.chrisbanes.haze.HazeState
+ import dev.chrisbanes.haze.hazeSource
+ import dev.chrisbanes.haze.rememberHazeState
+ import kotlinx.coroutines.Job
+@@ -55,6 +57,7 @@ import me.rerere.ai.provider.BuiltInTools
+ import me.rerere.ai.provider.Model
+ import me.rerere.ai.provider.ProviderSetting
+ import me.rerere.ai.ui.UIMessagePart
++import me.rerere.rikkahub.ui.theme.surfaceMaterialEffect
+ import me.rerere.hugeicons.HugeIcons
+ import me.rerere.hugeicons.stroke.Cancel01
+ import me.rerere.hugeicons.stroke.LeftToRightListBullet
+@@ -188,6 +191,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+         }
+     }
+ 
++    // haze 背景源提到最外层：侧边栏抽屉和聊天内容共用同一个，材质模糊才有画面可采样
++    val hazeState = rememberHazeState()
++
+     when {
+         isBigScreen -> {
+             PermanentNavigationDrawer(
+@@ -196,11 +202,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+                         navController = navController,
+                         current = conversation,
+                         vm = vm,
+-                        settings = setting
++                        settings = setting,
++                        hazeState = hazeState,
+                     )
+                 }
+             ) {
+                 ChatPageContent(
++                    hazeState = hazeState,
+                     onStartVoiceMode = startVoiceMode,
+                     inputState = inputState,
+                     loadingJob = loadingJob,
+@@ -229,11 +237,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+                         navController = navController,
+                         current = conversation,
+                         vm = vm,
+-                        settings = setting
++                        settings = setting,
++                        hazeState = hazeState,
+                     )
+                 }
+             ) {
+                 ChatPageContent(
++                    hazeState = hazeState,
+                     onStartVoiceMode = startVoiceMode,
+                     inputState = inputState,
+                     loadingJob = loadingJob,
+@@ -261,6 +271,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+ 
+ @Composable
+ private fun ChatPageContent(
++    hazeState: HazeState,
+     onStartVoiceMode: () -> Unit,
+     inputState: ChatInputState,
+     loadingJob: Job?,
+@@ -282,7 +293,6 @@ private fun ChatPageContent(
+     val toaster = LocalToaster.current
+     val workspaceRepository: WorkspaceRepository = koinInject()
+     var previewMode by rememberSaveable { mutableStateOf(false) }
+-    val hazeState = rememberHazeState()
+     val assistant = setting.getCurrentAssistant()
+     var showFilesSheet by remember { mutableStateOf(false) }
+     val attachmentPickerActions = rememberChatAttachmentPickerActions(
+@@ -308,7 +318,9 @@ private fun ChatPageContent(
      TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
  
      Surface(
@@ -1214,6 +1676,36 @@ index 5460f45..04f9cd4 100644
          modifier = Modifier.fillMaxSize()
      ) {
          AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
+@@ -317,6 +329,7 @@ private fun ChatPageContent(
+                 TopBar(
+                     settings = setting,
+                     conversation = conversation,
++                    hazeState = hazeState,
+                     bigScreen = bigScreen,
+                     drawerState = drawerState,
+                     previewMode = previewMode,
+@@ -622,6 +635,7 @@ private fun ChatFilesPickerSheet(
+ private fun TopBar(
+     settings: Settings,
+     conversation: Conversation,
++    hazeState: HazeState,
+     drawerState: DrawerState,
+     bigScreen: Boolean,
+     previewMode: Boolean,
+@@ -636,6 +650,13 @@ private fun TopBar(
+     }
+ 
+     TopAppBar(
++        // 顶栏材质：磨砂 / 液态时给顶栏加背后模糊，纯色时和原版一样什么都不加
++        modifier = Modifier.surfaceMaterialEffect(
++            state = hazeState,
++            display = settings.displaySetting,
++            shape = RectangleShape,
++            tint = MaterialTheme.colorScheme.surface,
++        ),
+         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+         navigationIcon = {
+             if (!bigScreen) {
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt
 new file mode 100644
 index 0000000..a96c05b
@@ -1362,17 +1854,19 @@ index 0000000..a96c05b
 +)
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
 new file mode 100644
-index 0000000..367efe5
+index 0000000..5a9b1b6
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
-@@ -0,0 +1,280 @@
+@@ -0,0 +1,374 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
 +import androidx.compose.foundation.layout.Arrangement
 +import androidx.compose.foundation.layout.Box
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
 +import androidx.compose.foundation.layout.fillMaxSize
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.padding
@@ -1380,9 +1874,11 @@ index 0000000..367efe5
 +import androidx.compose.foundation.lazy.LazyColumn
 +import androidx.compose.foundation.shape.CircleShape
 +import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.Icon
 +import androidx.compose.material3.LargeFlexibleTopAppBar
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.RadioButton
 +import androidx.compose.material3.Scaffold
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
@@ -1392,6 +1888,7 @@ index 0000000..367efe5
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
 +import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
 +import androidx.compose.ui.Modifier
 +import androidx.compose.ui.draw.clip
 +import androidx.compose.ui.graphics.Color
@@ -1399,7 +1896,10 @@ index 0000000..367efe5
 +import androidx.compose.ui.unit.dp
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import java.util.Locale
++import me.rerere.hugeicons.HugeIcons
++import me.rerere.hugeicons.stroke.ArrowRight01
 +import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.ThemeSchemeStyle
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
 +import me.rerere.rikkahub.ui.theme.CustomColors
@@ -1416,6 +1916,7 @@ index 0000000..367efe5
 +    val settings by vm.settings.collectAsStateWithLifecycle()
 +    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
 +    var colorTarget by remember { mutableStateOf<ColorField?>(null) }
++    var showSchemeStyleDialog by remember { mutableStateOf(false) }
 +
 +    fun updateDisplaySetting(setting: DisplaySetting) {
 +        displaySetting = setting
@@ -1513,6 +2014,21 @@ index 0000000..367efe5
 +                            )
 +                        },
 +                    )
++                    // 配色风格：只有设了主题基色才真正起作用（白/灰基色会被算法自动拉成中性灰阶）
++                    item(
++                        onClick = { showSchemeStyleDialog = true },
++                        headlineContent = { Text("配色风格") },
++                        supportingContent = {
++                            Text(themeSchemeStyleLabel(displaySetting.themeSchemeStyle))
++                        },
++                        trailingContent = {
++                            Icon(
++                                imageVector = HugeIcons.ArrowRight01,
++                                contentDescription = null,
++                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                        },
++                    )
 +                    colorFields.forEach { field ->
 +                        item(
 +                            onClick = { colorTarget = field },
@@ -1545,6 +2061,76 @@ index 0000000..367efe5
 +            },
 +        )
 +    }
++
++    if (showSchemeStyleDialog) {
++        ThemeSchemeStyleDialog(
++            current = displaySetting.themeSchemeStyle,
++            onDismiss = { showSchemeStyleDialog = false },
++            onSelect = { style ->
++                updateDisplaySetting(displaySetting.copy(themeSchemeStyle = style))
++                showSchemeStyleDialog = false
++            },
++        )
++    }
++}
++
++/** 配色风格的中文名，设置在副标题里显示 */
++internal fun themeSchemeStyleLabel(style: ThemeSchemeStyle): String = when (style) {
++    ThemeSchemeStyle.SOFT -> "柔和"
++    ThemeSchemeStyle.FAITHFUL -> "贴近原色"
++    ThemeSchemeStyle.MONOCHROME -> "单色灰阶"
++    ThemeSchemeStyle.NEUTRAL -> "中性"
++}
++
++/** 配色风格的单选弹窗：点一项立刻生效，底部给「恢复默认」回到柔和 */
++@Composable
++private fun ThemeSchemeStyleDialog(
++    current: ThemeSchemeStyle,
++    onDismiss: () -> Unit,
++    onSelect: (ThemeSchemeStyle) -> Unit,
++) {
++    AlertDialog(
++        onDismissRequest = onDismiss,
++        title = { Text("配色风格") },
++        text = {
++            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
++                ThemeSchemeStyle.entries.forEach { style ->
++                    Row(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .clickable { onSelect(style) }
++                            .padding(vertical = 8.dp),
++                        verticalAlignment = Alignment.CenterVertically,
++                    ) {
++                        RadioButton(
++                            selected = current == style,
++                            onClick = { onSelect(style) },
++                        )
++                        Text(
++                            text = themeSchemeStyleLabel(style),
++                            style = MaterialTheme.typography.bodyLarge,
++                            modifier = Modifier.padding(start = 8.dp),
++                        )
++                    }
++                }
++                Text(
++                    text = "白 / 灰这类没有彩度的基色会自动走中性灰阶，不会再发绿",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = onDismiss) {
++                Text("关闭")
++            }
++        },
++        dismissButton = {
++            TextButton(onClick = { onSelect(ThemeSchemeStyle.SOFT) }) {
++                Text("恢复默认")
++            }
++        },
++    )
 +}
 +
 +/**
@@ -1957,11 +2543,219 @@ index 0000000..3945d8d
 +            target.absolutePath
 +        }.getOrNull()
 +    }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
+new file mode 100644
+index 0000000..30e7557
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
+@@ -0,0 +1,202 @@
++package me.rerere.rikkahub.ui.pages.setting
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.material3.LargeFlexibleTopAppBar
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.SegmentedButton
++import androidx.compose.material3.SegmentedButtonDefaults
++import androidx.compose.material3.SingleChoiceSegmentedButtonRow
++import androidx.compose.material3.Slider
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import kotlin.math.roundToInt
++import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
++import me.rerere.rikkahub.ui.components.nav.BackButton
++import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.theme.CustomColors
++import me.rerere.rikkahub.utils.plus
++import org.koin.androidx.compose.koinViewModel
++
++/** 模糊强度滑块的取值范围，和 DisplaySetting.materialBlurRadius 的收敛范围一致 */
++private const val MIN_MATERIAL_BLUR = 0
++private const val MAX_MATERIAL_BLUR = 40
++private const val DEFAULT_MATERIAL_BLUR = 16
++private const val DEFAULT_BUBBLE_REALTIME_BLUR = false
++private val DEFAULT_SURFACE_MATERIAL = SurfaceMaterial.SOLID
++
++/** 三选一的显示顺序与中文名 */
++private val SURFACE_MATERIAL_OPTIONS = listOf(
++    SurfaceMaterial.SOLID to "纯色",
++    SurfaceMaterial.FROSTED to "磨砂",
++    SurfaceMaterial.LIQUID to "液态",
++)
++
++/**
++ * 界面材质页：纯色 / 磨砂玻璃 / 液态玻璃 + 模糊强度 + 气泡实时模糊。
++ *
++ * 全部带默认值，默认 SOLID + 16dp + 关闭气泡模糊，和原版外观完全一致。
++ */
++@Composable
++fun SettingPreferencesMaterialPage(vm: SettingVM = koinViewModel()) {
++    val settings by vm.settings.collectAsStateWithLifecycle()
++    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
++
++    fun updateDisplaySetting(setting: DisplaySetting) {
++        displaySetting = setting
++        vm.updateSettings(settings.copy(displaySetting = setting))
++    }
++
++    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
++    val material = displaySetting.surfaceMaterial
++    val blurRadius = displaySetting.materialBlurRadius.coerceIn(MIN_MATERIAL_BLUR, MAX_MATERIAL_BLUR)
++
++    Scaffold(
++        topBar = {
++            LargeFlexibleTopAppBar(
++                title = { Text("界面材质") },
++                navigationIcon = {
++                    BackButton()
++                },
++                scrollBehavior = scrollBehavior,
++                colors = CustomColors.topBarColors
++            )
++        },
++        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++        containerColor = CustomColors.topBarColors.containerColor
++    ) { contentPadding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize(),
++            contentPadding = contentPadding + PaddingValues(8.dp),
++            verticalArrangement = Arrangement.spacedBy(16.dp)
++        ) {
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("材质") },
++                ) {
++                    item(
++                        headlineContent = { Text("界面材质") },
++                        supportingContent = {
++                            Column {
++                                Text("纯色、磨砂玻璃、液态玻璃")
++                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
++                                    SURFACE_MATERIAL_OPTIONS.forEachIndexed { index, (value, label) ->
++                                        SegmentedButton(
++                                            selected = material == value,
++                                            onClick = {
++                                                updateDisplaySetting(displaySetting.copy(surfaceMaterial = value))
++                                            },
++                                            shape = SegmentedButtonDefaults.itemShape(
++                                                index = index,
++                                                count = SURFACE_MATERIAL_OPTIONS.size,
++                                            ),
++                                        ) {
++                                            Text(label)
++                                        }
++                                    }
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(surfaceMaterial = DEFAULT_SURFACE_MATERIAL)
++                                        )
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    item(
++                        headlineContent = { Text("模糊强度") },
++                        supportingContent = {
++                            Column {
++                                Text("只影响磨砂玻璃 / 液态玻璃，0 就是完全清晰")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = blurRadius.toFloat(),
++                                        onValueChange = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(
++                                                    materialBlurRadius = it.roundToInt()
++                                                        .coerceIn(MIN_MATERIAL_BLUR, MAX_MATERIAL_BLUR)
++                                                )
++                                            )
++                                        },
++                                        valueRange = MIN_MATERIAL_BLUR.toFloat()..MAX_MATERIAL_BLUR.toFloat(),
++                                        steps = (MAX_MATERIAL_BLUR - MIN_MATERIAL_BLUR - 1) / 2,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${blurRadius} dp")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(materialBlurRadius = DEFAULT_MATERIAL_BLUR)
++                                        )
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    item(
++                        headlineContent = { Text("聊天气泡实时模糊") },
++                        supportingContent = {
++                            Column {
++                                Text("给用户 / AI 气泡加背后模糊，滚动时比较吃性能，默认关闭")
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(
++                                                bubbleRealtimeBlur = DEFAULT_BUBBLE_REALTIME_BLUR
++                                            )
++                                        )
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.bubbleRealtimeBlur,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(bubbleRealtimeBlur = it))
++                                }
++                            )
++                        },
++                    )
++                }
++            }
++        }
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-index c296a24..9812f68 100644
+index c296a24..7910ae0 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
+@@ -18,9 +18,13 @@ import androidx.compose.ui.unit.dp
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Notification01
  import me.rerere.hugeicons.stroke.Internet
@@ -1971,7 +2765,11 @@ index c296a24..9812f68 100644
  import me.rerere.hugeicons.stroke.PaintBoard
  import me.rerere.hugeicons.stroke.Settings03
  import me.rerere.hugeicons.stroke.Sun01
-@@ -65,6 +68,24 @@ fun SettingPreferencesPage() {
++import me.rerere.hugeicons.stroke.WebDesign01
+ import me.rerere.rikkahub.R
+ import me.rerere.rikkahub.Screen
+ import me.rerere.rikkahub.ui.components.nav.BackButton
+@@ -65,6 +69,30 @@ fun SettingPreferencesPage() {
                          headlineContent = { Text(stringResource(R.string.setting_page_preferences_theme)) },
                          supportingContent = { Text(stringResource(R.string.setting_page_preferences_theme_desc)) },
                      )
@@ -1993,15 +2791,21 @@ index c296a24..9812f68 100644
 +                        headlineContent = { Text("插图素材") },
 +                        supportingContent = { Text("输入框背景、侧边栏背景、气泡背景") },
 +                    )
++                    item(
++                        onClick = { navController.navigate(Screen.SettingPreferencesMaterial) },
++                        leadingContent = { Icon(HugeIcons.WebDesign01, null) },
++                        headlineContent = { Text("界面材质") },
++                        supportingContent = { Text("纯色、磨砂玻璃、液态玻璃") },
++                    )
                      item(
                          onClick = { navController.navigate(Screen.SettingPreferencesNotification) },
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/SeedColorScheme.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/SeedColorScheme.kt
 new file mode 100644
-index 0000000..7fff986
+index 0000000..a46bbb5
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/SeedColorScheme.kt
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,97 @@
 +package me.rerere.rikkahub.ui.theme
 +
 +import androidx.compose.material3.ColorScheme
@@ -2012,47 +2816,81 @@ index 0000000..7fff986
 +import dynamiccolor.Variant
 +import hct.Hct
 +import me.rerere.material3.toColorScheme
++import me.rerere.rikkahub.data.datastore.ThemeSchemeStyle
++
++/**
++ * 基色彩度低于这个值时，整条配色改走 [Variant.NEUTRAL]。
++ *
++ * 原因：TONAL_SPOT 在基色 chroma≈0（纯白 / 浅灰 / 深灰）时会退回一个默认色相，
++ * 生成出来的灰阶会发青发绿，所以纯灰基色直接交给 NEUTRAL 出干净灰阶。
++ */
++private const val MIN_CHROMA_FOR_VARIANT = 8.0
++
++/**
++ * 配色风格 → material-color-utilities 的 Variant。
++ *
++ * 只映射到本项目 material-color-utilities 里确实存在的常量：
++ * TONAL_SPOT / CONTENT / MONOCHROME / NEUTRAL。
++ */
++fun ThemeSchemeStyle.toVariant(): Variant = when (this) {
++    ThemeSchemeStyle.SOFT -> Variant.TONAL_SPOT
++    ThemeSchemeStyle.FAITHFUL -> Variant.CONTENT
++    ThemeSchemeStyle.MONOCHROME -> Variant.MONOCHROME
++    ThemeSchemeStyle.NEUTRAL -> Variant.NEUTRAL
++}
 +
 +/**
 + * 用单个基色生成整套 Material 3 配色。
 + *
-+ * 算法和 [CustomTheme.generateColorScheme] 完全一致（TONAL_SPOT + 默认 spec / platform / 对比度），
++ * 算法和 [CustomTheme.generateColorScheme] 一致（同样的 spec / platform / 对比度），
 + * 区别只是只需要用户给一个颜色，背景 / 卡片 / 文字 / 描边全部从这条基色推导，
 + * 所以用户选一个很亮或很淡的颜色也不会出现「白底白字」。
 + *
-+ * 纯函数，调用方用 `remember(seed, dark)` 缓存即可。
++ * [style] 决定调色板变体；基色 chroma 过低时无视 [style] 统一走 NEUTRAL。
++ *
++ * 纯函数，调用方用 `remember(seed, dark, style)` 缓存即可。
 + */
-+fun generateSchemeFromSeed(seed: Long, dark: Boolean): ColorScheme {
++fun generateSchemeFromSeed(
++    seed: Long,
++    dark: Boolean,
++    style: ThemeSchemeStyle = ThemeSchemeStyle.SOFT,
++): ColorScheme {
 +    val sourceHct = Hct.fromInt(seed.toInt())
 +    val specVersion = DynamicScheme.DEFAULT_SPEC_VERSION
 +    val platform = DynamicScheme.DEFAULT_PLATFORM
 +    val contrastLevel = 0.0
 +    val colorSpec = ColorSpecs.get(specVersion)
++    // 白 / 灰基色：chroma 几乎为 0，按风格走会拿到默认色相的青绿色，这里统一拉回中性灰阶
++    val variant = if (sourceHct.chroma < MIN_CHROMA_FOR_VARIANT) {
++        Variant.NEUTRAL
++    } else {
++        style.toVariant()
++    }
 +
 +    val scheme = DynamicScheme(
 +        sourceHct,
-+        Variant.TONAL_SPOT,
++        variant,
 +        dark,
 +        contrastLevel,
 +        platform,
 +        specVersion,
 +        colorSpec.getPrimaryPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +        colorSpec.getSecondaryPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +        colorSpec.getTertiaryPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +        colorSpec.getNeutralPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +        colorSpec.getNeutralVariantPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +        colorSpec.getErrorPalette(
-+            Variant.TONAL_SPOT, sourceHct, dark, platform, contrastLevel,
++            variant, sourceHct, dark, platform, contrastLevel,
 +        ),
 +    )
 +    return scheme.toColorScheme()
@@ -2065,25 +2903,159 @@ index 0000000..7fff986
 +fun onColorFor(background: Color): Color {
 +    return if (background.luminance() > 0.5f) Color.Black else Color.White
 +}
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
+new file mode 100644
+index 0000000..d7f89fc
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
+@@ -0,0 +1,126 @@
++package me.rerere.rikkahub.ui.theme
++
++import androidx.compose.foundation.BorderStroke
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.BoxScope
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Brush
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.Shape
++import androidx.compose.ui.unit.dp
++import dev.chrisbanes.haze.HazeInput
++import dev.chrisbanes.haze.HazeState
++import dev.chrisbanes.haze.blur.HazeBlurStyle
++import dev.chrisbanes.haze.blur.hazeBlur
++import dev.chrisbanes.haze.blur.material3.Material3
++import dev.chrisbanes.haze.glass.GlassDefaults
++import dev.chrisbanes.haze.glass.GlassStyle
++import dev.chrisbanes.haze.glass.OpticalSizeValue
++import dev.chrisbanes.haze.glass.hazeGlass
++import dev.chrisbanes.haze.glass.material3.Material3
++import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
++
++/**
++ * 界面材质（纯色 / 磨砂玻璃 / 液态玻璃）在非输入框界面上的复用实现。
++ *
++ * 只使用项目里 haze 2.0.0-rc02 已经在 ChatInput 用过的那些 API：
++ * HazeInput.Sources / HazeBlurStyle.Material3 / GlassStyle.Material3 / hazeBlur / hazeGlass。
++ * 一律不用 `Modifier.blur`，半径直接取设置里的 materialBlurRadius。
++ */
++
++/** 模糊强度统一收敛到 0..40，和设置页滑块的取值范围一致 */
++fun DisplaySetting.materialBlurDp(): Int = materialBlurRadius.coerceIn(0, 40)
++
++/** 是否真的需要走 haze：纯色就是原版外观，一点额外绘制都不加 */
++fun DisplaySetting.usesHazeSurfaceMaterial(): Boolean = surfaceMaterial != SurfaceMaterial.SOLID
++
++/**
++ * 给一个作用面加上材质效果。
++ *
++ * SOLID 原样返回（不做任何额外绘制）；FROSTED 用 haze 模糊；LIQUID 用 haze-glass
++ * （更强模糊 + glass 自带的光学高光），形状用传入的 [shape]。
++ */
++@Composable
++fun Modifier.surfaceMaterialEffect(
++    state: HazeState,
++    display: DisplaySetting,
++    shape: Shape,
++    tint: Color,
++): Modifier {
++    val radius = display.materialBlurDp()
++    return when (display.surfaceMaterial) {
++        SurfaceMaterial.SOLID -> this
++        SurfaceMaterial.FROSTED -> this.hazeBlur(
++            input = HazeInput.Sources(state),
++            style = HazeBlurStyle.Material3 {
++                blurRadius(radius.dp)
++            },
++        )
++
++        SurfaceMaterial.LIQUID -> this.hazeGlass(
++            input = HazeInput.Sources(state),
++            style = GlassStyle.Material3(
++                containerColor = tint,
++                tint = tint.copy(alpha = 0.72f),
++            ) {
++                optics(
++                    GlassDefaults.optics.copy(
++                        blurRadius = OpticalSizeValue.Fixed(radius.dp),
++                        depth = OpticalSizeValue.Fixed(0.5f),
++                    )
++                )
++                shape(shape)
++            },
++        )
++    }
++}
++
++/**
++ * 材质作用面自己的底色。
++ *
++ * 磨砂玻璃留一点半透明让背后模糊透出来；液态玻璃交给 haze-glass 自己上色，所以是透明。
++ */
++fun surfaceMaterialContainerColor(display: DisplaySetting, solid: Color, frosted: Color): Color =
++    when (display.surfaceMaterial) {
++        SurfaceMaterial.SOLID -> solid
++        SurfaceMaterial.FROSTED -> frosted.copy(alpha = 0.55f)
++        SurfaceMaterial.LIQUID -> Color.Transparent
++    }
++
++/**
++ * 液态玻璃的边缘高光：1dp 半透明白描边。其它材质沿用调用方原来的 [fallback] 描边。
++ */
++fun surfaceMaterialBorder(display: DisplaySetting, fallback: BorderStroke?): BorderStroke? =
++    when (display.surfaceMaterial) {
++        SurfaceMaterial.LIQUID -> BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
++        else -> fallback
++    }
++
++/**
++ * 液态玻璃的轻微渐变高光，垫在内容上面一层。
++ *
++ * 渐变对象用 remember 缓存，不逐帧新建；本身不消费触摸事件，不影响点击。
++ */
++@Composable
++fun BoxScope.LiquidGlassHighlight(shape: Shape) {
++    val brush = remember {
++        Brush.verticalGradient(
++            listOf(
++                Color.White.copy(alpha = 0.14f),
++                Color.Transparent,
++                Color.White.copy(alpha = 0.04f),
++            )
++        )
++    }
++    Box(
++        modifier = Modifier
++            .matchParentSize()
++            .clip(shape)
++            .background(brush)
++    )
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/Theme.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/Theme.kt
-index 3d9a2e3..82c3489 100644
+index 3d9a2e3..79bb0b9 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/theme/Theme.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/Theme.kt
-@@ -75,6 +75,40 @@ fun RikkahubTheme(
+@@ -75,6 +75,42 @@ fun RikkahubTheme(
              colorScheme
          }
      }
 +    // 主题基色：给一个颜色，用它生成整套浅色/深色配色（背景/卡片/文字/描边全部跟着推）
 +    // AMOLED 纯黑仍要压在最上面，所以生成完再把深色背景拉回纯黑
 +    val themeSeedColor = settings.displaySetting.themeSeedColor
++    val themeSchemeStyle = settings.displaySetting.themeSchemeStyle
 +    val colorSchemeSeeded = remember(
 +        colorSchemeConverted,
 +        themeSeedColor,
++        themeSchemeStyle,
 +        darkTheme,
 +        amoledDarkMode,
 +    ) {
 +        if (themeSeedColor != null) {
-+            val seeded = generateSchemeFromSeed(themeSeedColor, darkTheme)
++            val seeded = generateSchemeFromSeed(themeSeedColor, darkTheme, themeSchemeStyle)
 +            if (darkTheme && amoledDarkMode) {
 +                seeded.copy(
 +                    background = AMOLED_DARK_BACKGROUND,
@@ -2110,7 +3082,7 @@ index 3d9a2e3..82c3489 100644
      val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
  
      // 更新状态栏图标颜色
-@@ -105,7 +139,7 @@ fun RikkahubTheme(
+@@ -105,7 +141,7 @@ fun RikkahubTheme(
          LocalOverscrollFactory provides null
      ) {
          MaterialExpressiveTheme(
