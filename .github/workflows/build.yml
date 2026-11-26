@@ -20,6 +20,12 @@ jobs:
           ref: 6adc0cf184b784c68b8737d4e55daabe4cfbcde7
           path: src
 
+      - name: 修 2.5.3 的 material3 版本（alpha28 编不过）
+        run: |
+          cd src
+          sed -i 's/^material3 = "1.5.0-alpha28"/material3 = "1.5.0-rc01"/' gradle/libs.versions.toml
+          grep -n '^material3 = ' gradle/libs.versions.toml
+
       - name: 打上美化补丁（不适用就跳过）
         run: |
           cd src
