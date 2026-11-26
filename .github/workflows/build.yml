@@ -13,18 +13,18 @@ jobs:
         with:
           path: mine
 
-      - name: 下载官方源码（锁定版本）
+      - name: 下载官方源码（锁定 2.5.3）
         uses: actions/checkout@v4
         with:
           repository: rikkahub/rikkahub
-          ref: 1fb09152942a0f3ae46bf796fe17eeaf2b022f19
+          ref: 6adc0cf184b784c68b8737d4e55daabe4cfbcde7
           path: src
 
-      - name: 打上美化补丁
+      - name: 打上美化补丁（不适用就跳过）
         run: |
           cd src
           if [ -f ../mine/beautify.patch ]; then
-            git apply -v ../mine/beautify.patch
+            git apply -v ../mine/beautify.patch || echo "补丁不适用这个版本，先编原版"
           else
             echo "没有 beautify.patch，先编原版"
           fi
@@ -68,11 +68,11 @@ jobs:
         working-directory: src
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleGithubRelease --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: rikka-apk-release
+          name: rikka-253-release
           path: src/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
