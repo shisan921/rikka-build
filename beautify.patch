@@ -1,8 +1,8 @@
 diff --git a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-index bef7871..85f9034 100644
+index bef7871..d036b40 100644
 --- a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-@@ -1,220 +1,225 @@
+@@ -1,220 +1,224 @@
 -package me.rerere.rikkahub
 -
 -import android.annotation.SuppressLint
@@ -257,7 +257,6 @@ index bef7871..85f9034 100644
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesColorsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAlphaPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesImagesPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesMaterialPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesQuotePage
 +import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 +import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
@@ -430,7 +429,7 @@ index bef7871..85f9034 100644
          val destination = when (intent.action) {
              ACTION_TRANSLATE -> Screen.Translator
              Intent.ACTION_SEND -> Screen.ShareHandler(
-@@ -228,507 +233,542 @@ class RouteActivity : ComponentActivity() {
+@@ -228,507 +232,535 @@ class RouteActivity : ComponentActivity() {
          }
          if (destination != null && backStack.lastOrNull() != destination) {
              backStack.add(destination)
@@ -826,10 +825,6 @@ index bef7871..85f9034 100644
 +
 +                            entry<Screen.SettingPreferencesImages> {
 +                                SettingPreferencesImagesPage()
-+                            }
-+
-+                            entry<Screen.SettingPreferencesMaterial> {
-+                                SettingPreferencesMaterialPage()
 +                            }
 +
 +                            entry<Screen.SettingPreferencesQuote> {
@@ -1307,9 +1302,6 @@ index bef7871..85f9034 100644
 +    data object SettingPreferencesImages : Screen
 +
 +    @Serializable
-+    data object SettingPreferencesMaterial : Screen
-+
-+    @Serializable
 +    data object SettingPreferencesQuote : Screen
 +
      @Serializable
@@ -1461,7 +1453,7 @@ index bef7871..85f9034 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..6cbbef0 100644
+index 205e822..f537969 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1563,7 +1555,7 @@ index 205e822..6cbbef0 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +716,64 @@ data class DisplaySetting(
+@@ -642,8 +716,83 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1592,12 +1584,27 @@ index 205e822..6cbbef0 100644
 +    val quoteBackgroundEnabled: Boolean = false,
 +    // 对白样式·背景透明度：0f = 完全透明，1f = 完全不透明，滑块步长 0.05（底色开关打开后才生效）
 +    val quoteHighlightBackgroundAlpha: Float = 0.18f,
-+    // 对白样式·下划线：NONE 就是不画（关闭），SOLID / DASHED / DOTTED 由自绘实现
++    // 对白样式·旧的下划线四选一（none / solid / dashed / dotted）：
++    // 只为向后兼容老数据而保留，界面上已经改成「实线」「虚线」两个独立开关，代码不再读它
 +    val quoteUnderline: QuoteUnderline = QuoteUnderline.NONE,
-+    // 对白样式·下划线颜色：null 表示跟随文字颜色；非 null 时下划线和行首竖线都用它
++    // 对白样式·旧的下划线颜色：同上，只为兼容老数据保留，现在的颜色由下面两项各自负责
 +    val quoteUnderlineColor: Long? = null,
++    // 对白样式·实线下划线开关（和虚线下划线互不影响，可以同时打开）
++    val quoteUnderlineSolid: Boolean = false,
++    // 对白样式·实线下划线颜色：null 表示跟随文字颜色
++    val quoteUnderlineSolidColor: Long? = null,
++    // 对白样式·虚线下划线开关
++    val quoteUnderlineDashed: Boolean = false,
++    // 对白样式·虚线下划线颜色：null 表示跟随文字颜色
++    val quoteUnderlineDashedColor: Long? = null,
++    // 对白样式·点线下划线开关
++    val quoteUnderlineDotted: Boolean = false,
++    // 对白样式·点线下划线颜色：null 表示跟随文字颜色
++    val quoteUnderlineDottedColor: Long? = null,
 +    // 对白样式·行首竖线：每个引号区间起点那一行左侧画一根 2dp 竖线
 +    val quoteLeadingBar: Boolean = false,
++    // 对白样式·行首竖线颜色：null 表示跟随文字颜色
++    val quoteLeadingBarColor: Long? = null,
 +    // 对白样式·底色圆角（dp），0 = 直角
 +    val quoteBackgroundCorner: Int = 4,
 +    // 对白样式·行间空隙（dp）：行与行的底色之间留白，0 = 紧贴
@@ -1615,7 +1622,11 @@ index 205e822..6cbbef0 100644
 +    val drawerBackgroundImage: String = "",
 +    val userBubbleImage: String = "",
 +    val assistantBubbleImage: String = "",
-+    // 背景图是否叠加主题色遮罩（保证文字可读）
++    // 插图素材·输入框背景图不透明度：0f = 完全看不见，1f = 原样显示
++    val inputBackgroundImageAlpha: Float = 1f,
++    // 插图素材·侧边栏背景图不透明度：0f = 完全看不见，1f = 原样显示
++    val drawerBackgroundImageAlpha: Float = 1f,
++    // 背景图是否叠加主题色遮罩（保证文字可读）：输入框 / 侧边栏 / 用户气泡 / AI 气泡共用这一个开关
 +    val backgroundImageTint: Boolean = true,
 +    // 界面材质：纯色 / 磨砂玻璃 / 液态玻璃，SOLID 与原来完全一致
 +    val surfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
@@ -1629,7 +1640,7 @@ index 205e822..6cbbef0 100644
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..51811b5 100644
+index 45c3d83..e4d8057 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -1640,7 +1651,11 @@ index 45c3d83..51811b5 100644
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.combinedClickable
  import androidx.compose.foundation.content.MediaType
-@@ -59,6 +60,7 @@ import androidx.compose.ui.Modifier
+@@ -56,9 +57,11 @@ import androidx.compose.runtime.setValue
+ import androidx.compose.runtime.snapshotFlow
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.alpha
  import androidx.compose.ui.draw.clip
  import androidx.compose.ui.focus.onFocusChanged
  import androidx.compose.ui.graphics.Color
@@ -1648,7 +1663,7 @@ index 45c3d83..51811b5 100644
  import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  import androidx.compose.ui.platform.LocalFocusManager
  import androidx.compose.ui.platform.LocalHapticFeedback
-@@ -97,7 +99,10 @@ import me.rerere.hugeicons.stroke.Fullscreen
+@@ -97,7 +100,10 @@ import me.rerere.hugeicons.stroke.Fullscreen
  import me.rerere.hugeicons.stroke.Zap
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.datastore.BackgroundEffectType
@@ -1659,7 +1674,7 @@ index 45c3d83..51811b5 100644
  import me.rerere.rikkahub.data.datastore.getCurrentAssistant
  import me.rerere.rikkahub.data.datastore.getCurrentChatModel
  import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
-@@ -118,6 +123,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
+@@ -118,6 +124,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.context.LocalToaster
  import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -1669,7 +1684,7 @@ index 45c3d83..51811b5 100644
  import me.rerere.rikkahub.utils.SoundEffectPlayer
  import org.koin.compose.koinInject
  import kotlin.time.Duration.Companion.seconds
-@@ -153,9 +161,21 @@ fun ChatInput(
+@@ -153,9 +162,21 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -1693,7 +1708,7 @@ index 45c3d83..51811b5 100644
      }
  
      val keyboardController = LocalSoftwareKeyboardController.current
-@@ -240,167 +260,224 @@ fun ChatInput(
+@@ -240,167 +261,227 @@ fun ChatInput(
                      .fillMaxWidth()
                      .clip(containerShape)
                      .then(
@@ -1801,7 +1816,10 @@ index 45c3d83..51811b5 100644
 +                            model = inputBackgroundImage,
 +                            contentDescription = null,
 +                            contentScale = ContentScale.Crop,
-+                            modifier = Modifier.matchParentSize(),
++                            // 输入框背景图不透明度：调到 0% 就是完全看不见，图片不再把输入框糊住
++                            modifier = Modifier
++                                .matchParentSize()
++                                .alpha(displaySetting.inputBackgroundImageAlpha.coerceIn(0f, 1f)),
                          )
 +                        if (settings.displaySetting.backgroundImageTint) {
 +                            Box(
@@ -2668,7 +2686,7 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..1bcff7e 100644
+index 3d21e9f..819e86e 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -623,7 +623,7 @@ private fun MarkdownNode(
@@ -2730,8 +2748,8 @@ index 3d21e9f..1bcff7e 100644
              inlineContent = inlineContents,
              softWrap = true,
              overflow = TextOverflow.Visible,
-+            // 关闭对白样式 / 这条消息里没有成对引号时传 null：完全等同于改动前的 Text 调用
-+            onTextLayout = rememberQuoteOnTextLayout(quoteLayout, quoteRanges.isNotEmpty()),
++            // 关闭对白样式 / 这条消息里没有成对引号时传空 lambda，行为等同于改动前的 Text 调用
++            onTextLayout = rememberQuoteOnTextLayout(quoteLayout, quoteRanges.isNotEmpty()) ?: {},
              style = LocalTextStyle.current.copy(
                  lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
              )
@@ -2907,10 +2925,10 @@ index a316327..aaef8ab 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..9e53f97
+index 0000000..57e54a9
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,466 @@
+@@ -0,0 +1,539 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -2936,7 +2954,6 @@ index 0000000..9e53f97
 +import androidx.compose.ui.text.withStyle
 +import androidx.compose.ui.unit.Density
 +import androidx.compose.ui.unit.dp
-+import me.rerere.rikkahub.data.datastore.QuoteUnderline
 +import me.rerere.rikkahub.ui.context.LocalSettings
 +
 +/**
@@ -2947,7 +2964,7 @@ index 0000000..9e53f97
 + * 所以这里不走「把引号内容伪装成别的内联元素」的预处理，直接在渲染层的文本追加点上处理：
 + *
 + * 1. 引号内的那一段文字仍然用 `SpanStyle`，但 **SpanStyle 只负责文字颜色**；
-+ * 2. 底色 / 下划线（实线 · 虚线 · 点线）/ 行首竖线全部由 [Modifier.quoteDecoration] 在
++ * 2. 底色 / 下划线（实线、虚线，可以同时画）/ 行首竖线全部由 [Modifier.quoteDecoration] 在
 + *    `Text` 的 `drawBehind` 里自绘：靠 `TextLayoutResult` 拿到每个字符的包围盒，
 + *    按「行」算出左右边界，一行一个圆角矩形、一行一条线——所以行与行之间天然留白，
 + *    下划线颜色也不再被 `TextDecoration` 锁死在文字颜色上。
@@ -3060,27 +3077,33 @@ index 0000000..9e53f97
 + *
 + * [color]：引号内文字颜色（永远走 SpanStyle）；
 + * [background]：已经乘好透明度的底色（见 [quoteStyleOrNull]），null 表示不加底色；
-+ * [underlineColor] null 表示下划线 / 竖线跟随 [color]；
-+ * [leadingBar] 行首竖线开关；[backgroundCorner] 底色圆角（dp，0 = 直角）；
-+ * [backgroundGap] 行与行底色之间的留白（dp，上下各一半）；
++ * [solidUnderline] / [dashedUnderline] / [dottedUnderline]：实线、虚线、点线三个**独立**开关，
++ * 各画各的线；三个 `...Color` 字段为 null 时该颜色跟随 [color]；
++ * [leadingBar] 行首竖线开关，[leadingBarColor] 为 null 时跟随 [color]；
++ * [backgroundCorner] 底色圆角（dp，0 = 直角）；[backgroundGap] 行与行底色之间的留白（dp，上下各一半）；
 + * [selfDrawn] 表示这条渲染路径会把底色 / 下划线 / 竖线交给 [quoteDecoration] 自绘，
 + * SpanStyle 就只输出文字颜色（[MarkdownNew] 的 HTML 兜底路径仍然是 false，走旧的 SpanStyle）。
 + *
 + * 整个对象是不可变 data class，可以直接当 `remember` 的 key 用（Compose 的 `Color` 是值类，
-+ * 比较的是 ARGB），改任何一个字段都会让缓存失效重新拼 AnnotatedString。
++ * 比较的是 ARGB），改任何一个字段（含新加的实线 / 虚线 / 点线开关与颜色）都会让缓存失效重新拼 AnnotatedString。
 + */
 +internal data class QuoteStyle(
 +    val color: Color,
 +    val background: Color? = null,
-+    val underline: QuoteUnderline = QuoteUnderline.NONE,
-+    val underlineColor: Color? = null,
++    val solidUnderline: Boolean = false,
++    val solidUnderlineColor: Color? = null,
++    val dashedUnderline: Boolean = false,
++    val dashedUnderlineColor: Color? = null,
++    val dottedUnderline: Boolean = false,
++    val dottedUnderlineColor: Color? = null,
 +    val leadingBar: Boolean = false,
++    val leadingBarColor: Color? = null,
 +    val backgroundCorner: Int = 4,
 +    val backgroundGap: Int = 2,
 +    val selfDrawn: Boolean = false,
 +) {
-+    /** 有没有要画的下划线（实线 / 虚线 / 点线都算） */
-+    val hasUnderline: Boolean get() = underline != QuoteUnderline.NONE
++    /** 有没有要画的下划线（实线 / 虚线 / 点线随便开一个都算，全开就是三条线） */
++    val hasUnderline: Boolean get() = solidUnderline || dashedUnderline || dottedUnderline
 +
 +    /** 自绘路径上真有东西要画吗：三样装饰全无时连 drawBehind 都不挂 */
 +    val needsDecoration: Boolean
@@ -3092,8 +3115,9 @@ index 0000000..9e53f97
 + *
 + * - 自绘路径（[QuoteStyle.selfDrawn] = true）：**只给文字颜色**，底色 / 下划线 / 竖线全部由
 + *   [quoteDecoration] 画，SpanStyle 不再画整块矩形背景，也不再受 `TextDecoration` 只能实线的限制；
-+ * - 旧路径（HTML 兜底）：保持原样——颜色 + 半透明底色 + 实线下划线（虚线 / 点线在旧路径上没有，
-+ *   这是 `TextDecoration` 的能力边界，报告里记为降级项）。
++ * - 旧路径（HTML 兜底）：颜色 + 半透明底色 + 实线下划线。旧路径只能画实线
++ *   （`TextDecoration` 的能力边界），所以这里只看 [QuoteStyle.solidUnderline]，
++ *   虚线在 HTML 兜底分支上画不出来，正经的对话正文走的是上面那条自绘路径。
 + *
 + * 刻意只动这几样：fontFamily / fontSize / fontWeight / fontStyle / shadow 都不碰，
 + * 外面已有的加粗、斜体、删除线、链接、行内公式样式不会被破坏。
@@ -3105,7 +3129,8 @@ index 0000000..9e53f97
 +    return SpanStyle(
 +        color = color,
 +        background = background ?: Color.Unspecified,
-+        textDecoration = if (underline == QuoteUnderline.SOLID) TextDecoration.Underline else null,
++        // 旧路径只有实线的能力（虚线需要 PathEffect，只有自绘分支才画得出来）
++        textDecoration = if (solidUnderline) TextDecoration.Underline else null,
 +    )
 +}
 +
@@ -3192,9 +3217,16 @@ index 0000000..9e53f97
 +    return QuoteStyle(
 +        color = textColor,
 +        background = backgroundColor,
-+        underline = displaySetting.quoteUnderline,
-+        underlineColor = displaySetting.quoteUnderlineColor?.let { Color(it) },
++        // 下划线：两个开关各读各的，颜色各自读各自的字段（null = 跟随文字色）
++        solidUnderline = displaySetting.quoteUnderlineSolid,
++        solidUnderlineColor = displaySetting.quoteUnderlineSolidColor?.let { Color(it) },
++        dashedUnderline = displaySetting.quoteUnderlineDashed,
++        dashedUnderlineColor = displaySetting.quoteUnderlineDashedColor?.let { Color(it) },
++        dottedUnderline = displaySetting.quoteUnderlineDotted,
++        dottedUnderlineColor = displaySetting.quoteUnderlineDottedColor?.let { Color(it) },
 +        leadingBar = displaySetting.quoteLeadingBar,
++        // 行首竖线用自己的颜色，不再借用下划线颜色
++        leadingBarColor = displaySetting.quoteLeadingBarColor?.let { Color(it) },
 +        backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 64),
 +        backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 24),
 +        selfDrawn = selfDrawn,
@@ -3203,7 +3235,7 @@ index 0000000..9e53f97
 +
 +/**
 + * 给独立渲染的文本节点用（不走 AnnotatedString 段落的那几条分支）。
-+ * 每条消息只算一次：key 是文本 + 整个 [QuoteStyle]（颜色 / 底色 / 下划线 / 下划线颜色都在里面），
++ * 每条消息只算一次：key 是文本 + 整个 [QuoteStyle]（文字色 / 底色 / 实线虚线开关与各自颜色 / 竖线色都在里面），
 + * 开关关掉时等价于 `AnnotatedString(text)`。
 + */
 +@Composable
@@ -3248,17 +3280,19 @@ index 0000000..9e53f97
 +    }
 +}
 +
-+/** 虚线 / 点线的疏密：规格是 px，这里按屏幕密度折算，避免高密度屏上糊成实线 */
-+private fun QuoteUnderline.dashIntervals(density: Density): FloatArray? = when (this) {
-+    QuoteUnderline.NONE, QuoteUnderline.SOLID -> null
-+    QuoteUnderline.DASHED -> floatArrayOf(6f, 4f).scaleBy(density.density)
-+    QuoteUnderline.DOTTED -> floatArrayOf(1f, 3f).scaleBy(density.density)
-+}
++/**
++ * 虚线的「线长 / 空档」：6dp 线 + 4dp 空档，按屏幕密度折算成 px，避免高密度屏上糊成实线。
++ * 只有虚线下划线用得到，实线是纯 drawLine（不带 PathEffect）。
++ */
++private fun dashedPathEffect(density: Density): PathEffect =
++    PathEffect.dashPathEffect(floatArrayOf(6f * density.density, 4f * density.density))
 +
-+private fun FloatArray.scaleBy(scale: Float): FloatArray = FloatArray(size) { this[it] * scale }
-+
-+private fun QuoteUnderline.toPathEffect(density: Density): PathEffect? =
-+    dashIntervals(density)?.let { PathEffect.dashPathEffect(it) }
++/**
++ * 点线的「线长 / 空档」：1dp 点 + 3dp 空档，折算成 px 后看上去就是一串小点。
++ * 只有点线下划线用得到。
++ */
++private fun dottedPathEffect(density: Density): PathEffect =
++    PathEffect.dashPathEffect(floatArrayOf(1f * density.density, 3f * density.density))
 +
 +/**
 + * 对白样式的自绘装饰层。
@@ -3268,11 +3302,18 @@ index 0000000..9e53f97
 + * - **底色**：对每个引号区间的每一行，取行内首字符与末字符的包围盒，得到这一行的左右边界、
 + *   上下边界，画一个圆角矩形（左右各内缩 2dp，上下各内缩 `gap/2`）。**一行一个矩形**，
 + *   行与行之间就自然留出 `gap` 的缝——不再是一整块连着的矩形；
-+ * - **下划线**：一行一条 `drawLine`，y 取该行 baseline 下方 2dp，粗细 1dp；
-+ *   实线不带 `PathEffect`，虚线 `dashPathEffect(6f, 4f)`，点线 `dashPathEffect(1f, 3f)`；
-+ *   颜色取 `quoteUnderlineColor ?: 文字色`，所以「下划线颜色」是真的生效了；
-+ * - **行首竖线**：每个引号区间只在它起点所在那一行的左侧画一根 2dp 宽的竖线，
-+ *   高度取该行底色矩形的高度，颜色同样跟随下划线颜色；
++ * - **下划线**：一行若干条 `drawLine`，粗细 1dp，实线 / 虚线 / 点线**各画各的**：
++ *   - 实线：不带 `PathEffect`，颜色 `solidUnderlineColor ?: 文字色`；
++ *   - 虚线：`dashPathEffect(6dp, 4dp)`，颜色 `dashedUnderlineColor ?: 文字色`；
++ *   - 点线：`dashPathEffect(1dp, 3dp)`，颜色 `dottedUnderlineColor ?: 文字色`；
++ *   - 第一条从 baseline 下方 2dp 起画，之后每多开一条就再往下错 2dp（实线 → 虚线 → 点线），
++ *     三条全开就是三条分开的线，不会重叠成一坨，每条的独立颜色也都保留；
++ * - **行首竖线**：**按行画**——引号区间覆盖的每一行都在该行起点左侧画一根 2dp 宽的竖线，
++ *   高度取该行文字盒的上下边界（不像底色那样缩 `gap`），若干段首尾相接，拼起来就是一条连续的竖线；
++ *   引号从行中间开始时，首行的那一段就落在那个字符的左侧；
++ *   颜色 `leadingBarColor ?: 文字色`（不再借用下划线颜色）；
++ * - **层序**：底色（`drawRoundRect`）在最底层 → 行首竖线（`drawRect`）在底色之上 →
++ *   下划线（`drawLine`）压在最上层，三层互相独立、可以同时开启，谁也不会盖掉谁；
 + * - 绘制阶段不创建集合 / 不拼字符串：区间是组合期算好的 IntArray，`Offset` / `Size` /
 + *   `CornerRadius` 都是 value class，不产生堆分配。
 + *
@@ -3286,7 +3327,13 @@ index 0000000..9e53f97
 +    holder: QuoteLayoutHolder,
 +): Modifier {
 +    val density = LocalDensity.current
-+    val pathEffect = remember(style.underline, density) { style.underline.toPathEffect(density) }
++    // 只有开了对应开关才去算 PathEffect；实线不带任何 PathEffect
++    val dashedEffect = remember(style.dashedUnderline, density) {
++        if (style.dashedUnderline) dashedPathEffect(density) else null
++    }
++    val dottedEffect = remember(style.dottedUnderline, density) {
++        if (style.dottedUnderline) dottedPathEffect(density) else null
++    }
 +    val gapPx = with(density) { style.backgroundGap.dp.toPx() }
 +    val cornerPx = with(density) { style.backgroundCorner.dp.toPx() }
 +
@@ -3295,15 +3342,23 @@ index 0000000..9e53f97
 +        if (ranges.size < 2 || layoutResult.lineCount <= 0) return@drawBehind
 +
 +        val backgroundColor = style.background
-+        val underlineColor = style.underlineColor ?: style.color
++        // 三条线三套颜色：没单选颜色就各自跟随文字色
++        val solidColor = style.solidUnderlineColor ?: style.color
++        val dashedColor = style.dashedUnderlineColor ?: style.color
++        val dottedColor = style.dottedUnderlineColor ?: style.color
++        val barColor = style.leadingBarColor ?: style.color
 +        val horizontalInset = 2.dp.toPx()
 +        val strokeWidth = 1.dp.toPx()
 +        val underlineOffset = 2.dp.toPx()
++        // 多条下划线同时打开时，每多一条就再往下让 2dp（实线 → 虚线 → 点线），不会糊在一起
++        val lineStep = 2.dp.toPx()
 +        val barWidth = 2.dp.toPx()
 +        val barGap = 3.dp.toPx()
 +        val corner = CornerRadius(cornerPx)
 +        val textLength = text.length
-+        val drawUnderline = style.hasUnderline
++        val drawSolid = style.solidUnderline
++        val drawDashed = style.dashedUnderline && dashedEffect != null
++        val drawDotted = style.dottedUnderline && dottedEffect != null
 +
 +        var index = 0
 +        while (index + 1 < ranges.size) {
@@ -3314,8 +3369,9 @@ index 0000000..9e53f97
 +
 +            val firstLine = layoutResult.getLineForOffset(rangeStart)
 +            val lastLine = layoutResult.getLineForOffset(rangeEnd - 1)
-+            // 竖线挂在区间起点那一行（起点在行中间时就是那个字符的左侧），后面的行不再画
-+            var barPending = style.leadingBar
++            // 竖线按「行」画：区间覆盖的每一行都各画一段（起点在行中间时，首行就落在那个字符左侧），
++            // 多行连起来就是一条连续的竖线，和引用块的观感一致
++            val drawBar = style.leadingBar
 +            var line = firstLine
 +            while (line <= lastLine) {
 +                val lineStart = maxOf(rangeStart, layoutResult.getLineStart(line))
@@ -3339,14 +3395,8 @@ index 0000000..9e53f97
 +                    val rowTop = top + gapPx / 2f
 +                    val rowBottom = bottom - gapPx / 2f
 +                    if (rowBottom > rowTop) {
-+                        if (barPending) {
-+                            drawRect(
-+                                color = underlineColor,
-+                                topLeft = Offset(left - barGap - barWidth, rowTop),
-+                                size = Size(barWidth, rowBottom - rowTop),
-+                            )
-+                            barPending = false
-+                        }
++                        // 层序（后画的压在上面）：① 底色 → ② 行首竖线 → ③ 下划线，
++                        // 三层互相独立，可以同时开启，谁也不会把谁盖掉
 +                        if (backgroundColor != null) {
 +                            val backgroundLeft = left + horizontalInset
 +                            val backgroundRight = right - horizontalInset
@@ -3359,16 +3409,57 @@ index 0000000..9e53f97
 +                                )
 +                            }
 +                        }
-+                        if (drawUnderline) {
-+                            val y = layoutResult.getLineBaseline(line) + underlineOffset
-+                            drawLine(
-+                                color = underlineColor,
-+                                start = Offset(left, y),
-+                                end = Offset(right, y),
-+                                strokeWidth = strokeWidth,
-+                                cap = StrokeCap.Butt,
-+                                pathEffect = pathEffect,
++                        // ② 行首竖线：每行一段，高度取该行文字盒的上下边界（top..bottom）。
++                        //    故意不像底色那样缩 gap —— 上下两行的竖线首尾正好接上，
++                        //    多行就是一条连续的竖线；行间空隙只在底色上留缝，竖线不断
++                        if (drawBar) {
++                            drawRect(
++                                color = barColor,
++                                topLeft = Offset(left - barGap - barWidth, top),
++                                size = Size(barWidth, bottom - top),
 +                            )
++                        }
++                        // ③ 下划线：实线 / 虚线 / 点线各画各的，压在最上层
++                        if (drawSolid || drawDashed || drawDotted) {
++                            // 第一条从 baseline 下方 2dp 起画，之后每多一条就再往下错 2dp
++                            // （顺序固定：实线 → 虚线 → 点线），三条分开画，互不重叠
++                            val baseY = layoutResult.getLineBaseline(line) + underlineOffset
++                            var slot = 0
++                            if (drawSolid) {
++                                val y = baseY + lineStep * slot
++                                slot++
++                                drawLine(
++                                    color = solidColor,
++                                    start = Offset(left, y),
++                                    end = Offset(right, y),
++                                    strokeWidth = strokeWidth,
++                                    cap = StrokeCap.Butt,
++                                    pathEffect = null,
++                                )
++                            }
++                            if (drawDashed) {
++                                val y = baseY + lineStep * slot
++                                slot++
++                                drawLine(
++                                    color = dashedColor,
++                                    start = Offset(left, y),
++                                    end = Offset(right, y),
++                                    strokeWidth = strokeWidth,
++                                    cap = StrokeCap.Butt,
++                                    pathEffect = dashedEffect,
++                                )
++                            }
++                            if (drawDotted) {
++                                val y = baseY + lineStep * slot
++                                drawLine(
++                                    color = dottedColor,
++                                    start = Offset(left, y),
++                                    end = Offset(right, y),
++                                    strokeWidth = strokeWidth,
++                                    cap = StrokeCap.Butt,
++                                    pathEffect = dottedEffect,
++                                )
++                            }
 +                        }
 +                    }
 +                }
@@ -3908,7 +3999,7 @@ index 0000000..806957f
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
-index 86fcdcf..b9166b7 100644
+index 86fcdcf..ef8b0af 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 @@ -1,6 +1,7 @@
@@ -3971,7 +4062,7 @@ index 86fcdcf..b9166b7 100644
  ) {
      val scope = rememberCoroutineScope()
      val context = LocalContext.current
-@@ -178,243 +190,294 @@ fun ChatDrawerContent(
+@@ -178,243 +190,299 @@ fun ChatDrawerContent(
          }
      }
  
@@ -4005,7 +4096,10 @@ index 86fcdcf..b9166b7 100644
 +                    model = drawerBackgroundImage,
 +                    contentDescription = null,
 +                    contentScale = ContentScale.Crop,
-+                    modifier = Modifier.matchParentSize(),
++                    // 侧边栏背景图不透明度：调低后图片淡下去，不会被列表卡片糊住
++                    modifier = Modifier
++                        .matchParentSize()
++                        .alpha(settings.displaySetting.drawerBackgroundImageAlpha.coerceIn(0f, 1f)),
 +                )
 +                // 主题色遮罩：关掉就只有纯图片，开着保证文字能看清
 +                if (settings.displaySetting.backgroundImageTint) {
@@ -4199,6 +4293,8 @@ index 86fcdcf..b9166b7 100644
 +                    conversations = conversations,
 +                    conversationJobs = conversationJobs.keys,
 +                    listState = conversationListState,
++                    // 列表条目的底色跟着「侧边栏元素透明度」走，别把背景图整块挡住
++                    elementAlpha = settings.displaySetting.drawerElementAlpha,
 +                    modifier = Modifier
 +                        .fillMaxWidth()
 +                        .weight(1f),
@@ -4689,6 +4785,56 @@ index 5460f45..957a562 100644
          colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
          navigationIcon = {
              if (!bigScreen) {
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt
+index 370fcc5..f996452 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt
+@@ -30,7 +30,6 @@ import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Surface
+ import androidx.compose.material3.Text
+-import androidx.compose.material3.surfaceColorAtElevation
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+@@ -79,6 +78,8 @@ fun ColumnScope.ConversationList(
+     conversationJobs: Collection<Uuid>,
+     listState: LazyListState,
+     modifier: Modifier = Modifier,
++    // 侧边栏元素透明度（同 DisplaySetting.drawerElementAlpha）：只用来决定条目底色多透
++    elementAlpha: Float = 1f,
+     onClick: (Conversation) -> Unit = {},
+     onDelete: (Conversation) -> Unit = {},
+     onRegenerateTitle: (Conversation) -> Unit = {},
+@@ -155,6 +156,7 @@ fun ColumnScope.ConversationList(
+                         conversation = item.conversation,
+                         selected = item.conversation.id == current.id,
+                         loading = item.conversation.id in conversationJobs,
++                        elementAlpha = elementAlpha,
+                         onClick = onClick,
+                         onDelete = onDelete,
+                         onRegenerateTitle = onRegenerateTitle,
+@@ -226,6 +228,7 @@ private fun ConversationItem(
+     conversation: Conversation,
+     selected: Boolean,
+     loading: Boolean,
++    elementAlpha: Float = 1f,
+     modifier: Modifier = Modifier,
+     onDelete: (Conversation) -> Unit = {},
+     onRegenerateTitle: (Conversation) -> Unit = {},
+@@ -236,8 +239,11 @@ private fun ConversationItem(
+ ) {
+     val interactionSource = remember { MutableInteractionSource() }
+     val focusManager = LocalFocusManager.current
++    // 选中项原来是不透明的 surface，会整块挡掉侧边栏背景图；
++    // 现在跟着「侧边栏元素透明度」走，透明度默认 100% 时再压到 90% 封顶，
++    // 保证选中底色永远留一点让底图透出来。
+     val backgroundColor = if (selected) {
+-        MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp)
++        MaterialTheme.colorScheme.surface.copy(alpha = elementAlpha.coerceIn(0f, 0.9f))
+     } else {
+         Color.Transparent
+     }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt
 new file mode 100644
 index 0000000..a96c05b
@@ -5216,10 +5362,10 @@ index 0000000..4f17f67
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt
 new file mode 100644
-index 0000000..3945d8d
+index 0000000..9303aef
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,386 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import android.content.Context
@@ -5353,6 +5499,28 @@ index 0000000..3945d8d
 +                    modifier = Modifier.padding(horizontal = 8.dp),
 +                    title = { Text("背景图") },
 +                ) {
++                    // 遮罩开关放在整个「背景图」组最上面：四张图共用同一个开关，
++                    // 之前放在「气泡」组里，容易让人以为只对气泡生效
++                    item(
++                        headlineContent = { Text("所有背景图叠加主题色遮罩") },
++                        supportingContent = {
++                            Text(
++                                if (displaySetting.backgroundImageTint) {
++                                    "对输入框 / 侧边栏 / 用户气泡 / AI 气泡都生效。开：图片上面压一层主题色，文字更好读"
++                                } else {
++                                    "对输入框 / 侧边栏 / 用户气泡 / AI 气泡都生效。关：只显示图片本身"
++                                }
++                            )
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.backgroundImageTint,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(backgroundImageTint = it))
++                                },
++                            )
++                        },
++                    )
 +                    imageSlots.forEach { (slot, title, description) ->
 +                        val path = displaySetting.imageOf(slot)
 +                        item(
@@ -5390,6 +5558,49 @@ index 0000000..3945d8d
 +                                }
 +                            },
 +                        )
++                        // 输入框 / 侧边栏这两张图单独给一个不透明度，图片太抢眼时可以压下去
++                        when (slot) {
++                            ImageSlot.INPUT -> item(
++                                headlineContent = { Text("输入框背景图不透明度") },
++                                supportingContent = {
++                                    ImageAlphaSlider(
++                                        value = displaySetting.inputBackgroundImageAlpha,
++                                        onValueChange = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(inputBackgroundImageAlpha = it)
++                                            )
++                                        },
++                                        onReset = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(inputBackgroundImageAlpha = 1f)
++                                            )
++                                        },
++                                    )
++                                },
++                            )
++
++                            ImageSlot.DRAWER -> item(
++                                headlineContent = { Text("侧边栏背景图不透明度") },
++                                supportingContent = {
++                                    ImageAlphaSlider(
++                                        value = displaySetting.drawerBackgroundImageAlpha,
++                                        onValueChange = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(drawerBackgroundImageAlpha = it)
++                                            )
++                                        },
++                                        onReset = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(drawerBackgroundImageAlpha = 1f)
++                                            )
++                                        },
++                                    )
++                                },
++                            )
++
++                            // 气泡图暂时不单独调不透明度，气泡本身的透明度在「透明度设置」里
++                            else -> Unit
++                        }
 +                    }
 +                }
 +            }
@@ -5439,26 +5650,6 @@ index 0000000..3945d8d
 +                            }
 +                        },
 +                    )
-+                    item(
-+                        headlineContent = { Text("背景图叠加主题色遮罩") },
-+                        supportingContent = {
-+                            Text(
-+                                if (displaySetting.backgroundImageTint) {
-+                                    "开：图片上面压一层主题色，文字更好读"
-+                                } else {
-+                                    "关：只显示图片本身"
-+                                }
-+                            )
-+                        },
-+                        trailingContent = {
-+                            Switch(
-+                                checked = displaySetting.backgroundImageTint,
-+                                onCheckedChange = {
-+                                    updateDisplaySetting(displaySetting.copy(backgroundImageTint = it))
-+                                },
-+                            )
-+                        },
-+                    )
 +                }
 +            }
 +
@@ -5470,6 +5661,42 @@ index 0000000..3945d8d
 +                    modifier = Modifier.padding(horizontal = 16.dp),
 +                )
 +            }
++        }
++    }
++}
++
++/**
++ * 背景图不透明度滑块：0% 完全看不见，100% 原样显示，步长 5%。
++ *
++ * 图片本身仍会参与圆角裁剪和遮罩开关，这里只改它自己那一层的不透明度。
++ */
++@Composable
++private fun ImageAlphaSlider(
++    value: Float,
++    onValueChange: (Float) -> Unit,
++    onReset: () -> Unit,
++) {
++    val safeValue = value.coerceIn(0f, 1f)
++    Column {
++        Row(
++            modifier = Modifier.fillMaxWidth(),
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            Slider(
++                value = safeValue,
++                onValueChange = onValueChange,
++                valueRange = 0f..1f,
++                steps = 19,
++                modifier = Modifier.weight(1f),
++            )
++            Text("${(safeValue * 100).roundToInt()}%")
++        }
++        TextButton(
++            onClick = onReset,
++            modifier = Modifier.align(Alignment.End),
++        ) {
++            Text("恢复默认")
 +        }
 +    }
 +}
@@ -5525,216 +5752,8 @@ index 0000000..3945d8d
 +            target.absolutePath
 +        }.getOrNull()
 +    }
-diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
-new file mode 100644
-index 0000000..30e7557
---- /dev/null
-+++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
-@@ -0,0 +1,202 @@
-+package me.rerere.rikkahub.ui.pages.setting
-+
-+import androidx.compose.foundation.layout.Arrangement
-+import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.PaddingValues
-+import androidx.compose.foundation.layout.Row
-+import androidx.compose.foundation.layout.fillMaxSize
-+import androidx.compose.foundation.layout.fillMaxWidth
-+import androidx.compose.foundation.layout.padding
-+import androidx.compose.foundation.lazy.LazyColumn
-+import androidx.compose.material3.LargeFlexibleTopAppBar
-+import androidx.compose.material3.Scaffold
-+import androidx.compose.material3.SegmentedButton
-+import androidx.compose.material3.SegmentedButtonDefaults
-+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-+import androidx.compose.material3.Slider
-+import androidx.compose.material3.Switch
-+import androidx.compose.material3.Text
-+import androidx.compose.material3.TextButton
-+import androidx.compose.material3.TopAppBarDefaults
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.getValue
-+import androidx.compose.runtime.mutableStateOf
-+import androidx.compose.runtime.remember
-+import androidx.compose.runtime.setValue
-+import androidx.compose.ui.Alignment
-+import androidx.compose.ui.Modifier
-+import androidx.compose.ui.input.nestedscroll.nestedScroll
-+import androidx.compose.ui.unit.dp
-+import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import kotlin.math.roundToInt
-+import me.rerere.rikkahub.data.datastore.DisplaySetting
-+import me.rerere.rikkahub.data.datastore.SurfaceMaterial
-+import me.rerere.rikkahub.ui.components.nav.BackButton
-+import me.rerere.rikkahub.ui.components.ui.CardGroup
-+import me.rerere.rikkahub.ui.theme.CustomColors
-+import me.rerere.rikkahub.utils.plus
-+import org.koin.androidx.compose.koinViewModel
-+
-+/** 模糊强度滑块的取值范围，和 DisplaySetting.materialBlurRadius 的收敛范围一致 */
-+private const val MIN_MATERIAL_BLUR = 0
-+private const val MAX_MATERIAL_BLUR = 40
-+private const val DEFAULT_MATERIAL_BLUR = 16
-+private const val DEFAULT_BUBBLE_REALTIME_BLUR = false
-+private val DEFAULT_SURFACE_MATERIAL = SurfaceMaterial.SOLID
-+
-+/** 三选一的显示顺序与中文名 */
-+private val SURFACE_MATERIAL_OPTIONS = listOf(
-+    SurfaceMaterial.SOLID to "纯色",
-+    SurfaceMaterial.FROSTED to "磨砂",
-+    SurfaceMaterial.LIQUID to "液态",
-+)
-+
-+/**
-+ * 界面材质页：纯色 / 磨砂玻璃 / 液态玻璃 + 模糊强度 + 气泡实时模糊。
-+ *
-+ * 全部带默认值，默认 SOLID + 16dp + 关闭气泡模糊，和原版外观完全一致。
-+ */
-+@Composable
-+fun SettingPreferencesMaterialPage(vm: SettingVM = koinViewModel()) {
-+    val settings by vm.settings.collectAsStateWithLifecycle()
-+    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
-+
-+    fun updateDisplaySetting(setting: DisplaySetting) {
-+        displaySetting = setting
-+        vm.updateSettings(settings.copy(displaySetting = setting))
-+    }
-+
-+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-+    val material = displaySetting.surfaceMaterial
-+    val blurRadius = displaySetting.materialBlurRadius.coerceIn(MIN_MATERIAL_BLUR, MAX_MATERIAL_BLUR)
-+
-+    Scaffold(
-+        topBar = {
-+            LargeFlexibleTopAppBar(
-+                title = { Text("界面材质") },
-+                navigationIcon = {
-+                    BackButton()
-+                },
-+                scrollBehavior = scrollBehavior,
-+                colors = CustomColors.topBarColors
-+            )
-+        },
-+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-+        containerColor = CustomColors.topBarColors.containerColor
-+    ) { contentPadding ->
-+        LazyColumn(
-+            modifier = Modifier.fillMaxSize(),
-+            contentPadding = contentPadding + PaddingValues(8.dp),
-+            verticalArrangement = Arrangement.spacedBy(16.dp)
-+        ) {
-+            item {
-+                CardGroup(
-+                    modifier = Modifier.padding(horizontal = 8.dp),
-+                    title = { Text("材质") },
-+                ) {
-+                    item(
-+                        headlineContent = { Text("界面材质") },
-+                        supportingContent = {
-+                            Column {
-+                                Text("纯色、磨砂玻璃、液态玻璃")
-+                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-+                                    SURFACE_MATERIAL_OPTIONS.forEachIndexed { index, (value, label) ->
-+                                        SegmentedButton(
-+                                            selected = material == value,
-+                                            onClick = {
-+                                                updateDisplaySetting(displaySetting.copy(surfaceMaterial = value))
-+                                            },
-+                                            shape = SegmentedButtonDefaults.itemShape(
-+                                                index = index,
-+                                                count = SURFACE_MATERIAL_OPTIONS.size,
-+                                            ),
-+                                        ) {
-+                                            Text(label)
-+                                        }
-+                                    }
-+                                }
-+                                TextButton(
-+                                    onClick = {
-+                                        updateDisplaySetting(
-+                                            displaySetting.copy(surfaceMaterial = DEFAULT_SURFACE_MATERIAL)
-+                                        )
-+                                    },
-+                                    modifier = Modifier.align(Alignment.End),
-+                                ) {
-+                                    Text("恢复默认")
-+                                }
-+                            }
-+                        },
-+                    )
-+                    item(
-+                        headlineContent = { Text("模糊强度") },
-+                        supportingContent = {
-+                            Column {
-+                                Text("只影响磨砂玻璃 / 液态玻璃，0 就是完全清晰")
-+                                Row(
-+                                    modifier = Modifier.fillMaxWidth(),
-+                                    verticalAlignment = Alignment.CenterVertically,
-+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-+                                ) {
-+                                    Slider(
-+                                        value = blurRadius.toFloat(),
-+                                        onValueChange = {
-+                                            updateDisplaySetting(
-+                                                displaySetting.copy(
-+                                                    materialBlurRadius = it.roundToInt()
-+                                                        .coerceIn(MIN_MATERIAL_BLUR, MAX_MATERIAL_BLUR)
-+                                                )
-+                                            )
-+                                        },
-+                                        valueRange = MIN_MATERIAL_BLUR.toFloat()..MAX_MATERIAL_BLUR.toFloat(),
-+                                        steps = (MAX_MATERIAL_BLUR - MIN_MATERIAL_BLUR - 1) / 2,
-+                                        modifier = Modifier.weight(1f)
-+                                    )
-+                                    Text(text = "${blurRadius} dp")
-+                                }
-+                                TextButton(
-+                                    onClick = {
-+                                        updateDisplaySetting(
-+                                            displaySetting.copy(materialBlurRadius = DEFAULT_MATERIAL_BLUR)
-+                                        )
-+                                    },
-+                                    modifier = Modifier.align(Alignment.End),
-+                                ) {
-+                                    Text("恢复默认")
-+                                }
-+                            }
-+                        },
-+                    )
-+                    item(
-+                        headlineContent = { Text("聊天气泡实时模糊") },
-+                        supportingContent = {
-+                            Column {
-+                                Text("给用户 / AI 气泡加背后模糊，滚动时比较吃性能，默认关闭")
-+                                TextButton(
-+                                    onClick = {
-+                                        updateDisplaySetting(
-+                                            displaySetting.copy(
-+                                                bubbleRealtimeBlur = DEFAULT_BUBBLE_REALTIME_BLUR
-+                                            )
-+                                        )
-+                                    },
-+                                    modifier = Modifier.align(Alignment.End),
-+                                ) {
-+                                    Text("恢复默认")
-+                                }
-+                            }
-+                        },
-+                        trailingContent = {
-+                            Switch(
-+                                checked = displaySetting.bubbleRealtimeBlur,
-+                                onCheckedChange = {
-+                                    updateDisplaySetting(displaySetting.copy(bubbleRealtimeBlur = it))
-+                                }
-+                            )
-+                        },
-+                    )
-+                }
-+            }
-+        }
-+    }
-+}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-index c296a24..dafc2e6 100644
+index c296a24..f747ad6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 @@ -18,9 +18,14 @@ import androidx.compose.ui.unit.dp
@@ -5752,7 +5771,7 @@ index c296a24..dafc2e6 100644
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
  import me.rerere.rikkahub.ui.components.nav.BackButton
-@@ -65,6 +70,36 @@ fun SettingPreferencesPage() {
+@@ -65,6 +70,30 @@ fun SettingPreferencesPage() {
                          headlineContent = { Text(stringResource(R.string.setting_page_preferences_theme)) },
                          supportingContent = { Text(stringResource(R.string.setting_page_preferences_theme_desc)) },
                      )
@@ -5775,12 +5794,6 @@ index c296a24..dafc2e6 100644
 +                        supportingContent = { Text("输入框背景、侧边栏背景、气泡背景") },
 +                    )
 +                    item(
-+                        onClick = { navController.navigate(Screen.SettingPreferencesMaterial) },
-+                        leadingContent = { Icon(HugeIcons.WebDesign01, null) },
-+                        headlineContent = { Text("界面材质") },
-+                        supportingContent = { Text("纯色、磨砂玻璃、液态玻璃") },
-+                    )
-+                    item(
 +                        onClick = { navController.navigate(Screen.SettingPreferencesQuote) },
 +                        leadingContent = { Icon(HugeIcons.TextSelection, null) },
 +                        headlineContent = { Text("对白样式") },
@@ -5791,10 +5804,10 @@ index c296a24..dafc2e6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..4b6e318
+index 0000000..b603476
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,437 @@
+@@ -0,0 +1,509 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -5812,9 +5825,6 @@ index 0000000..4b6e318
 +import androidx.compose.material3.LargeFlexibleTopAppBar
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Scaffold
-+import androidx.compose.material3.SegmentedButton
-+import androidx.compose.material3.SegmentedButtonDefaults
-+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 +import androidx.compose.material3.Slider
 +import androidx.compose.material3.Switch
 +import androidx.compose.material3.Text
@@ -5834,9 +5844,9 @@ index 0000000..4b6e318
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import kotlin.math.roundToInt
 +import me.rerere.rikkahub.data.datastore.DisplaySetting
-+import me.rerere.rikkahub.data.datastore.QuoteUnderline
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 +import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
 +import me.rerere.rikkahub.ui.components.ui.pushRecentColor
 +import me.rerere.rikkahub.ui.theme.CustomColors
@@ -5845,7 +5855,6 @@ index 0000000..4b6e318
 +
 +/** 背景透明度滑块的默认值，和 DisplaySetting.quoteHighlightBackgroundAlpha 保持一致 */
 +private const val DEFAULT_QUOTE_BACKGROUND_ALPHA = 0.18f
-+private val DEFAULT_QUOTE_UNDERLINE = QuoteUnderline.NONE
 +
 +/** 底色圆角默认值（dp），和 DisplaySetting.quoteBackgroundCorner 一致 */
 +private const val DEFAULT_QUOTE_BACKGROUND_CORNER = 4
@@ -5853,26 +5862,38 @@ index 0000000..4b6e318
 +/** 行间空隙默认值（dp），和 DisplaySetting.quoteBackgroundGap 一致 */
 +private const val DEFAULT_QUOTE_BACKGROUND_GAP = 2
 +
-+/** 下划线四种：选「无」就是关闭，不再有第五种「关」的开关 */
-+private val QUOTE_UNDERLINE_OPTIONS = listOf(
-+    QuoteUnderline.NONE to "无",
-+    QuoteUnderline.SOLID to "实线",
-+    QuoteUnderline.DASHED to "虚线",
-+    QuoteUnderline.DOTTED to "点线",
-+)
-+
 +/**
 + * 对白样式页：AI 回复里被 “引号” 包住的文字怎么画。
 + *
-+ * 结构：高亮开关 → 文字颜色 / 底色开关 / 背景色 / 背景透明度 / 底色圆角 / 行间空隙
-+ * → 下划线样式（无 · 实线 · 虚线 · 点线）/ 下划线颜色 / 行首竖线。
++ * 分组按用户要求从上到下依次是（每组一个独立的 [CardGroup]，互不混在一起）：
 + *
-+ * 底色与下划线都是自绘的（`QuoteHighlight.kt` 的 `drawBehind`），所以：
-+ * - 底色是「每行一个圆角矩形」，行与行之间留 `行间空隙`，不再是一整块连在一起的矩形；
-+ * - 下划线支持实线 / 虚线 / 点线，颜色取「下划线颜色」，没选时跟随文字颜色；
-+ * - 「下划线颜色」只有**一处**入口（原来重复出现的两处已合并成这一处），而且是真的生效的。
++ * ```
++ * ［引号高亮］ 引号内文字高亮      [开关]
++ * ［文字］     文字颜色            #676262 ●
++ * ［底色］     启用对白底色        [开关]
++ *              背景色              浅灰 ●
++ *              背景透明度          30%
++ *              底色圆角            4dp
++ *              行间空隙            2dp
++ * ［下划线］   实线                [开关]
++ *              颜色                红 ●     ← 只在「实线」打开时出现
++ *              虚线                [开关]
++ *              颜色                红 ●     ← 只在「虚线」打开时出现
++ *              点线                [开关]
++ *              颜色                红 ●     ← 只在「点线」打开时出现
++ * ［行首竖线］ 行首竖线            [开关]
++ *              竖线颜色            红 ●     ← null 表示跟随文字颜色
++ * ```
 + *
-+ * 所有字段都带默认值（开关关、无底色、无下划线），默认状态下渲染结果与没有这个功能时逐像素一致。
++ * 几条硬要求：
++ * - 「文字颜色」单独一组，和底色 / 下划线彻底分开；
++ * - 「底色」组里**没有**「下划线颜色」这一行（老版本里跑错组的那一项已经搬走）；
++ * - 下划线不再是「无 / 实线 / 虚线 / 点线」四选一，而是「实线」「虚线」「点线」三个独立开关，
++ *   各带自己的颜色；全打开就是三条线，依次往下错开 2dp（见 `QuoteHighlight.kt`）；
++ * - 颜色行只在对应开关打开时才显示，节省竖向空间。
++ *
++ * 所有字段都带默认值（开关全关、无底色、无下划线、竖线颜色跟随文字色），
++ * 默认状态下渲染结果与没有这个功能时逐像素一致。
 + */
 +@Composable
 +fun SettingPreferencesQuotePage(vm: SettingVM = koinViewModel()) {
@@ -5892,6 +5913,7 @@ index 0000000..4b6e318
 +    val backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 24)
 +    val backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 12)
 +
++    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
 +    val textColorField = ColorField(
 +        key = "quoteText",
 +        title = "文字颜色",
@@ -5914,18 +5936,50 @@ index 0000000..4b6e318
 +        },
 +        apply = { setting, value -> setting.copy(quoteHighlightBackground = value) },
 +    )
-+    // 下划线颜色：只有这一处（左右两处重复入口已合并），自绘下划线 / 行首竖线都取它
-+    val underlineColorField = ColorField(
-+        key = "quoteUnderlineColor",
-+        title = "下划线颜色",
-+        value = displaySetting.quoteUnderlineColor,
++    // 实线颜色：只在「实线」开关打开时才用得到，null = 跟随文字颜色
++    val solidColorField = ColorField(
++        key = "quoteUnderlineSolid",
++        title = "颜色",
++        value = displaySetting.quoteUnderlineSolidColor,
 +        preview = MaterialTheme.colorScheme.tertiary,
-+        supporting = { value ->
-+            value?.toHexArgb() ?: "跟随文字颜色（也会用在行首竖线上）"
-+        },
-+        apply = { setting, value -> setting.copy(quoteUnderlineColor = value) },
++        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
++        apply = { setting, value -> setting.copy(quoteUnderlineSolidColor = value) },
 +    )
-+    val colorFields = listOf(textColorField, backgroundColorField)
++    // 虚线颜色：只在「虚线」开关打开时才用得到，null = 跟随文字颜色
++    val dashedColorField = ColorField(
++        key = "quoteUnderlineDashed",
++        title = "颜色",
++        value = displaySetting.quoteUnderlineDashedColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
++        apply = { setting, value -> setting.copy(quoteUnderlineDashedColor = value) },
++    )
++    // 点线颜色：只在「点线」开关打开时才用得到，null = 跟随文字颜色
++    val dottedColorField = ColorField(
++        key = "quoteUnderlineDotted",
++        title = "颜色",
++        value = displaySetting.quoteUnderlineDottedColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
++        apply = { setting, value -> setting.copy(quoteUnderlineDottedColor = value) },
++    )
++    // 行首竖线颜色：null = 跟随文字颜色（不再借用下划线颜色）
++    val leadingBarColorField = ColorField(
++        key = "quoteLeadingBar",
++        title = "竖线颜色",
++        value = displaySetting.quoteLeadingBarColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
++        apply = { setting, value -> setting.copy(quoteLeadingBarColor = value) },
++    )
++    val colorFields = listOf(
++        textColorField,
++        backgroundColorField,
++        solidColorField,
++        dashedColorField,
++        dottedColorField,
++        leadingBarColorField,
++    )
 +
 +    Scaffold(
 +        topBar = {
@@ -5946,6 +6000,7 @@ index 0000000..4b6e318
 +            contentPadding = contentPadding + PaddingValues(8.dp),
 +            verticalArrangement = Arrangement.spacedBy(16.dp)
 +        ) {
++            // ① 引号高亮总开关
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
@@ -5967,29 +6022,24 @@ index 0000000..4b6e318
 +                    )
 +                }
 +            }
++            // ② 文字：只有一个文字颜色，单独一组（和底色 / 下划线彻底分开）
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
-+                    title = { Text("文字与底色") },
++                    title = { Text("文字") },
 +                ) {
-+                    item(
++                    quoteColorItem(
++                        field = textColorField,
 +                        onClick = { colorTargetKey = textColorField.key },
-+                        headlineContent = { Text(textColorField.title) },
-+                        supportingContent = {
-+                            Text(textColorField.supporting(textColorField.value))
-+                        },
-+                        trailingContent = {
-+                            Box(
-+                                modifier = Modifier
-+                                    .size(28.dp)
-+                                    .clip(CircleShape)
-+                                    .background(
-+                                        textColorField.value?.let { Color(it) }
-+                                            ?: textColorField.preview
-+                                    ),
-+                            )
-+                        },
 +                    )
++                }
++            }
++            // ③ 底色：开关 + 背景色 + 透明度 + 圆角 + 行间空隙（这里没有下划线颜色）
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("底色") },
++                ) {
 +                    // 底色总开关：关掉就完全不画底色，不用点进取色盘「恢复默认」
 +                    item(
 +                        headlineContent = { Text("启用对白底色") },
@@ -6007,23 +6057,9 @@ index 0000000..4b6e318
 +                            )
 +                        },
 +                    )
-+                    item(
++                    quoteColorItem(
++                        field = backgroundColorField,
 +                        onClick = { colorTargetKey = backgroundColorField.key },
-+                        headlineContent = { Text(backgroundColorField.title) },
-+                        supportingContent = {
-+                            Text(backgroundColorField.supporting(backgroundColorField.value))
-+                        },
-+                        trailingContent = {
-+                            Box(
-+                                modifier = Modifier
-+                                    .size(28.dp)
-+                                    .clip(CircleShape)
-+                                    .background(
-+                                        backgroundColorField.value?.let { Color(it) }
-+                                            ?: backgroundColorField.preview
-+                                    ),
-+                            )
-+                        },
 +                    )
 +                    // 背景透明度：只在启用了底色、且设了背景色时才有意义，0% 等于不加底色
 +                    item(
@@ -6123,70 +6159,91 @@ index 0000000..4b6e318
 +                    )
 +                }
 +            }
++            // ④ 下划线：实线 / 虚线 / 点线各自一个开关 + 各自一个颜色（颜色行只在对应开关打开时出现）
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
 +                    title = { Text("下划线") },
 +                ) {
 +                    item(
-+                        headlineContent = { Text("下划线样式") },
++                        headlineContent = { Text("实线") },
 +                        supportingContent = {
-+                            Column {
-+                                Text("选「无」即关闭下划线；实线 / 虚线 / 点线都是自绘的，颜色见下面一项")
-+                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-+                                    QUOTE_UNDERLINE_OPTIONS.forEachIndexed { index, (value, label) ->
-+                                        SegmentedButton(
-+                                            selected = displaySetting.quoteUnderline == value,
-+                                            onClick = {
-+                                                applyDisplaySetting {
-+                                                    it.copy(quoteUnderline = value)
-+                                                }
-+                                            },
-+                                            shape = SegmentedButtonDefaults.itemShape(
-+                                                index = index,
-+                                                count = QUOTE_UNDERLINE_OPTIONS.size,
-+                                            ),
-+                                        ) {
-+                                            Text(label)
-+                                        }
-+                                    }
-+                                }
-+                                TextButton(
-+                                    onClick = {
-+                                        applyDisplaySetting {
-+                                            it.copy(quoteUnderline = DEFAULT_QUOTE_UNDERLINE)
-+                                        }
-+                                    },
-+                                    modifier = Modifier.align(Alignment.End),
-+                                ) {
-+                                    Text("恢复默认")
-+                                }
-+                            }
-+                        },
-+                    )
-+                    item(
-+                        onClick = { colorTargetKey = underlineColorField.key },
-+                        headlineContent = { Text(underlineColorField.title) },
-+                        supportingContent = {
-+                            Text(underlineColorField.supporting(underlineColorField.value))
++                            Text("在引号内的文字下面画一条实线，颜色用下面那一项")
 +                        },
 +                        trailingContent = {
-+                            Box(
-+                                modifier = Modifier
-+                                    .size(28.dp)
-+                                    .clip(CircleShape)
-+                                    .background(
-+                                        underlineColorField.value?.let { Color(it) }
-+                                            ?: underlineColorField.preview
-+                                    ),
++                            Switch(
++                                checked = displaySetting.quoteUnderlineSolid,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteUnderlineSolid = checked)
++                                    }
++                                },
 +                            )
 +                        },
 +                    )
-+                    // 行首竖线：竖线颜色跟随上面的下划线颜色（没选就跟随文字颜色）
++                    // 颜色行只在「实线」打开时出现，省空间
++                    if (displaySetting.quoteUnderlineSolid) {
++                        quoteColorItem(
++                            field = solidColorField,
++                            onClick = { colorTargetKey = solidColorField.key },
++                        )
++                    }
++                    item(
++                        headlineContent = { Text("虚线") },
++                        supportingContent = {
++                            Text("在引号内的文字下面画一条虚线，可以和上面的实线同时打开")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteUnderlineDashed,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteUnderlineDashed = checked)
++                                    }
++                                },
++                            )
++                        },
++                    )
++                    if (displaySetting.quoteUnderlineDashed) {
++                        quoteColorItem(
++                            field = dashedColorField,
++                            onClick = { colorTargetKey = dashedColorField.key },
++                        )
++                    }
++                    item(
++                        headlineContent = { Text("点线") },
++                        supportingContent = {
++                            Text("在引号内的文字下面画一排小点，可以和上面的实线、虚线同时打开")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteUnderlineDotted,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteUnderlineDotted = checked)
++                                    }
++                                },
++                            )
++                        },
++                    )
++                    if (displaySetting.quoteUnderlineDotted) {
++                        quoteColorItem(
++                            field = dottedColorField,
++                            onClick = { colorTargetKey = dottedColorField.key },
++                        )
++                    }
++                }
++            }
++            // ⑤ 行首竖线：开关 + 自己的颜色（null = 跟随文字颜色）
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("行首竖线") },
++                ) {
 +                    item(
 +                        headlineContent = { Text("行首竖线") },
 +                        supportingContent = {
-+                            Text("每个引号区间起点那一行的左侧画一根竖线，颜色跟随下划线颜色")
++                            Text("引号覆盖的每一行左侧都画一段竖线，多行连起来就是一条完整的竖线")
 +                        },
 +                        trailingContent = {
 +                            Switch(
@@ -6197,14 +6254,16 @@ index 0000000..4b6e318
 +                            )
 +                        },
 +                    )
++                    quoteColorItem(
++                        field = leadingBarColorField,
++                        onClick = { colorTargetKey = leadingBarColorField.key },
++                    )
 +                }
 +            }
 +        }
 +    }
 +
-+    val activeField = colorTargetKey?.let { key ->
-+        (colorFields + underlineColorField).firstOrNull { it.key == key }
-+    }
++    val activeField = colorTargetKey?.let { key -> colorFields.firstOrNull { it.key == key } }
 +    if (activeField != null) {
 +        ColorPickerDialog(
 +            title = activeField.title,
@@ -6231,6 +6290,32 @@ index 0000000..4b6e318
 +            },
 +        )
 +    }
++}
++
++/**
++ * 一行「颜色项」：左边标题 + 说明，右边一个圆形色块。
++ *
++ * 直接复用 [CardGroupScope.item]（和页面里其它行同一种卡片排版 / 点击水波），
++ * 色块取当前值，没设置过时用 [ColorField.preview] 这张主题色示意，表示「现在跟随主题 / 文字颜色」。
++ * 抽成扩展函数只是为了让五个颜色行长得完全一样，不重复五份 Box 代码。
++ */
++private fun CardGroupScope.quoteColorItem(
++    field: ColorField,
++    onClick: () -> Unit,
++) {
++    item(
++        onClick = onClick,
++        headlineContent = { Text(field.title) },
++        supportingContent = { Text(field.supporting(field.value)) },
++        trailingContent = {
++            Box(
++                modifier = Modifier
++                    .size(28.dp)
++                    .clip(CircleShape)
++                    .background(field.value?.let { Color(it) } ?: field.preview),
++            )
++        },
++    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 index 2ee9d11..d6aa969 100644
