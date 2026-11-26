@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..74a97c8 100644
+index 205e822..16ffc0c 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1555,7 +1555,7 @@ index 205e822..74a97c8 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +716,102 @@ data class DisplaySetting(
+@@ -642,8 +716,104 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1625,6 +1625,8 @@ index 205e822..74a97c8 100644
 +    // 消息正文的段落 / 块间距**增量**（dp，-8..24）：0 = 沿用原来按字号算的间距（原样），
 +    // 正数在默认间距上更松、负数更紧；渲染处 = (fontSize.toDp() + 这个值).coerceAtLeast(0.dp)
 +    val chatParagraphSpacingDp: Int = 0,
++    // 字间距（em 倍数，0 = 原样；负数更紧、正数更松）
++    val chatLetterSpacingEm: Float = 0f,
 +    // 消息正文的**自定义字号百分比**（0 = 关闭）：0 表示沿用上面 fontSizeRatio 的那几个档位，
 +    // 10..200 表示直接覆盖正文的字号倍率（只影响消息正文，设置界面自身排版不受影响）
 +    val chatFontSizePercent: Int = 0,
@@ -2091,7 +2093,7 @@ index 45c3d83..e4d8057 100644
              }
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..9f3d2a3 100644
+index a18dd69..e0dd00e 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -2127,7 +2129,14 @@ index a18dd69..9f3d2a3 100644
  import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  import androidx.compose.ui.platform.LocalContext
  import androidx.compose.ui.platform.LocalHapticFeedback
-@@ -58,6 +63,8 @@ import androidx.compose.ui.util.fastForEachIndexed
+@@ -52,12 +57,15 @@ import androidx.compose.ui.text.buildAnnotatedString
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.text.withLink
+ import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.em
+ import androidx.compose.ui.util.fastAll
+ import androidx.compose.ui.util.fastForEach
+ import androidx.compose.ui.util.fastForEachIndexed
  import androidx.core.content.FileProvider
  import androidx.core.net.toFile
  import androidx.core.net.toUri
@@ -2136,7 +2145,7 @@ index a18dd69..9f3d2a3 100644
  import kotlinx.coroutines.FlowPreview
  import kotlinx.coroutines.flow.debounce
  import kotlinx.serialization.json.jsonArray
-@@ -75,10 +82,15 @@ import me.rerere.hugeicons.stroke.MusicNote03
+@@ -75,10 +83,15 @@ import me.rerere.hugeicons.stroke.MusicNote03
  import me.rerere.hugeicons.stroke.Video01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
@@ -2152,7 +2161,7 @@ index a18dd69..9f3d2a3 100644
  import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
  import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
  import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
-@@ -89,6 +101,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
+@@ -89,6 +102,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
  import me.rerere.rikkahub.ui.modifier.shimmer
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
@@ -2164,7 +2173,7 @@ index a18dd69..9f3d2a3 100644
  import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
  import me.rerere.rikkahub.ui.theme.extendColors
  import me.rerere.rikkahub.utils.JsonInstant
-@@ -121,9 +138,20 @@ fun ChatMessage(
+@@ -121,10 +139,28 @@ fun ChatMessage(
      val message = node.messages[node.selectIndex]
      val settings = LocalSettings.current.displaySetting
      val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
@@ -2179,15 +2188,24 @@ index a18dd69..9f3d2a3 100644
 +    } else {
 +        settings.fontSizeRatio
 +    }
++    // 字间距：em 为单位，0 就是原样（不写 letterSpacing），避免影响默认排版
++    val chatLetterSpacingEm = settings.chatLetterSpacingEm.coerceIn(-0.05f, 0.3f)
      val textStyle = LocalTextStyle.current.copy(
 -        fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
 -        lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
+-        fontFamily = chatFontFamily
 +        fontSize = LocalTextStyle.current.fontSize * chatFontSizeRatio,
 +        lineHeight = LocalTextStyle.current.lineHeight * chatFontSizeRatio,
-         fontFamily = chatFontFamily
++        fontFamily = chatFontFamily,
++        letterSpacing = if (chatLetterSpacingEm == 0f) {
++            LocalTextStyle.current.letterSpacing
++        } else {
++            chatLetterSpacingEm.em
++        },
      )
      var showActionsSheet by remember { mutableStateOf(false) }
-@@ -137,45 +165,70 @@ fun ChatMessage(
+     var showSelectCopySheet by remember { mutableStateOf(false) }
+@@ -137,45 +173,70 @@ fun ChatMessage(
          verticalArrangement = Arrangement.spacedBy(4.dp)
      ) {
          if (!message.parts.isEmptyUIMessage()) {
@@ -2292,7 +2310,7 @@ index a18dd69..9f3d2a3 100644
              }
          }
  
-@@ -261,6 +314,100 @@ fun ChatMessage(
+@@ -261,6 +322,100 @@ fun ChatMessage(
      }
  }
  
@@ -2393,7 +2411,7 @@ index a18dd69..9f3d2a3 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -280,7 +427,34 @@ private fun MessagePartsBlock(
+@@ -280,7 +435,34 @@ private fun MessagePartsBlock(
      // 消息输出HapticFeedback
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
@@ -2428,7 +2446,7 @@ index a18dd69..9f3d2a3 100644
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +498,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +506,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -2441,7 +2459,7 @@ index a18dd69..9f3d2a3 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,41 +543,69 @@ private fun MessagePartsBlock(
+@@ -365,41 +551,69 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
@@ -2532,7 +2550,7 @@ index a18dd69..9f3d2a3 100644
                                  } else {
                                      MarkdownBlock(
                                          content = part.text.replaceRegexes(
-@@ -408,6 +614,8 @@ private fun MessagePartsBlock(
+@@ -408,6 +622,8 @@ private fun MessagePartsBlock(
                                              visual = true,
                                          ),
                                          onClickCitation = handleClickCitation,
@@ -2541,7 +2559,7 @@ index a18dd69..9f3d2a3 100644
                                          modifier = Modifier
                                              .animateContentSize()
                                      )
-@@ -420,10 +628,18 @@ private fun MessagePartsBlock(
+@@ -420,10 +636,18 @@ private fun MessagePartsBlock(
                          // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
                          // 生成结束后内容稳定，再启用文本选择。
                          if (loading) {
@@ -3227,10 +3245,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..5fe9c21
+index 0000000..ebedb28
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,839 @@
+@@ -0,0 +1,841 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -3978,8 +3996,10 @@ index 0000000..5fe9c21
 +                if (solidPath != null || dashedPath != null || dottedPath != null) {
 +                    // 下划线直接复用这一行底色的左右界：与底色块严格同宽，
 +                    // 既不会长出引号，也不会像用行/字符端点那样在某些行算不出长度而漏画。
-+                    val underlineLeft = spanLeft
-+                    val underlineRight = spanRight
++                    // 再比底色块往里收 2dp：底色的边缘会吃进「引号与相邻文字之间的空白」，
++                    // 线要是贴着底色边缘，就会看起来盖住了引号外侧的空白（用户截图那个现象）
++                    val underlineLeft = spanLeft + underlineEndShrinkPx
++                    val underlineRight = spanRight - underlineEndShrinkPx
 +                    run {
 +                        if (underlineRight - underlineLeft > 0f) {
 +                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
@@ -7342,7 +7362,7 @@ index 0000000..541f170
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..acb28af 100644
+index 2ee9d11..b5ccabf 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.Row
@@ -7390,7 +7410,7 @@ index 2ee9d11..acb28af 100644
  import me.rerere.rikkahub.utils.plus
  import org.koin.androidx.compose.koinViewModel
  import java.io.File
-@@ -68,6 +75,11 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -68,6 +75,12 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
      val toaster = LocalToaster.current
      val scope = rememberCoroutineScope()
      val chatFontFamily = rememberChatFontFamily(displaySetting)
@@ -7399,10 +7419,11 @@ index 2ee9d11..acb28af 100644
 +    val chatParagraphSpacing = displaySetting.chatParagraphSpacingDp.coerceIn(-8, 24)
 +    // 自定义字号百分比（0 = 跟随档位，50–140% 覆盖正文倍率）
 +    val chatFontSizePercent = displaySetting.chatFontSizePercent
++    val chatLetterSpacingEm = displaySetting.chatLetterSpacingEm.coerceIn(-0.05f, 0.30f)
  
      fun updateDisplaySetting(setting: DisplaySetting) {
          displaySetting = setting
-@@ -86,11 +98,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -86,11 +99,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                      importCustomChatFontInternal(context, uri)
                  }
              }.onSuccess { importedFont ->
@@ -7442,7 +7463,7 @@ index 2ee9d11..acb28af 100644
                      )
                  )
                  toaster.show(importSuccessMsg, type = ToastType.Success)
-@@ -140,6 +178,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -140,6 +179,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -7483,7 +7504,7 @@ index 2ee9d11..acb28af 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
-@@ -209,6 +281,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -209,6 +282,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -7514,7 +7535,7 @@ index 2ee9d11..acb28af 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
-@@ -283,40 +379,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -283,40 +380,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          }
                      )
@@ -7670,7 +7691,7 @@ index 2ee9d11..acb28af 100644
                                          }
                                      ) {
                                          Icon(
-@@ -326,10 +509,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -326,10 +510,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                              )
                                          )
                                      }
@@ -7697,7 +7718,7 @@ index 2ee9d11..acb28af 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
                          supportingContent = {
-@@ -358,9 +554,124 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -358,9 +555,165 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                          fontFamily = chatFontFamily
                                      )
                                  )
@@ -7819,10 +7840,51 @@ index 2ee9d11..acb28af 100644
 +                            }
 +                        },
 +                    )
++                }
++            }
++            item {
++                CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
++                    // 字间距：只作用在消息正文，0 就是原样
++                    item(
++                        headlineContent = { Text("字间距") },
++                        supportingContent = {
++                            Column {
++                                Text("消息正文里字与字之间的距离，0.00em 就是现在的样子（负数更紧凑，只影响消息正文）")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = chatLetterSpacingEm,
++                                        onValueChange = { value ->
++                                            updateDisplaySetting(
++                                                displaySetting.copy(
++                                                    chatLetterSpacingEm = (value * 100f).roundToInt() / 100f
++                                                )
++                                            )
++                                        },
++                                        valueRange = -0.05f..0.30f,
++                                        steps = 0,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "%.2fem".format(chatLetterSpacingEm))
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(displaySetting.copy(chatLetterSpacingEm = 0f))
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
                  }
              }
  
-@@ -466,7 +777,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -466,7 +819,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
              throw IllegalArgumentException(error.message ?: "Invalid font file", error)
          }
  
@@ -7831,7 +7893,7 @@ index 2ee9d11..acb28af 100644
      } catch (error: Throwable) {
          tempFile.delete()
          throw error
-@@ -477,27 +788,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -477,27 +830,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
      return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
  }
  
