@@ -56,7 +56,7 @@ index bef7871..b56ecb8 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..e7b1ddd 100644
+index 205e822..9dc8277 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -604,6 +604,41 @@ enum class BackgroundEffectType {
@@ -101,7 +101,7 @@ index 205e822..e7b1ddd 100644
  @Serializable
  data class DisplaySetting(
      val userAvatar: Avatar = Avatar.Dummy,
-@@ -644,6 +679,36 @@ data class DisplaySetting(
+@@ -644,6 +679,38 @@ data class DisplaySetting(
      val chatCustomFontName: String = "",
      val enableVolumeKeyScroll: Boolean = false,
      val volumeKeyScrollRatio: Float = 1.0f,
@@ -114,6 +114,8 @@ index 205e822..e7b1ddd 100644
 +    // 主题基色：给一个颜色自动生成整套浅色/深色配色，null 表示不启用
 +    val themeSeedColor: Long? = null,
 +    val chatTextColor: Long? = null,
++    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
++    val recentColors: List<Long> = emptyList(),
 +    // 气泡圆角（dp），-1 表示沿用默认圆角
 +    val bubbleCornerRadius: Int = -1,
 +    // 思维链气泡透明度
@@ -905,6 +907,517 @@ index a18dd69..c01b8b1 100644
                                  } else {
                                      MarkdownBlock(
                                          content = part.text.replaceRegexes(
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt
+new file mode 100644
+index 0000000..9619dfa
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt
+@@ -0,0 +1,505 @@
++package me.rerere.rikkahub.ui.components.ui
++
++import android.graphics.Color as AndroidColor
++import androidx.compose.foundation.Canvas
++import androidx.compose.foundation.background
++import androidx.compose.foundation.border
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.gestures.detectDragGestures
++import androidx.compose.foundation.gestures.detectTapGestures
++import androidx.compose.foundation.horizontalScroll
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.focus.onFocusChanged
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Brush
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.drawscope.Stroke
++import androidx.compose.ui.graphics.toArgb
++import androidx.compose.ui.input.pointer.pointerInput
++import androidx.compose.ui.unit.dp
++import kotlin.math.ceil
++import kotlin.math.roundToInt
++import me.rerere.rikkahub.ui.pages.setting.parseArgbHex
++import me.rerere.rikkahub.ui.pages.setting.toHexArgb
++
++/**
++ * 取色盘弹窗：色域方块 + 色相条 + 透明度条 + 原色/当前预览 + HEX 输入 + 记忆色。
++ *
++ * 全部自绘（Canvas + Brush + pointerInput），不依赖 `:ui` 模块里 `internal` 的 SketchColorPicker。
++ * 状态只在弹窗内部滚动，点「确认」才通过 [onConfirm] 写回设置；[onRecentColorsChange] 用于记忆色的
++ * 「+ / 长按删除」，是独立于颜色的设置项，可以立即落库，取消弹窗也不会把刚收藏的颜色弄丢。
++ *
++ * @param title 弹窗标题（即正在改的那一项的名字）
++ * @param initialColor 当前设置里的颜色（ARGB Long），null 表示还没设置
++ * @param fallbackColor 没设置时预览用的主题色
++ * @param recentColors 已保存的记忆色，最近的在前
++ * @param canReset 是否显示「恢复默认」（把颜色置回 null）
++ */
++@Composable
++fun ColorPickerDialog(
++    title: String,
++    initialColor: Long?,
++    fallbackColor: Color,
++    recentColors: List<Long>,
++    onRecentColorsChange: (List<Long>) -> Unit,
++    onDismiss: () -> Unit,
++    onConfirm: (Long) -> Unit,
++    canReset: Boolean = true,
++    onReset: () -> Unit = {},
++) {
++    // 色域里的初始值：设置过就用设置的颜色，没设置就落在主题色上，避免一进来是纯红
++    val baselineArgb: Long = (initialColor ?: (fallbackColor.toArgb().toLong() and 0xFFFFFFFFL)) and 0xFFFFFFFFL
++    val baselineColor = Color(baselineArgb)
++
++    val baselineHsv = remember(baselineArgb) {
++        FloatArray(3).also { AndroidColor.colorToHSV(baselineArgb.toInt(), it) }
++    }
++
++    var hue by remember(baselineArgb) { mutableStateOf(baselineHsv[0]) }
++    var saturation by remember(baselineArgb) { mutableStateOf(baselineHsv[1]) }
++    var brightness by remember(baselineArgb) { mutableStateOf(baselineHsv[2]) }
++    var alphaFraction by remember(baselineArgb) {
++        mutableStateOf(((baselineArgb shr 24) and 0xFFL) / 255f)
++    }
++    // null 表示「跟着色域走」，非 null 表示用户正在手打 HEX，先别覆盖他打的字
++    var hexDraft by remember(baselineArgb) { mutableStateOf<String?>(null) }
++
++    val currentArgb: Long = argbFromHsv(hue, saturation, brightness, alphaFraction)
++    val currentColor = Color(currentArgb)
++    val pureHueColor = Color(argbFromHsv(hue, 1f, 1f, 1f))
++
++    fun applyColorValue(value: Long) {
++        val normalized = value and 0xFFFFFFFFL
++        val hsv = FloatArray(3)
++        AndroidColor.colorToHSV(normalized.toInt(), hsv)
++        // 灰色/黑色没有色相，别把用户刚调好的色相拽回 0
++        if (hsv[1] > 0.0001f && hsv[2] > 0.0001f) hue = hsv[0]
++        saturation = hsv[1]
++        brightness = hsv[2]
++        alphaFraction = ((normalized shr 24) and 0xFFL) / 255f
++    }
++
++    fun applySquarePosition(x: Float, y: Float, width: Int, height: Int) {
++        if (width <= 0 || height <= 0) return
++        saturation = (x / width).coerceIn(0f, 1f)
++        brightness = 1f - (y / height).coerceIn(0f, 1f)
++    }
++
++    fun applyBarPosition(x: Float, width: Int): Float {
++        if (width <= 0) return 0f
++        return (x / width).coerceIn(0f, 1f)
++    }
++
++    // Brush 在组合里建，绘制 lambda 里不建集合
++    val squareHorizontalBrush = remember(pureHueColor) {
++        Brush.horizontalGradient(listOf(Color.White, pureHueColor))
++    }
++    val squareVerticalBrush = remember {
++        Brush.verticalGradient(listOf(Color.Transparent, Color.Black))
++    }
++    val hueBrush = remember {
++        Brush.horizontalGradient(
++            listOf(
++                Color.Red,
++                Color.Yellow,
++                Color.Green,
++                Color.Cyan,
++                Color.Blue,
++                Color.Magenta,
++                Color.Red,
++            )
++        )
++    }
++    val alphaBrush = remember(currentColor) {
++        Brush.horizontalGradient(
++            listOf(
++                currentColor.copy(alpha = 0f),
++                currentColor.copy(alpha = 1f),
++            )
++        )
++    }
++
++    val squareShape = RoundedCornerShape(12.dp)
++    val barShape = RoundedCornerShape(6.dp)
++
++    val draft = hexDraft
++    val hexText = draft ?: currentArgb.toHexArgb()
++    val hexParsed = if (draft != null) parseArgbHex(draft) else currentArgb
++    val hexError = draft != null && draft.isNotBlank() && parseArgbHex(draft) == null
++
++    AlertDialog(
++        onDismissRequest = onDismiss,
++        title = { Text(title) },
++        text = {
++            Column(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .heightIn(max = 500.dp)
++                    .verticalScroll(rememberScrollState()),
++                verticalArrangement = Arrangement.spacedBy(10.dp),
++            ) {
++                // 1. 色域方块：横轴饱和度、纵轴明度
++                Box(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .height(240.dp)
++                        .clip(squareShape)
++                        .pointerInput(Unit) {
++                            detectTapGestures { offset ->
++                                applySquarePosition(offset.x, offset.y, size.width, size.height)
++                            }
++                        }
++                        .pointerInput(Unit) {
++                            detectDragGestures(
++                                onDragStart = { offset ->
++                                    applySquarePosition(offset.x, offset.y, size.width, size.height)
++                                },
++                                onDrag = { change, _ ->
++                                    change.consume()
++                                    applySquarePosition(
++                                        change.position.x,
++                                        change.position.y,
++                                        size.width,
++                                        size.height,
++                                    )
++                                },
++                            )
++                        },
++                ) {
++                    Canvas(modifier = Modifier.fillMaxSize()) {
++                        drawRect(brush = squareHorizontalBrush)
++                        drawRect(brush = squareVerticalBrush)
++                        val centerX = saturation.coerceIn(0f, 1f) * size.width
++                        val centerY = (1f - brightness.coerceIn(0f, 1f)) * size.height
++                        drawCircle(
++                            color = Color.Black.copy(alpha = 0.3f),
++                            radius = 9.dp.toPx(),
++                            center = Offset(centerX, centerY),
++                            style = Stroke(width = 3.dp.toPx()),
++                        )
++                        drawCircle(
++                            color = Color.White,
++                            radius = 8.dp.toPx(),
++                            center = Offset(centerX, centerY),
++                            style = Stroke(width = 2.dp.toPx()),
++                        )
++                    }
++                }
++
++                // 2. 色相条
++                Box(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .height(14.dp)
++                        .clip(barShape)
++                        .pointerInput(Unit) {
++                            detectTapGestures { offset ->
++                                hue = applyBarPosition(offset.x, size.width) * 360f
++                            }
++                        }
++                        .pointerInput(Unit) {
++                            detectDragGestures(
++                                onDragStart = { offset ->
++                                    hue = applyBarPosition(offset.x, size.width) * 360f
++                                },
++                                onDrag = { change, _ ->
++                                    change.consume()
++                                    hue = applyBarPosition(change.position.x, size.width) * 360f
++                                },
++                            )
++                        },
++                ) {
++                    Canvas(modifier = Modifier.fillMaxSize()) {
++                        drawRect(brush = hueBrush)
++                        val centerX = (hue.coerceIn(0f, 360f) / 360f) * size.width
++                        drawCircle(
++                            color = Color.Black.copy(alpha = 0.3f),
++                            radius = 8.dp.toPx(),
++                            center = Offset(centerX, size.height / 2f),
++                            style = Stroke(width = 3.dp.toPx()),
++                        )
++                        drawCircle(
++                            color = Color.White,
++                            radius = 7.dp.toPx(),
++                            center = Offset(centerX, size.height / 2f),
++                            style = Stroke(width = 2.dp.toPx()),
++                        )
++                    }
++                }
++
++                // 3. 透明度条：底下一层棋盘格，上面叠 alpha 渐变
++                Box(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .height(14.dp)
++                        .clip(barShape)
++                        .pointerInput(Unit) {
++                            detectTapGestures { offset ->
++                                alphaFraction = applyBarPosition(offset.x, size.width)
++                            }
++                        }
++                        .pointerInput(Unit) {
++                            detectDragGestures(
++                                onDragStart = { offset ->
++                                    alphaFraction = applyBarPosition(offset.x, size.width)
++                                },
++                                onDrag = { change, _ ->
++                                    change.consume()
++                                    alphaFraction = applyBarPosition(change.position.x, size.width)
++                                },
++                            )
++                        },
++                ) {
++                    Canvas(modifier = Modifier.fillMaxSize()) {
++                        val cell = 8.dp.toPx()
++                        val columns = ceil(size.width / cell).toInt()
++                        val rows = ceil(size.height / cell).toInt()
++                        val cellSize = Size(cell, cell)
++                        for (row in 0 until rows) {
++                            for (column in 0 until columns) {
++                                val light = (row + column) % 2 == 0
++                                drawRect(
++                                    color = if (light) Color(0xFFEFEFEF) else Color(0xFFBFBFBF),
++                                    topLeft = Offset(column * cell, row * cell),
++                                    size = cellSize,
++                                )
++                            }
++                        }
++                        drawRect(brush = alphaBrush)
++                        val centerX = alphaFraction.coerceIn(0f, 1f) * size.width
++                        drawCircle(
++                            color = Color.Black.copy(alpha = 0.35f),
++                            radius = 8.dp.toPx(),
++                            center = Offset(centerX, size.height / 2f),
++                            style = Stroke(width = 3.dp.toPx()),
++                        )
++                        drawCircle(
++                            color = Color.White,
++                            radius = 7.dp.toPx(),
++                            center = Offset(centerX, size.height / 2f),
++                            style = Stroke(width = 2.dp.toPx()),
++                        )
++                    }
++                }
++
++                // 4. 预览行：原色 → 当前
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(16.dp),
++                ) {
++                    ColorPreview(label = "原色", color = baselineColor, size = 40.dp)
++                    Text(
++                        text = "→",
++                        style = MaterialTheme.typography.titleMedium,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    )
++                    ColorPreview(label = "当前", color = currentColor, size = 40.dp)
++                }
++
++                // 5. HEX 输入：手打立刻同步回色域，失焦后显示规范化后的值
++                OutlinedTextField(
++                    value = hexText,
++                    onValueChange = { input ->
++                        hexDraft = input
++                        parseArgbHex(input)?.let { applyColorValue(it) }
++                    },
++                    singleLine = true,
++                    isError = hexError,
++                    label = { Text("颜色值") },
++                    placeholder = { Text("#AARRGGBB") },
++                    supportingText = {
++                        Text(
++                            if (hexError) {
++                                "格式不对，用 #RRGGBB 或 #AARRGGBB"
++                            } else {
++                                "A 是透明度，FF 为不透明"
++                            }
++                        )
++                    },
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .onFocusChanged { state -> if (!state.isFocused) hexDraft = null },
++                )
++
++                // 6. 记忆色
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                ) {
++                    Text(
++                        text = "记忆色",
++                        style = MaterialTheme.typography.labelLarge,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    )
++                    Row(
++                        modifier = Modifier
++                            .weight(1f)
++                            .horizontalScroll(rememberScrollState()),
++                        verticalAlignment = Alignment.CenterVertically,
++                        horizontalArrangement = Arrangement.spacedBy(8.dp),
++                    ) {
++                        recentColors.forEach { value ->
++                            Box(
++                                modifier = Modifier
++                                    .size(28.dp)
++                                    .clip(CircleShape)
++                                    .background(Color(value))
++                                    .border(
++                                        width = 1.dp,
++                                        color = MaterialTheme.colorScheme.outlineVariant,
++                                        shape = CircleShape,
++                                    )
++                                    .pointerInput(value) {
++                                        detectTapGestures(
++                                            onTap = {
++                                                applyColorValue(value)
++                                                hexDraft = null
++                                            },
++                                            onLongPress = {
++                                                onRecentColorsChange(recentColors - value)
++                                            },
++                                        )
++                                    },
++                            )
++                        }
++                        Box(
++                            modifier = Modifier
++                                .size(28.dp)
++                                .clip(CircleShape)
++                                .border(
++                                    width = 1.dp,
++                                    color = MaterialTheme.colorScheme.outline,
++                                    shape = CircleShape,
++                                )
++                                .clickable {
++                                    onRecentColorsChange(pushRecentColor(recentColors, currentArgb))
++                                },
++                            contentAlignment = Alignment.Center,
++                        ) {
++                            Text(
++                                text = "+",
++                                style = MaterialTheme.typography.titleMedium,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                        }
++                    }
++                }
++                Text(
++                    text = "点一下取用，长按删除；最多记 12 个",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    modifier = Modifier.padding(top = 2.dp),
++                )
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = { onConfirm(hexParsed ?: currentArgb) }) {
++                Text("确认")
++            }
++        },
++        dismissButton = {
++            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
++                if (canReset) {
++                    TextButton(onClick = onReset) {
++                        Text("恢复默认")
++                    }
++                }
++                TextButton(onClick = onDismiss) {
++                    Text("取消")
++                }
++            }
++        },
++    )
++}
++
++/** 圆形预览色块 + 底下的小标签 */
++@Composable
++private fun ColorPreview(
++    label: String,
++    color: Color,
++    size: androidx.compose.ui.unit.Dp,
++) {
++    Column(horizontalAlignment = Alignment.CenterHorizontally) {
++        Box(
++            modifier = Modifier
++                .size(size)
++                .clip(CircleShape)
++                .background(color)
++                .border(
++                    width = 1.dp,
++                    color = MaterialTheme.colorScheme.outlineVariant,
++                    shape = CircleShape,
++                ),
++        )
++        Text(
++            text = label,
++            style = MaterialTheme.typography.labelSmall,
++            color = MaterialTheme.colorScheme.onSurfaceVariant,
++            modifier = Modifier.padding(top = 4.dp),
++        )
++    }
++}
++
++/** 记忆色上限 */
++internal const val MAX_RECENT_COLORS = 12
++
++/**
++ * 把 [color] 放到记忆色最前面：去重（同色只留最前面那个）、最多 [MAX_RECENT_COLORS] 个。
++ * 颜色统一按 32 位 ARGB 归一化，避免 `toArgb()` 出来的负数 Int 和正数 Long 被当成两个颜色。
++ */
++internal fun pushRecentColor(recentColors: List<Long>, color: Long): List<Long> {
++    val normalized = color and 0xFFFFFFFFL
++    val result = ArrayList<Long>(MAX_RECENT_COLORS)
++    result.add(normalized)
++    for (item in recentColors) {
++        if (result.size >= MAX_RECENT_COLORS) break
++        val value = item and 0xFFFFFFFFL
++        if (value != normalized) {
++            result.add(value)
++        }
++    }
++    return result
++}
++
++/** HSV + alpha → 0xAARRGGBB */
++internal fun argbFromHsv(hue: Float, saturation: Float, brightness: Float, alpha: Float): Long {
++    val alphaInt = (alpha.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255).toLong()
++    val normalizedHue = ((hue % 360f) + 360f) % 360f
++    val rgb = AndroidColor.HSVToColor(
++        floatArrayOf(
++            normalizedHue,
++            saturation.coerceIn(0f, 1f),
++            brightness.coerceIn(0f, 1f),
++        )
++    ).toLong() and 0xFFFFFFL
++    return (alphaInt shl 24) or rgb
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt b/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt
 new file mode 100644
 index 0000000..806957f
@@ -1854,10 +2367,10 @@ index 0000000..a96c05b
 +)
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
 new file mode 100644
-index 0000000..5a9b1b6
+index 0000000..cd2de84
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,363 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -1877,7 +2390,6 @@ index 0000000..5a9b1b6
 +import androidx.compose.material3.Icon
 +import androidx.compose.material3.LargeFlexibleTopAppBar
 +import androidx.compose.material3.MaterialTheme
-+import androidx.compose.material3.OutlinedTextField
 +import androidx.compose.material3.RadioButton
 +import androidx.compose.material3.Scaffold
 +import androidx.compose.material3.Text
@@ -1902,6 +2414,8 @@ index 0000000..5a9b1b6
 +import me.rerere.rikkahub.data.datastore.ThemeSchemeStyle
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
++import me.rerere.rikkahub.ui.components.ui.pushRecentColor
 +import me.rerere.rikkahub.ui.theme.CustomColors
 +import me.rerere.rikkahub.utils.plus
 +import org.koin.androidx.compose.koinViewModel
@@ -1909,14 +2423,22 @@ index 0000000..5a9b1b6
 +/**
 + * 颜色自定义页：顶部「主题基色」+ 气泡 / 背景 / 输入框 / 主色调 / 正文文字色共 6 个颜色。
 + *
-+ * 所有颜色都是可选项，`null` 表示「跟随主题」。透明度在「透明度设置」页，气泡圆角和插图素材在「插图素材」页。
++ * 所有颜色都是可选项，`null` 表示「跟随主题」。点任意一行都打开取色盘（色域 + 色相 + 透明度 + HEX + 记忆色），
++ * 只有点「确认」才会写回设置。透明度滑块在「透明度设置」页，气泡圆角和插图素材在「插图素材」页。
 + */
 +@Composable
 +fun SettingPreferencesColorsPage(vm: SettingVM = koinViewModel()) {
 +    val settings by vm.settings.collectAsStateWithLifecycle()
 +    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
-+    var colorTarget by remember { mutableStateOf<ColorField?>(null) }
++    // 只记「正在改哪一项」的 key，颜色值 / 更新函数每次都从当前组合里重新取，避免弹窗拿到过期的闭包
++    var colorTargetKey by remember { mutableStateOf<String?>(null) }
 +    var showSchemeStyleDialog by remember { mutableStateOf(false) }
++
++    fun applyDisplaySetting(transform: (DisplaySetting) -> DisplaySetting) {
++        val next = transform(displaySetting)
++        displaySetting = next
++        vm.updateSettings(settings.copy(displaySetting = next))
++    }
 +
 +    fun updateDisplaySetting(setting: DisplaySetting) {
 +        displaySetting = setting
@@ -1927,48 +2449,65 @@ index 0000000..5a9b1b6
 +
 +    // 主题基色：只给一个颜色，整套浅色/深色配色由它推出来，优先级比单个「主色调」低
 +    val seedField = ColorField(
++        key = "seed",
 +        title = "主题基色",
 +        value = displaySetting.themeSeedColor,
 +        preview = MaterialTheme.colorScheme.primary,
-+        onUpdate = { updateDisplaySetting(displaySetting.copy(themeSeedColor = it)) },
++        supporting = { value ->
++            value?.let { "基色 ${it.toHexArgb()}，整套配色按它生成" }
++                ?: "设一个颜色，自动生成整套浅色/深色配色（留空则用当前主题）"
++        },
++        apply = { setting, value -> setting.copy(themeSeedColor = value) },
 +    )
 +
 +    val colorFields = listOf(
 +        ColorField(
++            key = "userBubble",
 +            title = "用户气泡颜色",
 +            value = displaySetting.userBubbleColor,
 +            preview = MaterialTheme.colorScheme.primaryContainer,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(userBubbleColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(userBubbleColor = value) },
 +        ),
 +        ColorField(
++            key = "assistantBubble",
 +            title = "AI 气泡颜色",
 +            value = displaySetting.assistantBubbleColor,
 +            preview = MaterialTheme.colorScheme.surfaceContainerHigh,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(assistantBubbleColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(assistantBubbleColor = value) },
 +        ),
 +        ColorField(
++            key = "chatBackground",
 +            title = "聊天背景色",
 +            value = displaySetting.chatBackgroundColor,
 +            preview = MaterialTheme.colorScheme.background,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(chatBackgroundColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(chatBackgroundColor = value) },
 +        ),
 +        ColorField(
++            key = "inputBackground",
 +            title = "输入框背景色",
 +            value = displaySetting.inputBackgroundColor,
 +            preview = MaterialTheme.colorScheme.surfaceContainerLow,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(inputBackgroundColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(inputBackgroundColor = value) },
 +        ),
 +        ColorField(
++            key = "primary",
 +            title = "主色调",
 +            value = displaySetting.primaryColor,
 +            preview = MaterialTheme.colorScheme.primary,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(primaryColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(primaryColor = value) },
 +        ),
 +        ColorField(
++            key = "chatText",
 +            title = "聊天正文文字色",
 +            value = displaySetting.chatTextColor,
 +            preview = MaterialTheme.colorScheme.onSurface,
-+            onUpdate = { updateDisplaySetting(displaySetting.copy(chatTextColor = it)) },
++            supporting = { it?.toHexArgb() ?: "跟随主题" },
++            apply = { setting, value -> setting.copy(chatTextColor = value) },
 +        ),
 +    )
 +
@@ -1997,13 +2536,10 @@ index 0000000..5a9b1b6
 +                    title = { Text("颜色") },
 +                ) {
 +                    item(
-+                        onClick = { colorTarget = seedField },
++                        onClick = { colorTargetKey = seedField.key },
 +                        headlineContent = { Text(seedField.title) },
 +                        supportingContent = {
-+                            Text(
-+                                seedField.value?.let { "基色 ${it.toHexArgb()}，整套配色按它生成" }
-+                                    ?: "设一个颜色，自动生成整套浅色/深色配色（留空则用当前主题）"
-+                            )
++                            Text(seedField.supporting(seedField.value))
 +                        },
 +                        trailingContent = {
 +                            Box(
@@ -2031,10 +2567,10 @@ index 0000000..5a9b1b6
 +                    )
 +                    colorFields.forEach { field ->
 +                        item(
-+                            onClick = { colorTarget = field },
++                            onClick = { colorTargetKey = field.key },
 +                            headlineContent = { Text(field.title) },
 +                            supportingContent = {
-+                                Text(field.value?.toHexArgb() ?: "跟随主题")
++                                Text(field.supporting(field.value))
 +                            },
 +                            trailingContent = {
 +                                Box(
@@ -2051,13 +2587,32 @@ index 0000000..5a9b1b6
 +        }
 +    }
 +
-+    colorTarget?.let { field ->
-+        ColorInputDialog(
-+            field = field,
-+            onDismiss = { colorTarget = null },
-+            onSubmit = { value ->
-+                field.onUpdate(value)
-+                colorTarget = null
++    val activeField = colorTargetKey?.let { key ->
++        (listOf(seedField) + colorFields).firstOrNull { it.key == key }
++    }
++    if (activeField != null) {
++        ColorPickerDialog(
++            title = activeField.title,
++            initialColor = activeField.value,
++            fallbackColor = activeField.preview,
++            recentColors = displaySetting.recentColors,
++            onRecentColorsChange = { colors ->
++                applyDisplaySetting { it.copy(recentColors = colors) }
++            },
++            onDismiss = { colorTargetKey = null },
++            // 确认：既写颜色，也把颜色收进记忆色（单次写入，避免两次 update 互相覆盖）
++            onConfirm = { color ->
++                applyDisplaySetting { setting ->
++                    activeField.apply(setting, color).copy(
++                        recentColors = pushRecentColor(setting.recentColors, color),
++                    )
++                }
++                colorTargetKey = null
++            },
++            canReset = true,
++            onReset = {
++                applyDisplaySetting { setting -> activeField.apply(setting, null) }
++                colorTargetKey = null
 +            },
 +        )
 +    }
@@ -2134,72 +2689,19 @@ index 0000000..5a9b1b6
 +}
 +
 +/**
-+ * 一项可自定义的颜色。[value] 为 null 表示还没设置，[preview] 是没设置时示意用的主题色。
++ * 一项可自定义的颜色。[value] 为 null 表示还没设置，[preview] 是没设置时取色盘 / 色块示意用的主题色。
++ *
++ * [apply] 是纯函数：拿当前 [DisplaySetting] 和新颜色算出新设置，这样确认时永远基于最新状态改，
++ * 不会因为弹窗开着期间设置变过而把别的字段（比如记忆色）覆盖回去。
 + */
-+private data class ColorField(
++private class ColorField(
++    val key: String,
 +    val title: String,
 +    val value: Long?,
 +    val preview: Color,
-+    val onUpdate: (Long?) -> Unit,
++    val supporting: (Long?) -> String,
++    val apply: (DisplaySetting, Long?) -> DisplaySetting,
 +)
-+
-+@Composable
-+private fun ColorInputDialog(
-+    field: ColorField,
-+    onDismiss: () -> Unit,
-+    onSubmit: (Long?) -> Unit,
-+) {
-+    var text by remember(field.title) { mutableStateOf(field.value?.toHexArgb().orEmpty()) }
-+    val parsed = parseArgbHex(text)
-+    val showError = text.isNotBlank() && parsed == null
-+
-+    AlertDialog(
-+        onDismissRequest = onDismiss,
-+        title = { Text(field.title) },
-+        text = {
-+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-+                OutlinedTextField(
-+                    value = text,
-+                    onValueChange = { text = it },
-+                    singleLine = true,
-+                    isError = showError,
-+                    label = { Text("颜色值") },
-+                    placeholder = { Text("#FF8E4955") },
-+                    supportingText = {
-+                        Text(
-+                            if (showError) {
-+                                "格式不对，用 #RRGGBB 或 #AARRGGBB"
-+                            } else {
-+                                "#RRGGBB 或 #AARRGGBB，留空保持默认"
-+                            }
-+                        )
-+                    },
-+                    modifier = Modifier.fillMaxWidth(),
-+                )
-+                Box(
-+                    modifier = Modifier
-+                        .size(48.dp)
-+                        .clip(MaterialTheme.shapes.medium)
-+                        .background(parsed?.let { Color(it) } ?: field.preview),
-+                )
-+            }
-+        },
-+        confirmButton = {
-+            TextButton(
-+                // 留空表示不改，格式不对时按钮也不给点，避免把原值改坏
-+                enabled = parsed != null || text.isBlank(),
-+                onClick = { onSubmit(if (text.isBlank()) field.value else parsed) },
-+            ) {
-+                Text("确定")
-+            }
-+        },
-+        dismissButton = {
-+            TextButton(onClick = { onSubmit(null) }) {
-+                Text("恢复默认")
-+            }
-+        },
-+    )
-+}
 +
 +/**
 + * 解析 `#RRGGBB` / `#AARRGGBB`：兼容不带 `#`、`0x` 前缀，3/4 位的简写会按 ARGB 每位重复一次展开。
@@ -2905,16 +3407,17 @@ index 0000000..a46bbb5
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
 new file mode 100644
-index 0000000..d7f89fc
+index 0000000..d383e87
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,127 @@
 +package me.rerere.rikkahub.ui.theme
 +
 +import androidx.compose.foundation.BorderStroke
 +import androidx.compose.foundation.background
 +import androidx.compose.foundation.layout.Box
 +import androidx.compose.foundation.layout.BoxScope
++import androidx.compose.foundation.shape.RoundedCornerShape
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.remember
 +import androidx.compose.ui.Modifier
@@ -2985,7 +3488,7 @@ index 0000000..d7f89fc
 +                        depth = OpticalSizeValue.Fixed(0.5f),
 +                    )
 +                )
-+                shape(shape)
++                shape(shape as? RoundedCornerShape ?: RoundedCornerShape(0.dp))
 +            },
 +        )
 +    }
@@ -3091,8 +3594,73 @@ index 3d9a2e3..79bb0b9 100644
              typography = Typography,
              content = content,
              motionScheme = MotionScheme.expressive()
+diff --git a/app/src/main/res/values-ja/strings.xml b/app/src/main/res/values-ja/strings.xml
+index 56d64b0..6d69be7 100644
+--- a/app/src/main/res/values-ja/strings.xml
++++ b/app/src/main/res/values-ja/strings.xml
+@@ -7,7 +7,7 @@
+   <string name="about_page_version">バージョン</string>
+   <string name="about_page_website">ウェブサイト</string>
+   <string name="add">追加</string>
+-  <string name="app_name">RikkaHub</string>
++  <string name="app_name">Love·汝</string>
+   <string name="asr_button_content_description">音声認識</string>
+   <string name="asr_button_stop">停止</string>
+   <string name="assistant_detail_basic_desc">名前、アバター、モデル、パラメータを設定</string>
+diff --git a/app/src/main/res/values-ko-rKR/strings.xml b/app/src/main/res/values-ko-rKR/strings.xml
+index 71e2288..be0931d 100644
+--- a/app/src/main/res/values-ko-rKR/strings.xml
++++ b/app/src/main/res/values-ko-rKR/strings.xml
+@@ -7,7 +7,7 @@
+   <string name="about_page_version">버전</string>
+   <string name="about_page_website">웹사이트</string>
+   <string name="add">추가</string>
+-  <string name="app_name">RikkaHub</string>
++  <string name="app_name">Love·汝</string>
+   <string name="asr_button_content_description">음성 인식</string>
+   <string name="asr_button_stop">중지</string>
+   <string name="assistant_detail_basic_desc">이름, 아바타, 모델 및 매개변수 구성</string>
+diff --git a/app/src/main/res/values-ru/strings.xml b/app/src/main/res/values-ru/strings.xml
+index 6bafe75..6c8136d 100644
+--- a/app/src/main/res/values-ru/strings.xml
++++ b/app/src/main/res/values-ru/strings.xml
+@@ -7,7 +7,7 @@
+   <string name="about_page_version">Версия</string>
+   <string name="about_page_website">Веб-сайт</string>
+   <string name="add">Добавить</string>
+-  <string name="app_name">RikkaHub</string>
++  <string name="app_name">Love·汝</string>
+   <string name="asr_button_content_description">Распознавание речи</string>
+   <string name="asr_button_stop">Стоп</string>
+   <string name="assistant_detail_basic_desc">Настройте имя, аватар, модель и параметры</string>
+diff --git a/app/src/main/res/values-zh-rTW/strings.xml b/app/src/main/res/values-zh-rTW/strings.xml
+index 7e1b426..28d9a25 100644
+--- a/app/src/main/res/values-zh-rTW/strings.xml
++++ b/app/src/main/res/values-zh-rTW/strings.xml
+@@ -7,7 +7,7 @@
+   <string name="about_page_version">版本</string>
+   <string name="about_page_website">官網</string>
+   <string name="add">添加</string>
+-  <string name="app_name">RikkaHub</string>
++  <string name="app_name">Love·汝</string>
+   <string name="asr_button_content_description">語音辨識</string>
+   <string name="asr_button_stop">停止</string>
+   <string name="assistant_detail_basic_desc">設定名稱、頭像、模型與參數</string>
+diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
+index 34dae2a..9c257e5 100644
+--- a/app/src/main/res/values-zh/strings.xml
++++ b/app/src/main/res/values-zh/strings.xml
+@@ -7,7 +7,7 @@
+   <string name="about_page_version">版本</string>
+   <string name="about_page_website">官网</string>
+   <string name="add">添加</string>
+-  <string name="app_name">RikkaHub</string>
++  <string name="app_name">Love·汝</string>
+   <string name="asr_button_content_description">语音识别</string>
+   <string name="asr_button_stop">停止</string>
+   <string name="assistant_detail_basic_desc">配置名称、头像、模型和参数</string>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 84730d9..c7bad55 100644
+index 84730d9..ced5b42 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -7,7 +7,7 @@
@@ -3100,7 +3668,7 @@ index 84730d9..c7bad55 100644
    <string name="about_page_website">Website</string>
    <string name="add">Add</string>
 -  <string name="app_name">RikkaHub</string>
-+  <string name="app_name">Rikka·贝</string>
++  <string name="app_name">Love·汝</string>
    <string name="asr_button_content_description">Speech Recognition</string>
    <string name="asr_button_stop">Stop</string>
    <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
