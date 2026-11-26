@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..19b5884 100644
+index 205e822..1b178c2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1473,7 +1473,7 @@ index 205e822..19b5884 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +614,81 @@ enum class BackgroundEffectType {
+@@ -604,17 +614,108 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -1535,6 +1535,33 @@ index 205e822..19b5884 100644
 +    DOTTED,
 +}
 +
++/**
++ * 对白外层符号：在引号内的对白**外面**再套一层装饰符号。
++ *
++ * 三种：`NONE`（不套，默认）/ `「」` / `『』`。
++ * 只影响渲染：符号是在 `QuoteHighlight.appendQuotedText` 拼 `AnnotatedString` 的时候插进去的字符，
++ * 消息原文一个字符都不改，复制 / 导出 / 导出 markdown 拿到的仍然是原始文本。
++ *
++ * 符号表（开 / 闭），代码侧见 `QuoteHighlight.kt` 的 `openSymbol()` / `closeSymbol()`：
++ * - `CORNER`        → `「` … `」`
++ * - `DOUBLE_CORNER` → `『` … `』`
++ *
++ * 和「行首竖线」是两个独立功能，可以同时打开（外层符号在引号外面，竖线贴着开引号，
++ * 引号区间本身不含外层符号，所以底色 / 下划线 / 竖线的几何都不会因为多插了字符而变宽）。
++ * 老数据只有默认值 `NONE`，`@SerialName` 让新增枚举值不影响反序列化。
++ */
++@Serializable
++enum class QuoteOuterDecor {
++    @SerialName("none")
++    NONE,
++
++    @SerialName("corner")
++    CORNER,
++
++    @SerialName("double_corner")
++    DOUBLE_CORNER,
++}
++
  @Serializable
  data class DisplaySetting(
      val userAvatar: Avatar = Avatar.Dummy,
@@ -1555,7 +1582,7 @@ index 205e822..19b5884 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +716,106 @@ data class DisplaySetting(
+@@ -642,8 +743,116 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1622,6 +1649,16 @@ index 205e822..19b5884 100644
 +    val quoteBarWidthDp: Int = 2,
 +    // 下划线左右两端比底色块再往里收多少（dp），越大越缩进
 +    val quoteUnderlineInsetDp: Int = 2,
++    // 对白样式·外层符号：在引号内的对白外面再套一层符号（「“你好。”」/『“你好。”』），
++    // 只是在渲染时插字符，消息原文不变（复制 / 导出仍然是原始文本）；默认 NONE = 与老版本逐像素一致
++    val quoteOuterDecor: QuoteOuterDecor = QuoteOuterDecor.NONE,
++    // 对白样式·外层符号与内容之间的空隙（0..3）：单位是薄空格 U+2009 的个数，0 = 紧贴
++    val quoteOuterDecorSpace: Int = 0,
++    // 对白样式·外层符号是否跟随引号高亮色：false 表示用正文颜色（不给符号上颜色 SpanStyle）
++    val quoteOuterDecorFollowHighlight: Boolean = true,
++    // 对白样式·外层符号的大小倍数（0.7f..1.5f，步进 0.05）：只放大 / 缩小符号本身，
++    // 实现是给符号套 SpanStyle(fontSize = 正文字号 * 这个倍数)，对白内容与 range 完全不受影响
++    val quoteOuterDecorScale: Float = 1f,
 +    // 消息正文行高（0.8f..2.0f，步进 0.05）：乘在正文行高上，1f = 与原来逐像素一致
 +    val chatLineHeightScale: Float = 1f,
 +    // 消息正文的段落 / 块间距**增量**（dp，-8..24）：0 = 沿用原来按字号算的间距（原样），
@@ -3247,12 +3284,13 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..5fac411
+index 0000000..c9d4319
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,845 @@
+@@ -0,0 +1,1018 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
++import androidx.compose.material3.LocalTextStyle
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.compositionLocalOf
@@ -3278,7 +3316,10 @@ index 0000000..5fac411
 +import androidx.compose.ui.text.style.TextDecoration
 +import androidx.compose.ui.text.withStyle
 +import androidx.compose.ui.unit.Density
++import androidx.compose.ui.unit.TextUnit
 +import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.isSpecified
++import me.rerere.rikkahub.data.datastore.QuoteOuterDecor
 +import me.rerere.rikkahub.ui.context.LocalSettings
 +
 +/**
@@ -3304,6 +3345,14 @@ index 0000000..5fac411
 + *    消息原文一个字符都不改，位置一一对应。
 + *
 + * - 不新增任何 markdown 语法，消息原文不改，复制/导出拿到的还是用户看到的原文；
++ * - **外层符号**（`「“你好。”」` / `『“你好。”』`）同样只是在拼 `AnnotatedString` 时**插入字符**：
++ *   开符号 + 薄空格 × 间距 + 原本的引号内容 + 薄空格 × 间距 + 闭符号。
++ *   关键点：**区间注解（[QUOTE_RANGE_ANNOTATION]）只覆盖原本的引号内容，不覆盖外层符号**——
++ *   自绘的底色 / 下划线 / 行首竖线全都按区间几何来算，所以符号插得再多，装饰的范围也不会跟着变宽、
++ *   不会错位（这也是为什么必须先 append 符号、再取 `length` 当内容起点：注解里的 offset 是
++ *   相对于**拼好的最终字符串**的，先插符号再记 offset 就永远对齐）；
++ *   外层符号和「行首竖线」是两个独立功能，可以同时开（竖线仍然贴着开引号 `“`）；
++ *   `quoteOuterDecor = NONE` 时一个字符都不插，渲染路径与老版本逐像素一致；
 + * - 代码天然不受影响：行内代码（CODE_SPAN / `<code>`）和代码块（CODE_FENCE / `<pre>`）在渲染器里
 + *   都有独立分支，文本压根不经过 [appendQuotedText]，不需要正则去跳过 ``` 围栏；
 + * - 只对 AI 消息生效：聊天正文按 `message.role` 把 [LocalQuoteStyleEnabled] 提供下去，
@@ -3465,10 +3514,34 @@ index 0000000..5fac411
 +     * 老数据也不用迁移。
 +     */
 +    val dashScale: Float = 1f,
++    /**
++     * 外层符号的开符号 / 闭符号（`「` `」` / `『` `』` / `（` `）`），空串表示不套外层符号。
++     *
++     * 由 [quoteStyleOrNull] 按 [me.rerere.rikkahub.data.datastore.QuoteOuterDecor] 映射成实际字符，
++     * 这里刻意存**字符**而不是枚举：绘制 / 拼字符串的地方不需要知道有哪几种样式，
++     * 设置页加一种新符号也不用改这里。两个都为空串时 [hasOuterDecor] 为 false，一个字符都不插。
++     */
++    val outerOpen: String = "",
++    val outerClose: String = "",
++    /** 符号与内容之间的空隙（0..3）：单位是薄空格 U+2009 的重复次数，只在 [hasOuterDecor] 时生效 */
++    val outerSpace: Int = 0,
++    /** 符号是否跟随引号高亮色（true = 符号也用 [color]；false = 符号用正文色） */
++    val outerFollowHighlight: Boolean = true,
++    /**
++     * 符号的字号（由「符号大小」倍率 × 正文字号在 [quoteStyleOrNull] 里算好），
++     * `TextUnit.Unspecified` = 不设字号（倍率 1.0x 时就是它，保证默认状态逐像素不变）。
++     *
++     * 只影响符号自己那一两个字符：内容照旧用外层文字样式，range / 底色 / 下划线全部按内容算，
++     * 所以符号调大也不会让装饰范围跟着变宽。
++     */
++    val outerFontSize: TextUnit = TextUnit.Unspecified,
 +    val selfDrawn: Boolean = false,
 +) {
 +    /** 有没有要画的下划线（实线 / 虚线 / 点线随便开一个都算，全开就是三条线） */
 +    val hasUnderline: Boolean get() = solidUnderline || dashedUnderline || dottedUnderline
++
++    /** 要不要套外层符号：开符号和闭符号至少有一个非空（`NONE` 时两个都是空串） */
++    val hasOuterDecor: Boolean get() = outerOpen.isNotEmpty() || outerClose.isNotEmpty()
 +
 +    /** 自绘路径上真有东西要画吗：三样装饰全无时连 drawBehind 都不挂 */
 +    val needsDecoration: Boolean
@@ -3500,12 +3573,57 @@ index 0000000..5fac411
 +}
 +
 +/**
++ * 外层符号与内容之间的空隙，单位是**薄空格 U+2009**（不是普通空格：普通空格在中文正文里太宽，
++ * 也不该被 Markdown 的行尾裁剪 / 换行逻辑盯上）。
++ */
++private const val THIN_SPACE = '\u2009'
++
++/** 「符号与内容间距」滑块上限（0..3，和设置页滑块一致），同时是下面查表数组的长度 */
++private const val MAX_OUTER_SPACE = 3
++
++/**
++ * 薄空格的重复串查表：0 → ""、1 → " "、2 / 3 依次加长。
++ *
++ * 用查表而不是 `String.repeat(n)`：`repeat` 每次都要新建 StringBuilder + String，
++ * 而这段代码在每条消息重建 `AnnotatedString` 时都会跑一次（滑块值只有 0..3 四种，表里够用）。
++ */
++private val THIN_SPACE_RUNS: Array<String> =
++    Array(MAX_OUTER_SPACE + 1) { index -> THIN_SPACE.toString().repeat(index) }
++
++/** 往正文里插一个外层符号：符号本身不带底色 / 下划线，只有「跟随高亮色」时才上一条纯颜色 SpanStyle */
++private fun AnnotatedString.Builder.appendOuterSymbol(symbol: String, style: SpanStyle?) {
++    if (symbol.isEmpty()) return
++    if (style == null) {
++        // 用正文色：什么都不加，由外层已有的文字样式决定颜色
++        append(symbol)
++    } else {
++        withStyle(style) { append(symbol) }
++    }
++}
++
++/** 往正文里插 [count] 个薄空格（0 个时什么都不做，保证 `NONE` / 间距 0 时逐像素不变） */
++private fun AnnotatedString.Builder.appendOuterSpaces(count: Int) {
++    if (count <= 0) return
++    append(THIN_SPACE_RUNS[count.coerceIn(0, MAX_OUTER_SPACE)])
++}
++
++/**
 + * 往 AnnotatedString 里追加一段纯文本，[quoteStyle] 非 null 时给引号内的文字上样式。
 + *
 + * 自绘路径下会同时给每段引号区间打一个 [QUOTE_RANGE_ANNOTATION] 字符串注解，
 + * 事后用 [collectQuoteRanges] 取回来交给 [quoteDecoration]，避免给递归的 append 函数加出参。
 + *
 + * [quoteStyle] 为 null 时退化成 `append(text)`，逐像素与改动前的渲染一致。
++ *
++ * 「外层符号」的插入顺序（`quoteStyle.hasOuterDecor` 为真时才做，否则一个字符都不插）：
++ *
++ * ```
++ * 非引号段 …  [开符号] [薄空格 × 间距] [“ 内容 ”（原样，带 SpanStyle）] [薄空格 × 间距] [闭符号] … 非引号段
++ * ```
++ *
++ * **区间只记「内容」的起止**：`start` 是在符号 / 薄空格都 append 完之后才取的 `length`，
++ * 所以注解的 offset 直接就是最终字符串里的真实下标——底色 / 下划线 / 行首竖线全都按这个区间算，
++ * 外层符号永远不会被圈进装饰范围里（符号插得再多，装饰也不会变宽或错位）。
 + */
 +internal fun AnnotatedString.Builder.appendQuotedText(text: String, quoteStyle: QuoteStyle?) {
 +    if (quoteStyle == null) {
@@ -3514,8 +3632,35 @@ index 0000000..5fac411
 +    }
 +    val spanStyle = quoteStyle.toSpanStyle()
 +    val tagRanges = quoteStyle.selfDrawn
++    // 外层符号：NONE 时 hasOuterDecor == false，下面的分支一个字符都不会插
++    val appendOuter = quoteStyle.hasOuterDecor
++    val outerSpace = if (appendOuter) quoteStyle.outerSpace.coerceIn(0, MAX_OUTER_SPACE) else 0
++    // 符号自己的 SpanStyle：**不能复用 spanStyle**（旧路径的 spanStyle 带底色 + 下划线，
++    // 套在符号上会让符号也被涂上底色），这里只拼「颜色 + 字号」两样：
++    // - 颜色：跟随高亮色时给 color，否则 Unspecified（= 沿用正文颜色）；
++    // - 字号：「符号大小」倍率算出来的 [QuoteStyle.outerFontSize]，1.0x 时是 Unspecified（不设）。
++    val outerSymbolStyle = if (
++        appendOuter && (quoteStyle.outerFollowHighlight || quoteStyle.outerFontSize.isSpecified)
++    ) {
++        SpanStyle(
++            color = if (quoteStyle.outerFollowHighlight) quoteStyle.color else Color.Unspecified,
++            fontSize = quoteStyle.outerFontSize,
++        )
++    } else {
++        null
++    }
++    // 一段连续 quoted 段 = 一个完整的引号区间（开引号 / 正文 / 闭引号都在里面），外层符号一左一右各一处
++    var inQuotedRun = false
 +    splitQuotedSegments(text).forEach { segment ->
 +        if (segment.quoted) {
++            if (!inQuotedRun) {
++                inQuotedRun = true
++                if (appendOuter) {
++                    // ① 先插开符号和它后面的空隙，再取 start，注解才会落在最终字符串的正确位置
++                    appendOuterSymbol(quoteStyle.outerOpen, outerSymbolStyle)
++                    appendOuterSpaces(outerSpace)
++                }
++            }
 +            val start = length
 +            withStyle(spanStyle) {
 +                append(segment.text)
@@ -3529,8 +3674,22 @@ index 0000000..5fac411
 +                )
 +            }
 +        } else {
++            if (inQuotedRun) {
++                inQuotedRun = false
++                if (appendOuter) {
++                    // ② 空隙 + 闭符号都插在区间**之后**，所以它们不参与任何自绘几何
++                    appendOuterSpaces(outerSpace)
++                    appendOuterSymbol(quoteStyle.outerClose, outerSymbolStyle)
++                }
++            }
 +            append(segment.text)
 +        }
++    }
++    // 兜底：splitQuotedSegments 保证同一段文本里的引号成对，正常走不到这里；
++    // 真出现「一段文字以引号内的内容结尾」这种极端情况，也把闭符号补齐，不留一个孤零零的开符号
++    if (inQuotedRun && appendOuter) {
++        appendOuterSpaces(outerSpace)
++        appendOuterSymbol(quoteStyle.outerClose, outerSymbolStyle)
 +    }
 +}
 +
@@ -3584,6 +3743,47 @@ index 0000000..5fac411
 +    return if (outSize == ranges.size) merged else merged.copyOf(outSize)
 +}
 +
++/** 「符号大小」倍率的下限 / 上限（0.7x..1.5x），和设置页滑块、DisplaySetting 的默认值配套 */
++private const val MIN_OUTER_SCALE = 0.7f
++private const val MAX_OUTER_SCALE = 1.5f
++
++/**
++ * 把「符号大小」倍率折算成符号实际用的字号（纯函数，组合期算一次）。
++ *
++ * - [baseFontSize] 是调用处 `LocalTextStyle.current.fontSize`（正文当前字号，通常是 sp）；
++ * - 倍率夹到 0.7x..1.5x，且**等于 1f 时直接返回 [TextUnit.Unspecified]**：
++ *   不设字号 = 符号与正文同字号，默认状态下与没有这个功能时逐像素一致；
++ * - 正文字号本身是 Unspecified 时也返回 Unspecified，避免拿 NaN 去乘；
++ * - 用 `TextUnit * Float` 而不是 `.value * scale` 再 `.sp`：单位（sp / em）原样保留。
++ *
++ * 注意它只影响符号那一两个字符的绘制尺寸，`AnnotatedString` 里的 range 与自绘几何一点没动。
++ */
++private fun resolveOuterFontSize(scale: Float, baseFontSize: TextUnit): TextUnit {
++    val safeScale = scale.coerceIn(MIN_OUTER_SCALE, MAX_OUTER_SCALE)
++    if (!baseFontSize.isSpecified) return TextUnit.Unspecified
++    if (safeScale == 1f) return TextUnit.Unspecified
++    return baseFontSize * safeScale
++}
++
++/**
++ * 外层符号的**符号表**：`NONE` → 空串（不套），`CORNER` → 「」，`DOUBLE_CORNER` → 『』。
++ *
++ * 单独抽成两个纯函数（而不是给枚举挂字段）：`QuoteStyle` 里只存字符，拼字符串的地方不需要认识枚举，
++ * 以后加样式也只改这两处 + [QuoteOuterDecor] 的一个枚举项。
++ * 全部用 `\u` 转义写，避免源文件编码 / 字体差异把全角符号读错。
++ */
++private fun QuoteOuterDecor.openSymbol(): String = when (this) {
++    QuoteOuterDecor.NONE -> ""
++    QuoteOuterDecor.CORNER -> "\u300C"        // 「
++    QuoteOuterDecor.DOUBLE_CORNER -> "\u300E" // 『
++}
++
++private fun QuoteOuterDecor.closeSymbol(): String = when (this) {
++    QuoteOuterDecor.NONE -> ""
++    QuoteOuterDecor.CORNER -> "\u300D"        // 」
++    QuoteOuterDecor.DOUBLE_CORNER -> "\u300F" // 』
++}
++
 +/**
 + * 当前这条消息该用的对白样式：开关关掉就是 null（渲染路径完全不变）；
 + * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
@@ -3605,6 +3805,8 @@ index 0000000..5fac411
 +    val displaySetting = LocalSettings.current.displaySetting
 +    if (!displaySetting.enableQuoteHighlight) return null
 +    val colorScheme = MaterialTheme.colorScheme
++    // 正文字号：「符号大小」倍率的基准（倍率 1.0x 时不使用，见 resolveOuterFontSize()）
++    val baseFontSize = LocalTextStyle.current.fontSize
 +    // tertiary 是 Material3 的必有槽位，真拿不到（Unspecified）时退回 primary 兜底
 +    val themeQuoteColor =
 +        if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
@@ -3647,6 +3849,14 @@ index 0000000..5fac411
 +        underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, MAX_UNDERLINE_OFFSET),
 +        underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12),
 +        dashScale = displaySetting.quoteDashScale.coerceIn(MIN_DASH_DENSITY, MAX_DASH_DENSITY),
++        // 外层符号：枚举 → 实际字符。NONE 时开闭都是空串，appendQuotedText 一个字符都不插
++        outerOpen = displaySetting.quoteOuterDecor.openSymbol(),
++        outerClose = displaySetting.quoteOuterDecor.closeSymbol(),
++        outerSpace = displaySetting.quoteOuterDecorSpace.coerceIn(0, MAX_OUTER_SPACE),
++        outerFollowHighlight = displaySetting.quoteOuterDecorFollowHighlight,
++        // 「符号大小」倍率 × 正文字号 = 符号自己的字号；倍率 1.0x（或拿不到正文字号）时给
++        // Unspecified，等价于「不给符号设字号」，默认状态下与老版本逐像素一致。
++        outerFontSize = resolveOuterFontSize(displaySetting.quoteOuterDecorScale, baseFontSize),
 +        selfDrawn = selfDrawn,
 +    )
 +}
@@ -6630,10 +6840,10 @@ index c296a24..f747ad6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..e816eb9
+index 0000000..03d6b95
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,771 @@
+@@ -0,0 +1,960 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -6651,6 +6861,9 @@ index 0000000..e816eb9
 +import androidx.compose.material3.LargeFlexibleTopAppBar
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Scaffold
++import androidx.compose.material3.SegmentedButton
++import androidx.compose.material3.SegmentedButtonDefaults
++import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 +import androidx.compose.material3.Slider
 +import androidx.compose.material3.Switch
 +import androidx.compose.material3.Text
@@ -6670,6 +6883,7 @@ index 0000000..e816eb9
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import kotlin.math.roundToInt
 +import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.QuoteOuterDecor
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
 +import me.rerere.rikkahub.ui.components.ui.CardGroupScope
@@ -6703,6 +6917,12 @@ index 0000000..e816eb9
 +/** 行首竖线粗细默认值（dp），和 DisplaySetting.quoteBarWidthDp 一致 */
 +private const val DEFAULT_QUOTE_BAR_WIDTH_DP = 2
 +
++/** 外层符号与内容之间的间距默认值（薄空格个数），和 DisplaySetting.quoteOuterDecorSpace 一致 */
++private const val DEFAULT_QUOTE_OUTER_DECOR_SPACE = 0
++
++/** 外层符号大小默认值（倍率），和 DisplaySetting.quoteOuterDecorScale 一致（1.0x = 与正文同字号） */
++private const val DEFAULT_QUOTE_OUTER_DECOR_SCALE = 1f
++
 +/**
 + * 对白样式页：AI 回复里被 “引号” 包住的文字怎么画。
 + *
@@ -6716,6 +6936,10 @@ index 0000000..e816eb9
 + *              背景透明度          30%
 + *              底色圆角            4dp
 + *              行间空隙            2dp
++ * ［外层符号］ 外层符号            无 / 「」 / 『』  ← 三选一（分段按钮）
++ *              符号与内容间距      0 空格   ← 滑块 0–3（薄空格 U+2009 的个数）
++ *              符号大小            1.00x    ← 滑块 0.7–1.5，只放大 / 缩小符号本身
++ *              符号跟随高亮色      [开关]   ← 默认开
 + * ［下划线］   实线                [开关]
 + *              颜色                红 ●     ← 只在「实线」打开时出现
 + *              虚线                [开关]
@@ -6736,7 +6960,11 @@ index 0000000..e816eb9
 + * - 「底色」组里**没有**「下划线颜色」这一行（老版本里跑错组的那一项已经搬走）；
 + * - 下划线不再是「无 / 实线 / 虚线 / 点线」四选一，而是「实线」「虚线」「点线」三个独立开关，
 + *   各带自己的颜色；全打开就是三条线，依次往下错开 2dp（见 `QuoteHighlight.kt`）；
-+ * - 颜色行只在对应开关打开时才显示，节省竖向空间。
++ * - 颜色行只在对应开关打开时才显示，节省竖向空间；
++ * - 「外层符号」只是在渲染时往 `AnnotatedString` 里插字符（`「“你好。”」` / `『“你好。”』`），
++ *   消息原文一个字符都不改，复制 / 导出不受影响；符号**不进**引号区间，所以底色 / 下划线 /
++ *   行首竖线的几何完全不受影响，而且它和「行首竖线」是两个独立功能，可以同时打开；
++ *   三样都不选（`NONE` + 间距 0 + 大小 1.0x）时渲染与没有这个功能时逐像素一致。
 + *
 + * 所有字段都带默认值（开关全关、无底色、无下划线、竖线颜色跟随文字色），
 + * 默认状态下渲染结果与没有这个功能时逐像素一致。
@@ -6766,6 +6994,9 @@ index 0000000..e816eb9
 +    val barOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(-4, 8)
 +    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(1, 5)
 +    val underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12)
++    // 外层符号两条滑块：符号与内容之间的薄空格个数（0–3）、符号大小倍率（0.7–1.5）
++    val outerDecorSpace = displaySetting.quoteOuterDecorSpace.coerceIn(0, 3)
++    val outerDecorScale = displaySetting.quoteOuterDecorScale.coerceIn(0.7f, 1.5f)
 +
 +    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
 +    val textColorField = ColorField(
@@ -7013,7 +7244,147 @@ index 0000000..e816eb9
 +                    )
 +                }
 +            }
-+            // ④ 下划线：实线 / 虚线 / 点线各自一个开关 + 各自一个颜色（颜色行只在对应开关打开时出现）
++            // ④ 外层符号：在引号内的对白外面再套一层符号（渲染时插字符，原文 / 复制 / 导出都不变）
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("外层符号") },
++                ) {
++                    item(
++                        headlineContent = { Text("外层符号") },
++                        supportingContent = {
++                            Column {
++                                Text(
++                                    "在引号内的对白外面再套一层符号（例：${outerDecorSample(displaySetting.quoteOuterDecor, outerDecorSpace)}）；" +
++                                        "只影响显示，复制 / 导出还是原文"
++                                )
++                                SingleChoiceSegmentedButtonRow(
++                                    modifier = Modifier
++                                        .fillMaxWidth()
++                                        .padding(top = 8.dp)
++                                ) {
++                                    val decorOptions = QuoteOuterDecor.entries
++                                    decorOptions.forEachIndexed { index, decor ->
++                                        SegmentedButton(
++                                            selected = displaySetting.quoteOuterDecor == decor,
++                                            onClick = {
++                                                applyDisplaySetting { it.copy(quoteOuterDecor = decor) }
++                                            },
++                                            shape = SegmentedButtonDefaults.itemShape(
++                                                index = index,
++                                                count = decorOptions.size,
++                                            ),
++                                        ) {
++                                            Text(outerDecorLabel(decor))
++                                        }
++                                    }
++                                }
++                            }
++                        },
++                    )
++                    // 符号与内容之间的空隙：单位是薄空格 U+2009，0 = 紧贴
++                    item(
++                        headlineContent = { Text("符号与内容间距") },
++                        supportingContent = {
++                            Column {
++                                Text("符号和对白之间空多少（用薄空格，0 就是紧贴）")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = outerDecorSpace.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteOuterDecorSpace = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 0f..3f,
++                                        steps = 2,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${outerDecorSpace} 空格")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(
++                                                quoteOuterDecorSpace = DEFAULT_QUOTE_OUTER_DECOR_SPACE
++                                            )
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    // 符号大小：只给符号套 SpanStyle(fontSize = 正文字号 × 倍率)，
++                    // 对白内容 / 引号区间 / 底色 / 下划线一律不受影响
++                    item(
++                        headlineContent = { Text("符号大小") },
++                        supportingContent = {
++                            Column {
++                                Text("只放大 / 缩小符号本身（0.70–1.50x），对白内容与底色下划线不受影响")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = outerDecorScale,
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                // 滑块步进 0.05，取两位小数避免浮点误差累积
++                                                it.copy(
++                                                    quoteOuterDecorScale =
++                                                        (value * 20f).roundToInt() / 20f
++                                                )
++                                            }
++                                        },
++                                        valueRange = 0.7f..1.5f,
++                                        steps = 15,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "%.2fx".format(outerDecorScale))
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(
++                                                quoteOuterDecorScale = DEFAULT_QUOTE_OUTER_DECOR_SCALE
++                                            )
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    // 符号颜色：跟随引号高亮色 or 正文色
++                    item(
++                        headlineContent = { Text("符号跟随高亮色") },
++                        supportingContent = {
++                            Text("打开：符号用上面的引号高亮色；关掉：符号用正文颜色")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteOuterDecorFollowHighlight,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteOuterDecorFollowHighlight = checked)
++                                    }
++                                },
++                            )
++                        },
++                    )
++                }
++            }
++            // ⑤ 下划线：实线 / 虚线 / 点线各自一个开关 + 各自一个颜色（颜色行只在对应开关打开时出现）
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
@@ -7168,7 +7539,7 @@ index 0000000..e816eb9
 +                    )
 +                }
 +            }
-+            // ⑤ 行首竖线：开关 + 自己的颜色（null = 跟随文字颜色）
++            // ⑥ 行首竖线：开关 + 自己的颜色（null = 跟随文字颜色）
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
@@ -7378,6 +7749,34 @@ index 0000000..e816eb9
 +            },
 +        )
 +    }
++}
++
++/** 外层符号选项的中文名：无 / 「」 / 『』 */
++private fun outerDecorLabel(decor: QuoteOuterDecor): String = when (decor) {
++    QuoteOuterDecor.NONE -> "无"
++    QuoteOuterDecor.CORNER -> "「」"
++    QuoteOuterDecor.DOUBLE_CORNER -> "『』"
++}
++
++/**
++ * 「外层符号」当前设置的效果示例，直接显示在这一项的说明里，选完立刻能看到长什么样。
++ *
++ * 间距用**薄空格 U+2009**，和 `QuoteHighlight.appendQuotedText` 渲染时插的是同一个字符；
++ * 大小倍率不在这里放大（示例跟着系统字号走，避免说明文字被撑得忽大忽小）。
++ */
++private fun outerDecorSample(decor: QuoteOuterDecor, space: Int): String {
++    val open = when (decor) {
++        QuoteOuterDecor.NONE -> ""
++        QuoteOuterDecor.CORNER -> "\u300C"
++        QuoteOuterDecor.DOUBLE_CORNER -> "\u300E"
++    }
++    val close = when (decor) {
++        QuoteOuterDecor.NONE -> ""
++        QuoteOuterDecor.CORNER -> "\u300D"
++        QuoteOuterDecor.DOUBLE_CORNER -> "\u300F"
++    }
++    val gap = "\u2009".repeat(space.coerceIn(0, 3))
++    return "$open${gap}\u201C你好。\u201D$gap$close"
 +}
 +
 +/**
