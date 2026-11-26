@@ -3284,10 +3284,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..c9d4319
+index 0000000..5be08f8
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1018 @@
+@@ -0,0 +1,1036 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -3317,6 +3317,7 @@ index 0000000..c9d4319
 +import androidx.compose.ui.text.withStyle
 +import androidx.compose.ui.unit.Density
 +import androidx.compose.ui.unit.TextUnit
++import androidx.compose.ui.unit.em
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.unit.isSpecified
 +import me.rerere.rikkahub.data.datastore.QuoteOuterDecor
@@ -3581,6 +3582,9 @@ index 0000000..c9d4319
 +/** 「符号与内容间距」滑块上限（0..3，和设置页滑块一致），同时是下面查表数组的长度 */
 +private const val MAX_OUTER_SPACE = 3
 +
++/** 「符号与内容间距」允许的负值（负 = 把符号往内容方向压，抵消括号自身的左右留白） */
++private const val MIN_OUTER_SPACE = -3
++
 +/**
 + * 薄空格的重复串查表：0 → ""、1 → " "、2 / 3 依次加长。
 + *
@@ -3634,7 +3638,11 @@ index 0000000..c9d4319
 +    val tagRanges = quoteStyle.selfDrawn
 +    // 外层符号：NONE 时 hasOuterDecor == false，下面的分支一个字符都不会插
 +    val appendOuter = quoteStyle.hasOuterDecor
-+    val outerSpace = if (appendOuter) quoteStyle.outerSpace.coerceIn(0, MAX_OUTER_SPACE) else 0
++    val outerSpaceRaw = if (appendOuter) quoteStyle.outerSpace.coerceIn(MIN_OUTER_SPACE, MAX_OUTER_SPACE) else 0
++    // 正数 = 插薄空格；负数 = 给符号加负字距，把两边往里收
++    val outerSpace = outerSpaceRaw.coerceAtLeast(0)
++    val outerPull = (-outerSpaceRaw).coerceAtLeast(0)
++    val pullLetterSpacing = if (outerPull > 0) (-0.10f * outerPull).em else TextUnit.Unspecified
 +    // 符号自己的 SpanStyle：**不能复用 spanStyle**（旧路径的 spanStyle 带底色 + 下划线，
 +    // 套在符号上会让符号也被涂上底色），这里只拼「颜色 + 字号」两样：
 +    // - 颜色：跟随高亮色时给 color，否则 Unspecified（= 沿用正文颜色）；
@@ -3645,6 +3653,7 @@ index 0000000..c9d4319
 +        SpanStyle(
 +            color = if (quoteStyle.outerFollowHighlight) quoteStyle.color else Color.Unspecified,
 +            fontSize = quoteStyle.outerFontSize,
++            letterSpacing = pullLetterSpacing,
 +        )
 +    } else {
 +        null
@@ -3663,7 +3672,16 @@ index 0000000..c9d4319
 +            }
 +            val start = length
 +            withStyle(spanStyle) {
-+                append(segment.text)
++                if (outerPull > 0 && segment.text.length >= 1) {
++                    // 负间距：把最后一个字单独套一层负字距，闭符号就会靠得更近；
++                    // 开符号那边靠它自己的 letterSpacing 收，两边各收一点
++                    append(segment.text.substring(0, segment.text.length - 1))
++                    withStyle(SpanStyle(letterSpacing = pullLetterSpacing)) {
++                        append(segment.text.substring(segment.text.length - 1))
++                    }
++                } else {
++                    append(segment.text)
++                }
 +            }
 +            if (tagRanges && length > start) {
 +                addStringAnnotation(
@@ -3852,7 +3870,7 @@ index 0000000..c9d4319
 +        // 外层符号：枚举 → 实际字符。NONE 时开闭都是空串，appendQuotedText 一个字符都不插
 +        outerOpen = displaySetting.quoteOuterDecor.openSymbol(),
 +        outerClose = displaySetting.quoteOuterDecor.closeSymbol(),
-+        outerSpace = displaySetting.quoteOuterDecorSpace.coerceIn(0, MAX_OUTER_SPACE),
++        outerSpace = displaySetting.quoteOuterDecorSpace.coerceIn(MIN_OUTER_SPACE, MAX_OUTER_SPACE),
 +        outerFollowHighlight = displaySetting.quoteOuterDecorFollowHighlight,
 +        // 「符号大小」倍率 × 正文字号 = 符号自己的字号；倍率 1.0x（或拿不到正文字号）时给
 +        // Unspecified，等价于「不给符号设字号」，默认状态下与老版本逐像素一致。
@@ -6840,7 +6858,7 @@ index c296a24..f747ad6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..03d6b95
+index 0000000..a0bf1d4
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 @@ -0,0 +1,960 @@
@@ -6937,7 +6955,7 @@ index 0000000..03d6b95
 + *              底色圆角            4dp
 + *              行间空隙            2dp
 + * ［外层符号］ 外层符号            无 / 「」 / 『』  ← 三选一（分段按钮）
-+ *              符号与内容间距      0 空格   ← 滑块 0–3（薄空格 U+2009 的个数）
++ *              符号与内容间距      0         ← 滑块 -3~3：正数插薄空格、负数压紧
 + *              符号大小            1.00x    ← 滑块 0.7–1.5，只放大 / 缩小符号本身
 + *              符号跟随高亮色      [开关]   ← 默认开
 + * ［下划线］   实线                [开关]
@@ -6995,7 +7013,7 @@ index 0000000..03d6b95
 +    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(1, 5)
 +    val underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12)
 +    // 外层符号两条滑块：符号与内容之间的薄空格个数（0–3）、符号大小倍率（0.7–1.5）
-+    val outerDecorSpace = displaySetting.quoteOuterDecorSpace.coerceIn(0, 3)
++    val outerDecorSpace = displaySetting.quoteOuterDecorSpace.coerceIn(-3, 3)
 +    val outerDecorScale = displaySetting.quoteOuterDecorScale.coerceIn(0.7f, 1.5f)
 +
 +    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
@@ -7287,7 +7305,7 @@ index 0000000..03d6b95
 +                        headlineContent = { Text("符号与内容间距") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("符号和对白之间空多少（用薄空格，0 就是紧贴）")
++                                Text("符号与对白之间的距离：正数更松（插薄空格），负数更紧（把符号往里压），0 就是紧贴")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -7300,11 +7318,11 @@ index 0000000..03d6b95
 +                                                it.copy(quoteOuterDecorSpace = value.roundToInt())
 +                                            }
 +                                        },
-+                                        valueRange = 0f..3f,
-+                                        steps = 2,
++                                        valueRange = -3f..3f,
++                                        steps = 5,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
-+                                    Text(text = "${outerDecorSpace} 空格")
++                                    Text(text = if (outerDecorSpace > 0) "+${outerDecorSpace} 空格" else if (outerDecorSpace < 0) "${outerDecorSpace} 紧凑" else "0")
 +                                }
 +                                TextButton(
 +                                    onClick = {
