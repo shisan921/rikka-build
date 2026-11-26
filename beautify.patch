@@ -3227,10 +3227,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..ae04c6f
+index 0000000..5fe9c21
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,848 @@
+@@ -0,0 +1,839 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -3956,20 +3956,17 @@ index 0000000..ae04c6f
 +                // 同一行里引号和正文已经合并（见 mergeTouchingRanges），所以这一行只画一块
 +                val rowTop = lineTop + halfGapPx
 +                val rowBottom = lineBottom - halfGapPx
-+                if (rowBottom > rowTop && bgRight > bgLeft) {
++                // 这一行底色 / 下划线共用的左右界：和底色块完全一致，下划线永远不会比底色宽
++                val spanLeft = bgLeft + horizontalInset
++                val spanRight = bgRight - horizontalInset
++                if (rowBottom > rowTop && spanRight > spanLeft && backgroundColor != null) {
 +                    // ① 底色：这一行一块圆角矩形（引号和正文共用同一块，见 mergeTouchingRanges）
-+                    if (backgroundColor != null) {
-+                        val backgroundLeft = bgLeft + horizontalInset
-+                        val backgroundRight = bgRight - horizontalInset
-+                        if (backgroundRight > backgroundLeft) {
-+                            drawRoundRect(
-+                                color = backgroundColor,
-+                                topLeft = Offset(backgroundLeft, rowTop),
-+                                size = Size(backgroundRight - backgroundLeft, rowBottom - rowTop),
-+                                cornerRadius = corner,
-+                            )
-+                        }
-+                    }
++                    drawRoundRect(
++                        color = backgroundColor,
++                        topLeft = Offset(spanLeft, rowTop),
++                        size = Size(spanRight - spanLeft, rowBottom - rowTop),
++                        cornerRadius = corner,
++                    )
 +                }
 +                // ② 下划线：端点**一律**用 getHorizontalPosition（光标位置）取，
 +                //    **不再**用 `getBoundingBox(...).right` —— 包围盒含字形右侧留白，会多出 1~2dp，
@@ -3979,17 +3976,11 @@ index 0000000..ae04c6f
 +                //    算出来长度 <= 0 的行这一行不画。
 +                //    y 起点 = baseline + 「下划线与文字的距离」滑块值，之后每条再往下错 2dp。
 +                if (solidPath != null || dashedPath != null || dottedPath != null) {
-+                    val underlineStartOffset = maxOf(rangeStart, lineStartOffset)
-+                    val underlineEndOffset = minOf(rangeEnd, visibleLineEnd)
-+                    if (underlineEndOffset > underlineStartOffset) {
-+                        val underlineStartX = layoutResult.getHorizontalPosition(
-+                            underlineStartOffset, usePrimaryDirection = false
-+                        )
-+                        val underlineEndX = layoutResult.getHorizontalPosition(
-+                            underlineEndOffset, usePrimaryDirection = false
-+                        ) - underlineEndShrinkPx
-+                        val underlineLeft = minOf(underlineStartX, underlineEndX)
-+                        val underlineRight = maxOf(underlineStartX, underlineEndX)
++                    // 下划线直接复用这一行底色的左右界：与底色块严格同宽，
++                    // 既不会长出引号，也不会像用行/字符端点那样在某些行算不出长度而漏画。
++                    val underlineLeft = spanLeft
++                    val underlineRight = spanRight
++                    run {
 +                        if (underlineRight - underlineLeft > 0f) {
 +                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
 +                            var slot = 0
@@ -7351,7 +7342,7 @@ index 0000000..541f170
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..9e9709f 100644
+index 2ee9d11..acb28af 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.Row
@@ -7712,7 +7703,7 @@ index 2ee9d11..9e9709f 100644
                                  )
 +                                // 自定义字号：0 = 跟随上面的档位；拖了滑块就按百分比直接覆盖正文倍率。
 +                                // 只影响消息正文，设置界面自身的排版照旧（见 ChatMessage 的 LocalChatFontSizeRatio）
-+                                Text("自定义字号（在档位之外细调，只影响消息正文）")
++                                Text("自定义字号（50%–140% 连续可调，1% 一格；只影响消息正文）")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -7730,7 +7721,7 @@ index 2ee9d11..9e9709f 100644
 +                                            )
 +                                        },
 +                                        valueRange = 50f..140f,
-+                                        steps = 18,
++                                        steps = 0,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
 +                                    Text(
