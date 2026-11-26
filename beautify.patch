@@ -3284,10 +3284,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..5be08f8
+index 0000000..ad94fda
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1036 @@
+@@ -0,0 +1,1037 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -3642,7 +3642,8 @@ index 0000000..5be08f8
 +    // 正数 = 插薄空格；负数 = 给符号加负字距，把两边往里收
 +    val outerSpace = outerSpaceRaw.coerceAtLeast(0)
 +    val outerPull = (-outerSpaceRaw).coerceAtLeast(0)
-+    val pullLetterSpacing = if (outerPull > 0) (-0.10f * outerPull).em else TextUnit.Unspecified
++    // 每档只收 0.035em：全角括号自带约 0.2em 的左右留白，收太多就会把引号压到括号下面
++    val pullLetterSpacing = if (outerPull > 0) (-0.035f * outerPull).em else TextUnit.Unspecified
 +    // 符号自己的 SpanStyle：**不能复用 spanStyle**（旧路径的 spanStyle 带底色 + 下划线，
 +    // 套在符号上会让符号也被涂上底色），这里只拼「颜色 + 字号」两样：
 +    // - 颜色：跟随高亮色时给 color，否则 Unspecified（= 沿用正文颜色）；
