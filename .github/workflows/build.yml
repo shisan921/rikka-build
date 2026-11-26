@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 取出我的补丁文件
         uses: actions/checkout@v4
@@ -83,9 +85,20 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon
 
-      - name: 上传 APK
+      - name: 上传 APK（临时，90 天）
         uses: actions/upload-artifact@v4
         with:
           name: rikka-253-release
           path: src/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
+      - name: 发布到 Release（永久下载链接）
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: eternity
+          name: Eternity（自编译）
+          body: |
+            自动编译的美化版 RikkaHub 2.5.3（Eternity）。
+            下载 `app-github-universal-release.apk` 安装即可；装之前先卸载官方 RikkaHub。
+          files: src/app/build/outputs/apk/**/*.apk
+          make_latest: true
