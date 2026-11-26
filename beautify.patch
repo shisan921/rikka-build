@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..ac6232f 100644
+index 205e822..74a97c8 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1555,7 +1555,7 @@ index 205e822..ac6232f 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +716,96 @@ data class DisplaySetting(
+@@ -642,8 +716,102 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1618,10 +1618,16 @@ index 205e822..ac6232f 100644
 +    val quoteBarHeightScale: Float = 0.7f,
 +    // 对白样式·行首竖线左右位置（dp，-4..8）：x = 开引号字符左边缘 - 这个值，默认 1（比早先固定的 2dp 更贴字）
 +    val quoteBarOffsetDp: Int = 1,
++    // 对白样式·行首竖线粗细（dp，1..5）：drawRoundRect 的 width，圆角仍然 1dp，默认 2dp（= 老版本行为）
++    val quoteBarWidthDp: Int = 2,
 +    // 消息正文行高（0.8f..2.0f，步进 0.05）：乘在正文行高上，1f = 与原来逐像素一致
 +    val chatLineHeightScale: Float = 1f,
-+    // 消息正文的段落 / 块间距（dp，0..24）：0 表示沿用原来按字号算的间距
++    // 消息正文的段落 / 块间距**增量**（dp，-8..24）：0 = 沿用原来按字号算的间距（原样），
++    // 正数在默认间距上更松、负数更紧；渲染处 = (fontSize.toDp() + 这个值).coerceAtLeast(0.dp)
 +    val chatParagraphSpacingDp: Int = 0,
++    // 消息正文的**自定义字号百分比**（0 = 关闭）：0 表示沿用上面 fontSizeRatio 的那几个档位，
++    // 10..200 表示直接覆盖正文的字号倍率（只影响消息正文，设置界面自身排版不受影响）
++    val chatFontSizePercent: Int = 0,
 +    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
 +    val recentColors: List<Long> = emptyList(),
 +    // 气泡圆角（dp），-1 表示沿用默认圆角
@@ -2085,7 +2091,7 @@ index 45c3d83..e4d8057 100644
              }
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..dcae6e9 100644
+index a18dd69..9f3d2a3 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -2130,7 +2136,7 @@ index a18dd69..dcae6e9 100644
  import kotlinx.coroutines.FlowPreview
  import kotlinx.coroutines.flow.debounce
  import kotlinx.serialization.json.jsonArray
-@@ -75,10 +82,14 @@ import me.rerere.hugeicons.stroke.MusicNote03
+@@ -75,10 +82,15 @@ import me.rerere.hugeicons.stroke.MusicNote03
  import me.rerere.hugeicons.stroke.Video01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
@@ -2141,11 +2147,12 @@ index a18dd69..dcae6e9 100644
  import me.rerere.rikkahub.data.model.replaceRegexes
 +import me.rerere.rikkahub.ui.components.richtext.LocalQuoteStyleEnabled
 +import me.rerere.rikkahub.ui.components.richtext.ChatParagraphStyle
++import me.rerere.rikkahub.ui.components.richtext.LocalChatFontSizeRatio
 +import me.rerere.rikkahub.ui.components.richtext.LocalChatParagraphStyle
  import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
  import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
  import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
-@@ -89,6 +100,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
+@@ -89,6 +101,11 @@ import me.rerere.rikkahub.ui.context.LocalNavController
  import me.rerere.rikkahub.ui.modifier.shimmer
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
@@ -2157,16 +2164,30 @@ index a18dd69..dcae6e9 100644
  import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
  import me.rerere.rikkahub.ui.theme.extendColors
  import me.rerere.rikkahub.utils.JsonInstant
-@@ -121,6 +137,8 @@ fun ChatMessage(
+@@ -121,9 +138,20 @@ fun ChatMessage(
      val message = node.messages[node.selectIndex]
      val settings = LocalSettings.current.displaySetting
      val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
 +    // 聊天正文文字色：没自定义就保持原有内容色
 +    val chatTextColor = settings.chatTextColor?.let { Color(it) }
++    // 「聊天字体大小」的字号倍率：档位（fontSizeRatio）优先，用户在设置页拖了「自定义字号」滑块
++    // （chatFontSizePercent > 0）时直接覆盖倍率；0 表示仍然走档位，所以默认值下与改动前一致。
++    // 这个倍率只作用在消息正文这一棵子树（下面的 textStyle + LocalChatFontSizeRatio），
++    // 设置页自己的预览 / 导出页仍然读 displaySetting.fontSizeRatio，排版不受影响。
++    val chatFontSizeRatio = if (settings.chatFontSizePercent > 0) {
++        settings.chatFontSizePercent.coerceIn(10, 200) / 100f
++    } else {
++        settings.fontSizeRatio
++    }
      val textStyle = LocalTextStyle.current.copy(
-         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
-         lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
-@@ -137,45 +155,67 @@ fun ChatMessage(
+-        fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
+-        lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
++        fontSize = LocalTextStyle.current.fontSize * chatFontSizeRatio,
++        lineHeight = LocalTextStyle.current.lineHeight * chatFontSizeRatio,
+         fontFamily = chatFontFamily
+     )
+     var showActionsSheet by remember { mutableStateOf(false) }
+@@ -137,45 +165,70 @@ fun ChatMessage(
          verticalArrangement = Arrangement.spacedBy(4.dp)
      ) {
          if (!message.parts.isEmptyUIMessage()) {
@@ -2241,6 +2262,9 @@ index a18dd69..dcae6e9 100644
 -                    onClickCitation = {}
 +            CompositionLocalProvider(
 +                LocalContentColor provides (chatTextColor ?: LocalContentColor.current),
++                // 正文里标题（Markdown 的 ATX_1..6 / HTML 的 <h1>..<h6>）是拿 fontSizeRatio 自己算字号的，
++                // 把最终倍率 provide 下去，自定义字号才能连标题一起缩放；设置页预览不提供 → null → 走档位
++                LocalChatFontSizeRatio provides chatFontSizeRatio,
 +            ) {
 +                MessagePartsBlock(
 +                    assistant = assistant,
@@ -2268,7 +2292,7 @@ index a18dd69..dcae6e9 100644
              }
          }
  
-@@ -261,6 +301,100 @@ fun ChatMessage(
+@@ -261,6 +314,100 @@ fun ChatMessage(
      }
  }
  
@@ -2369,7 +2393,7 @@ index a18dd69..dcae6e9 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -280,7 +414,33 @@ private fun MessagePartsBlock(
+@@ -280,7 +427,34 @@ private fun MessagePartsBlock(
      // 消息输出HapticFeedback
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
@@ -2382,7 +2406,8 @@ index a18dd69..dcae6e9 100644
 +    ) {
 +        ChatParagraphStyle(
 +            lineHeightScale = settings.displaySetting.chatLineHeightScale.coerceIn(0.8f, 2.0f),
-+            paragraphSpacingDp = settings.displaySetting.chatParagraphSpacingDp.coerceIn(0, 24),
++            // 段落间距是**增量**（-8..24dp）：0 = 原样，正数更松、负数更紧（见 Markdown.kt 的 Paragraph）
++            paragraphSpacingDp = settings.displaySetting.chatParagraphSpacingDp.coerceIn(-8, 24),
 +        )
 +    }
      val partsState by rememberUpdatedState(parts)
@@ -2403,7 +2428,7 @@ index a18dd69..dcae6e9 100644
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +484,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +498,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -2416,7 +2441,7 @@ index a18dd69..dcae6e9 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,39 +529,67 @@ private fun MessagePartsBlock(
+@@ -365,41 +543,69 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
@@ -2468,9 +2493,9 @@ index a18dd69..dcae6e9 100644
                                                  onClickCitation = handleClickCitation,
 +                                                // 用户自己发的话不套「对白样式」
 +                                                enableQuoteStyle = role == MessageRole.ASSISTANT,
-+                                            )
-+                                        }
-+                                    }
+                                             )
+                                         }
+                                     }
 +                                }
 +                            } else {
 +                                if (settings.displaySetting.showAssistantBubble) {
@@ -2489,7 +2514,7 @@ index a18dd69..dcae6e9 100644
 +                                                image = rememberBubbleImage(settings.displaySetting.assistantBubbleImage),
 +                                                maskColor = assistantBubbleColor.copy(alpha = 0.72f),
 +                                                tint = settings.displaySetting.backgroundImageTint,
-                                             )
++                                            )
 +                                            Column(modifier = Modifier.padding(8.dp)) {
 +                                                MarkdownBlock(
 +                                                    content = part.text.replaceRegexes(
@@ -2502,10 +2527,12 @@ index a18dd69..dcae6e9 100644
 +                                                    enableQuoteStyle = role == MessageRole.ASSISTANT,
 +                                                )
 +                                            }
-                                         }
-                                     }
++                                        }
++                                    }
                                  } else {
-@@ -408,6 +600,8 @@ private fun MessagePartsBlock(
+                                     MarkdownBlock(
+                                         content = part.text.replaceRegexes(
+@@ -408,6 +614,8 @@ private fun MessagePartsBlock(
                                              visual = true,
                                          ),
                                          onClickCitation = handleClickCitation,
@@ -2514,7 +2541,7 @@ index a18dd69..dcae6e9 100644
                                          modifier = Modifier
                                              .animateContentSize()
                                      )
-@@ -420,10 +614,18 @@ private fun MessagePartsBlock(
+@@ -420,10 +628,18 @@ private fun MessagePartsBlock(
                          // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
                          // 生成结束后内容稳定，再启用文本选择。
                          if (loading) {
@@ -2757,7 +2784,7 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..4d447a3 100644
+index 3d21e9f..4f1ca81 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -39,6 +39,7 @@ import androidx.compose.material3.Text
@@ -2778,7 +2805,7 @@ index 3d21e9f..4d447a3 100644
  import androidx.compose.ui.unit.dp
  import androidx.compose.ui.unit.em
  import androidx.compose.ui.unit.sp
-@@ -230,12 +233,58 @@ private fun parseMarkdown(content: String): MarkdownParseResult {
+@@ -230,12 +233,76 @@ private fun parseMarkdown(content: String): MarkdownParseResult {
      return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
  }
  
@@ -2792,12 +2819,26 @@ index 3d21e9f..4d447a3 100644
 + * 由 `ChatMessage` 用 `LocalChatParagraphStyle provides ...` 显式提供下去。
 + *
 + * [lineHeightScale]：1f = 原样（连 `lineHeight` 字段都不碰，逐像素一致），0.8f..2.0f；
-+ * [paragraphSpacingDp]：0 = 原样（段落之间仍然按字号算间距），1..24 才是用户设的固定 dp。
++ * [paragraphSpacingDp]：**增量**（-8..24dp）。0 = 原样（段落之间仍然按字号算间距，即 `fontSize.toDp()`），
++ * 正数在默认间距上更松、负数更紧，渲染处统一是
++ * `(LocalTextStyle.fontSize.toDp() + paragraphSpacingDp.dp).coerceAtLeast(0.dp)`；
++ * 代码块那块的 `4.dp` 同样变成 `(4.dp + paragraphSpacingDp.dp).coerceAtLeast(0.dp)`。
 + */
 +internal data class ChatParagraphStyle(
 +    val lineHeightScale: Float = 1f,
 +    val paragraphSpacingDp: Int = 0,
 +)
++
++/**
++ * 消息正文的字号倍率覆盖（`null` = 没覆盖，沿用 `displaySetting.fontSizeRatio` 的那几个档位）。
++ *
++ * 只解决一件事：标题（ATX_1..6 / HTML 的 h1..h6）的字号是 `HeaderStyle.fromLevel(level, ratio)`
++ * 自己算出来的，不跟 `LocalTextStyle` 走；用户在设置页拖了「自定义字号」滑块时，
++ * 由 `ChatMessage` 把最终倍率 provide 到正文子树里，标题才能跟着一起缩放。
++ *
++ * 默认 `null`：设置页预览 / 导出页 / 调试页不提供这个 Local，行为与改动前完全一致。
++ */
++internal val LocalChatFontSizeRatio = compositionLocalOf<Float?> { null }
 +
 +/**
 + * 消息正文的排版参数，默认「不变」。只有 `ChatMessage` 的正文子树会提供真正的值。
@@ -2806,6 +2847,10 @@ index 3d21e9f..4d447a3 100644
 +
 +/** 行高没指定时按字号估一个基准用的系数（Material3 bodyLarge 是 16sp/24sp） */
 +private const val DEFAULT_LINE_HEIGHT_MULTIPLIER = 1.5f
++
++/** 段落 / 块间距增量的下限（-8dp）与上限（24dp），和设置页滑块范围一致 */
++private const val MIN_PARAGRAPH_SPACING_DP = -8
++private const val MAX_PARAGRAPH_SPACING_DP = 24
 +
 +/**
 + * 把「行高倍数」乘到现有行高上。
@@ -2838,7 +2883,7 @@ index 3d21e9f..4d447a3 100644
  ) {
      var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
  
-@@ -251,22 +300,26 @@ fun MarkdownBlock(
+@@ -251,22 +318,26 @@ fun MarkdownBlock(
              .collect { setData(it) }
      }
  
@@ -2881,22 +2926,34 @@ index 3d21e9f..4d447a3 100644
                  }
              }
          }
-@@ -610,11 +663,13 @@ private fun MarkdownNode(
+@@ -365,7 +436,9 @@ private fun MarkdownNode(
+         MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
+             val style = HeaderStyle.fromMarkdownType(
+                 type = node.type,
+-                fontSizeRatio = LocalSettings.current.displaySetting.fontSizeRatio,
++                // 自定义字号（chatFontSizePercent）时用正文提供的倍率覆盖，否则仍是档位值
++                fontSizeRatio = LocalChatFontSizeRatio.current
++                    ?: LocalSettings.current.displaySetting.fontSizeRatio,
+             )
+             val headingPadding = HeaderStyle.verticalPadding(node.type)
+             ProvideTextStyle(value = LocalTextStyle.current.merge(style)) {
+@@ -610,11 +683,14 @@ private fun MarkdownNode(
                  node.findChildOfTypeRecursive(MarkdownTokenTypes.FENCE_LANG)?.getTextInNode(content) ?: "plaintext"
              val hasEnd = node.findChildOfTypeRecursive(MarkdownTokenTypes.CODE_FENCE_END) != null
  
-+            // 代码块也是「块」：段落间距设了就用它当块间距，0 时保持原来的 4dp
++            // 代码块也是「块」：块间距同样是**增量**，基准 4dp，下限 0（负数收紧到贴住为止）
 +            val blockSpacing = LocalChatParagraphStyle.current.paragraphSpacingDp
++                .coerceIn(MIN_PARAGRAPH_SPACING_DP, MAX_PARAGRAPH_SPACING_DP)
              HighlightCodeBlock(
                  code = code,
                  language = language,
                  modifier = Modifier
 -                    .padding(bottom = 4.dp)
-+                    .padding(bottom = if (blockSpacing > 0) blockSpacing.dp else 4.dp)
++                    .padding(bottom = (4.dp + blockSpacing.dp).coerceAtLeast(0.dp))
                      .fillMaxWidth(),
                  completeCodeBlock = hasEnd
              )
-@@ -623,7 +678,7 @@ private fun MarkdownNode(
+@@ -623,7 +699,7 @@ private fun MarkdownNode(
          MarkdownTokenTypes.TEXT -> {
              val text = node.getTextInNode(content)
              Text(
@@ -2905,7 +2962,7 @@ index 3d21e9f..4d447a3 100644
                  modifier = modifier,
              )
          }
-@@ -790,17 +845,31 @@ private fun Paragraph(
+@@ -790,17 +866,33 @@ private fun Paragraph(
          node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
      }
      val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
@@ -2919,13 +2976,15 @@ index 3d21e9f..4d447a3 100644
 +    // 消息正文排版参数（行高倍数 / 段落间距）：默认「不变」，只有 ChatMessage 的正文子树会提供真值，
 +    // 设置页自己的预览 / 导出页 / 调试页读到的仍是默认值，排版与改动前逐像素一致。
 +    val paragraphStyle = LocalChatParagraphStyle.current
-+    // 段落间距：0 表示沿用原来的「按字号算」间距（原来那段就是 fontSize.toDp()），
-+    // 1..24 才是用户在设置页里设的固定 dp（只加在段落之间，最后一段不留）
-+    val paragraphSpacing: Dp = if (paragraphStyle.paragraphSpacingDp > 0) {
-+        paragraphStyle.paragraphSpacingDp.dp
-+    } else {
-+        LocalTextStyle.current.fontSize.toDp()
-+    }
++    // 段落间距是**增量**语义（-8..24dp）：以「按字号算」的默认间距为基准加减，
++    // 0 就是原样（逐像素与改动前一致），正数更松、负数更紧，最后再夹到 >= 0
++    // （早先是「0 = 字号间距 / >0 = 覆盖成固定 dp」，于是从 0 调到 1dp 反而比原来自带的
++    //  字号线距小得多，看起来是「往紧里跳」——用户报的就是这个）。
++    val paragraphSpacingOffset = paragraphStyle.paragraphSpacingDp
++        .coerceIn(MIN_PARAGRAPH_SPACING_DP, MAX_PARAGRAPH_SPACING_DP)
++    val defaultParagraphSpacing: Dp = LocalTextStyle.current.fontSize.toDp()
++    val paragraphSpacing: Dp =
++        (defaultParagraphSpacing + paragraphSpacingOffset.dp).coerceAtLeast(0.dp)
      FlowRow(
          modifier = modifier.then(
 -            if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
@@ -2939,7 +2998,7 @@ index 3d21e9f..4d447a3 100644
              buildAnnotatedString {
                  node.children.fastForEach { child ->
                      appendMarkdownNodeContent(
-@@ -814,18 +883,43 @@ private fun Paragraph(
+@@ -814,18 +906,43 @@ private fun Paragraph(
                          trim = trim,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2985,7 +3044,7 @@ index 3d21e9f..4d447a3 100644
              )
          )
      }
-@@ -999,6 +1093,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -999,6 +1116,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
      enableLatexRendering: Boolean = true,
      latexColorArgb: Int = 0,
      onClickCitation: (String) -> Unit = {},
@@ -2994,7 +3053,7 @@ index 3d21e9f..4d447a3 100644
  ) {
      when {
          node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
-@@ -1020,9 +1116,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1020,9 +1139,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      it
                  }.replace(BREAK_LINE_REGEX, "\n")
              }
@@ -3007,7 +3066,7 @@ index 3d21e9f..4d447a3 100644
          }
  
          node.type == MarkdownElementTypes.EMPH -> {
-@@ -1037,7 +1133,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1037,7 +1156,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -3017,7 +3076,7 @@ index 3d21e9f..4d447a3 100644
                      )
                  }
              }
-@@ -1055,7 +1152,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1055,7 +1175,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -3027,7 +3086,7 @@ index 3d21e9f..4d447a3 100644
                      )
                  }
              }
-@@ -1073,7 +1171,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1073,7 +1194,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -3037,7 +3096,7 @@ index 3d21e9f..4d447a3 100644
                      )
                  }
              }
-@@ -1240,7 +1339,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1240,7 +1362,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      style = style,
                      enableLatexRendering = enableLatexRendering,
                      latexColorArgb = latexColorArgb,
@@ -3048,7 +3107,7 @@ index 3d21e9f..4d447a3 100644
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
-index a316327..aaef8ab 100644
+index a316327..6ea5bdc 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
 @@ -188,7 +188,7 @@ private fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
@@ -3085,7 +3144,18 @@ index a316327..aaef8ab 100644
                  )
              }
          }
-@@ -700,6 +704,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -391,7 +395,9 @@ private fun HtmlHeading(element: Element, onClickCitation: (String) -> Unit) {
+     val level = element.tagName().removePrefix("h").toIntOrNull() ?: 1
+     val headingStyle = HeaderStyle.fromLevel(
+         level = level,
+-        fontSizeRatio = LocalSettings.current.displaySetting.fontSizeRatio,
++        // 自定义字号（chatFontSizePercent）时用正文提供的倍率覆盖，否则仍是档位值
++        fontSizeRatio = LocalChatFontSizeRatio.current
++            ?: LocalSettings.current.displaySetting.fontSizeRatio,
+     )
+     val verticalPadding = HeaderStyle.verticalPadding(level)
+     ProvideTextStyle(LocalTextStyle.current.merge(headingStyle)) {
+@@ -700,6 +706,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
      val colorScheme = MaterialTheme.colorScheme
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
@@ -3093,7 +3163,7 @@ index a316327..aaef8ab 100644
  
      val key = remember(nodes) { nodes.joinToString("") { if (it is Element) it.outerHtml() else it.toString() } }
      val (annotatedString, inlineContents) = remember(
-@@ -709,6 +714,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -709,6 +716,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
          density,
          textStyle,
          onClickCitation,
@@ -3101,7 +3171,7 @@ index a316327..aaef8ab 100644
      ) {
          val contents = mutableMapOf<String, InlineTextContent>()
          val text = buildAnnotatedString {
-@@ -721,6 +727,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -721,6 +729,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
                      style = textStyle,
                      enableLatexRendering = enableLatexRendering,
                      onClickCitation = onClickCitation,
@@ -3109,7 +3179,7 @@ index a316327..aaef8ab 100644
                  )
              }
          }
-@@ -743,7 +750,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
+@@ -743,7 +752,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
      when (node) {
          is TextNode -> {
              val text = node.text()
@@ -3118,7 +3188,7 @@ index a316327..aaef8ab 100644
          }
  
          is Element -> {
-@@ -817,9 +824,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+@@ -817,9 +826,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
@@ -3131,7 +3201,7 @@ index a316327..aaef8ab 100644
          is Element -> appendHtmlInlineElement(
              element = node,
              colorScheme = colorScheme,
-@@ -828,6 +837,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+@@ -828,6 +839,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
              style = style,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
@@ -3139,7 +3209,7 @@ index a316327..aaef8ab 100644
          )
      }
  }
-@@ -840,6 +850,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+@@ -840,6 +852,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
@@ -3147,7 +3217,7 @@ index a316327..aaef8ab 100644
  ) {
      val cssStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
          parseInlineSpanStyle(
-@@ -858,6 +869,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+@@ -858,6 +871,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
              style = inheritedStyle,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
@@ -3157,10 +3227,10 @@ index a316327..aaef8ab 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..b324a7f
+index 0000000..ae04c6f
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,797 @@
+@@ -0,0 +1,848 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -3357,6 +3427,8 @@ index 0000000..b324a7f
 +    val leadingBarHeightScale: Float = 0.7f,
 +    /** 行首竖线左右位置（dp，-4..8）：x = 开引号字符左边缘 - 这个值，正数把竖线往左推 */
 +    val leadingBarOffsetDp: Int = 1,
++    /** 行首竖线粗细（dp，1..5）：drawRect / drawRoundRect 的 width，默认 2dp */
++    val quoteBarWidthDp: Int = 2,
 +    val backgroundCorner: Int = 4,
 +    /**
 +     * 行与行之间底色留白（dp），**上下各取一半**（默认 2dp）。
@@ -3543,6 +3615,10 @@ index 0000000..b324a7f
 +        leadingBarOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(
 +            MIN_BAR_OFFSET_DP, MAX_BAR_OFFSET_DP
 +        ),
++        // 行首竖线粗细（1dp..5dp，默认 2dp）
++        quoteBarWidthDp = displaySetting.quoteBarWidthDp.coerceIn(
++            MIN_BAR_WIDTH_DP, MAX_BAR_WIDTH_DP
++        ),
 +        backgroundCorner = displaySetting.quoteBackgroundCorner.coerceIn(0, 64),
 +        // 「整段上下的内缩」不再参与行间留白（行间永远无缝），只在首行之上 / 末行之下生效
 +        backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 24),
@@ -3620,6 +3696,20 @@ index 0000000..b324a7f
 +private const val MIN_BAR_OFFSET_DP = -4
 +private const val MAX_BAR_OFFSET_DP = 8
 +
++/** 行首竖线粗细的下限 / 上限（dp），和设置页滑块范围一致 */
++private const val MIN_BAR_WIDTH_DP = 1
++private const val MAX_BAR_WIDTH_DP = 5
++
++/**
++ * 下划线终点的微收量（dp）。
++ *
++ * 端点一律用 `getHorizontalPosition()` 取（那是**光标**位置 = 字符的 advance 右边缘），
++ * 但闭引号这类全宽标点的 advance 盒本来就比墨迹宽一点点，再加上抗锯齿，
++ * 线看起来还是会压到 / 越过引号右边缘一丝。所以整体再往里收 0.5dp：
++ * 用户截图里「右端还是会长出引号一点」就靠这个微收兜住。
++ */
++private const val UNDERLINE_END_SHRINK_DP = 0.5f
++
 +/**
 + * 虚线的「线长 / 空档」：基准 **2dp 线 + 1.5dp 空档**（早先是 3dp/2dp，用户仍嫌稀，再压一格），
 + * 再整体乘上 [multiplier]，最后按屏幕密度折算成 px，避免高密度屏上糊成实线。
@@ -3669,11 +3759,12 @@ index 0000000..b324a7f
 + *   Path 里，最后各 `drawPath(..., style = Stroke(...))` 一次。早先是每行 `drawLine` + `pathEffect`，
 + *   每行的 dash 相位都从 0 重新开始、每行长度又不一样，看上去一段长一段短；现在整段共用一条连续路径
 + *   + 一个 PathEffect，相位连续、dash 长度均匀：
-+ *   - **左右端点只取该行被区间覆盖的字符区间**：`max(rangeStart, getLineStart(line))` ..
-+ *     `min(rangeEnd, getLineEnd(line))`（再裁掉行尾空白），端点用 `getHorizontalPosition(...)` 精确取，
-+ *     辅以末字符 `getBoundingBox` 的右边缘；**这个区间为空（跨行延续 / 行末 / 空行）就这一行不画线**，
-+ *     绝不退化成 `getLineLeft` .. `getLineRight` 铺满整行——用户截图里「下划线伸到行末、超出引号」
-+ *     就是那个铺满兜底造成的；
++ *   - **左右端点只取该行被区间覆盖的字符区间**：起点 = `max(rangeStart, getLineStart(line))`、
++ *     终点 = `min(rangeEnd, getLineEnd(line, visibleEnd = true))`，两端的 x **一律**用
++ *     `getHorizontalPosition(offset, usePrimaryDirection = false)` 取（那是光标位置 = 字符 advance 边缘），
++ *     **不再用末字符 `getBoundingBox(...).right`**（含字形右侧留白，会越过闭引号 1~2dp，用户截图确认）；
++ *     终点再往里收 0.5dp，保证线不越过引号右边缘；**算出来长度 <= 0 就这一行不画线**，
++ *     绝不退化成 `getLineLeft` .. `getLineRight` 铺满整行——早先「下划线伸到行末、超出引号」就是那个铺满兜底造成的；
 + *   - y 起点 = `getLineBaseline(line) + underlineOffset.dp`，之后每多开一条再往下错 2dp
 + *     （实线 → 虚线 → 点线），三条全开就是三条分开的线，互不重叠；
 + *   - 实线：不带 `PathEffect`，颜色 `solidUnderlineColor ?: 文字色`；
@@ -3685,7 +3776,8 @@ index 0000000..b324a7f
 + *   更不会落在段落左边缘（不 clamp 到 `getLineLeft`，引号在行中间时也照样贴着引号）；
 + *   高度 = 该行行高 × `leadingBarHeightScale`（默认 0.7x，范围 0.3x..1.2x），**以行中心为基准居中**，
 + *   不再是整行顶天立地；仍然**只覆盖开引号所在那一行**，跨行对白**不**往下延伸；
-+ *   宽度 2dp、圆角 1dp，颜色 `leadingBarColor ?: 文字色`；
++ *   宽度取「竖线粗细」滑块（`quoteBarWidthDp`，1..5dp，默认 2dp）、圆角 1dp，
++ *   颜色 `leadingBarColor ?: 文字色`；
 + * - **层序**：底色（Path 填充）在最底层 → 下划线（三条 Path）→ 行首竖线在最上层，
 + *   三层互相独立、可以同时开启；竖线最后画，所以它永远压在底色之上；
 + * - 绘制阶段不拼字符串、不建集合：区间是组合期算好的 IntArray，`PathEffect` 在组合期 remember，
@@ -3725,6 +3817,12 @@ index 0000000..b324a7f
 +    // 「下划线与文字的距离」滑块：baseline 往下偏移多少 dp 才是第一条线的位置
 +    val underlineOffsetPx =
 +        with(density) { style.underlineOffset.coerceIn(0, MAX_UNDERLINE_OFFSET).dp.toPx() }
++    // 下划线终点微收（0.5dp）：端点用光标位置取，再往里收一点，保证线不越过闭引号右边缘
++    val underlineEndShrinkPx = with(density) { UNDERLINE_END_SHRINK_DP.dp.toPx() }
++    // 行首竖线粗细（1..5dp，默认 2dp）：drawRoundRect 的 width
++    val barWidthPx = with(density) {
++        style.quoteBarWidthDp.coerceIn(MIN_BAR_WIDTH_DP, MAX_BAR_WIDTH_DP).dp.toPx()
++    }
 +
 +    return this.drawBehind {
 +        val layoutResult = holder.layout ?: return@drawBehind
@@ -3740,7 +3838,8 @@ index 0000000..b324a7f
 +        val strokeWidth = 1.dp.toPx()
 +        // 多条下划线同时打开时，每多一条就再往下让 2dp（实线 → 虚线 → 点线），不会糊在一起
 +        val lineStep = 2.dp.toPx()
-+        val barWidth = 2.dp.toPx()
++        // 行首竖线粗细：取「竖线粗细」滑块（1..5dp，默认 2dp）
++        val barWidth = barWidthPx
 +        // 竖线紧贴开引号字符：x = 开引号包围盒左边缘 - 「竖线左右位置」滑块（不 clamp，引号在行中间也贴着引号）
 +        val barCorner = CornerRadius(1.dp.toPx())
 +        val corner = CornerRadius(cornerPx)
@@ -3797,6 +3896,9 @@ index 0000000..b324a7f
 +                val lineBottom = layoutResult.getLineBottom(line)
 +                val lineStartOffset = layoutResult.getLineStart(line)
 +                val lineEndOffset = layoutResult.getLineEnd(line)
++                // 行尾「可见」结束位置（visibleEnd = true，不含换行符）：下划线终点用它，
++                // 否则跨行时 min(rangeEnd, lineEnd) 会落在换行符之后、x 掉到下一行行首
++                val visibleLineEnd = layoutResult.getLineEnd(line, visibleEnd = true)
 +                // 该行内被区间覆盖的字符子区间
 +                val rawStart = maxOf(rangeStart, lineStartOffset)
 +                val rawEnd = minOf(rangeEnd, lineEndOffset)
@@ -3869,27 +3971,46 @@ index 0000000..b324a7f
 +                        }
 +                    }
 +                }
-+                // ② 下划线：只在这一行真有被区间覆盖的字符时才往 Path 里加一段；
-+                //    y 起点 = baseline + 「下划线与文字的距离」滑块值，之后每条再往下错 2dp
-+                if (hasCharSpan && (solidPath != null || dashedPath != null || dottedPath != null)) {
-+                    val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
-+                    var slot = 0
-+                    if (solidPath != null) {
-+                        val y = baseY + lineStep * slot
-+                        slot++
-+                        solidPath.moveTo(lineLeft, y)
-+                        solidPath.lineTo(lineRight, y)
-+                    }
-+                    if (dashedPath != null) {
-+                        val y = baseY + lineStep * slot
-+                        slot++
-+                        dashedPath.moveTo(lineLeft, y)
-+                        dashedPath.lineTo(lineRight, y)
-+                    }
-+                    if (dottedPath != null) {
-+                        val y = baseY + lineStep * slot
-+                        dottedPath.moveTo(lineLeft, y)
-+                        dottedPath.lineTo(lineRight, y)
++                // ② 下划线：端点**一律**用 getHorizontalPosition（光标位置）取，
++                //    **不再**用 `getBoundingBox(...).right` —— 包围盒含字形右侧留白，会多出 1~2dp，
++                //    用户截图里「右端还是会长出引号一点」就是它。
++                //    起点 = max(rangeStart, lineStart) 的位置，终点 = min(rangeEnd, lineEnd) 的位置再 -0.5dp；
++                //    lineEnd 取 visibleEnd = true（不含行尾换行符），否则跨行时终点会掉到下一行的 x = 0 上。
++                //    算出来长度 <= 0 的行这一行不画。
++                //    y 起点 = baseline + 「下划线与文字的距离」滑块值，之后每条再往下错 2dp。
++                if (solidPath != null || dashedPath != null || dottedPath != null) {
++                    val underlineStartOffset = maxOf(rangeStart, lineStartOffset)
++                    val underlineEndOffset = minOf(rangeEnd, visibleLineEnd)
++                    if (underlineEndOffset > underlineStartOffset) {
++                        val underlineStartX = layoutResult.getHorizontalPosition(
++                            underlineStartOffset, usePrimaryDirection = false
++                        )
++                        val underlineEndX = layoutResult.getHorizontalPosition(
++                            underlineEndOffset, usePrimaryDirection = false
++                        ) - underlineEndShrinkPx
++                        val underlineLeft = minOf(underlineStartX, underlineEndX)
++                        val underlineRight = maxOf(underlineStartX, underlineEndX)
++                        if (underlineRight - underlineLeft > 0f) {
++                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
++                            var slot = 0
++                            if (solidPath != null) {
++                                val y = baseY + lineStep * slot
++                                slot++
++                                solidPath.moveTo(underlineLeft, y)
++                                solidPath.lineTo(underlineRight, y)
++                            }
++                            if (dashedPath != null) {
++                                val y = baseY + lineStep * slot
++                                slot++
++                                dashedPath.moveTo(underlineLeft, y)
++                                dashedPath.lineTo(underlineRight, y)
++                            }
++                            if (dottedPath != null) {
++                                val y = baseY + lineStep * slot
++                                dottedPath.moveTo(underlineLeft, y)
++                                dottedPath.lineTo(underlineRight, y)
++                            }
++                        }
 +                    }
 +                }
 +                line++
@@ -6492,10 +6613,10 @@ index c296a24..f747ad6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..4448270
+index 0000000..541f170
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,691 @@
+@@ -0,0 +1,733 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -6562,6 +6683,9 @@ index 0000000..4448270
 +/** 行首竖线左右位置默认值（dp），和 DisplaySetting.quoteBarOffsetDp 一致 */
 +private const val DEFAULT_QUOTE_BAR_OFFSET_DP = 1
 +
++/** 行首竖线粗细默认值（dp），和 DisplaySetting.quoteBarWidthDp 一致 */
++private const val DEFAULT_QUOTE_BAR_WIDTH_DP = 2
++
 +/**
 + * 对白样式页：AI 回复里被 “引号” 包住的文字怎么画。
 + *
@@ -6587,6 +6711,7 @@ index 0000000..4448270
 + *              竖线颜色            红 ●     ← null 表示跟随文字颜色
 + *              竖线高度            0.7x     ← 滑块 0.3–1.2，按行高比例、行中心居中
 + *              竖线左右位置        +2dp     ← 滑块 -4..8dp，x = 开引号左边缘 - 这个值
++ *              竖线粗细            2dp      ← 滑块 1–5dp，竖线的宽度（圆角仍 1dp）
 + * ```
 + *
 + * 几条硬要求：
@@ -6619,9 +6744,10 @@ index 0000000..4448270
 +    // 下划线两条滑块：和文字的距离（dp）、虚线点线的密度（0.2–3.0，越大越密）
 +    val underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, 10)
 +    val dashScale = displaySetting.quoteDashScale.coerceIn(0.2f, 3.0f)
-+    // 行首竖线两条滑块：高度（按行高比例 0.3–1.2）、左右位置（-4..8dp）
++    // 行首竖线三条滑块：高度（按行高比例 0.3–1.2）、左右位置（-4..8dp）、粗细（1–5dp）
 +    val barHeightScale = displaySetting.quoteBarHeightScale.coerceIn(0.3f, 1.2f)
 +    val barOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(-4, 8)
++    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(1, 5)
 +
 +    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
 +    val textColorField = ColorField(
@@ -7033,7 +7159,7 @@ index 0000000..4448270
 +                    item(
 +                        headlineContent = { Text("行首竖线") },
 +                        supportingContent = {
-+                            Text("在开引号紧左边画一条 2dp 短竖线，高度只覆盖引号所在那一行")
++                            Text("在开引号紧左边画一条短竖线，高度只覆盖引号所在那一行（粗细可调）")
 +                        },
 +                        trailingContent = {
 +                            Switch(
@@ -7128,6 +7254,43 @@ index 0000000..4448270
 +                            }
 +                        },
 +                    )
++                    // 竖线粗细：drawRect 的 width（1–5dp，圆角仍然 1dp），默认 2dp = 老版本
++                    item(
++                        headlineContent = { Text("竖线粗细") },
++                        supportingContent = {
++                            Column {
++                                Text("竖线的宽度（1–5dp），默认 2dp，圆角保持 1dp")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = barWidthDp.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteBarWidthDp = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 1f..5f,
++                                        steps = 3,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${barWidthDp}dp")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(quoteBarWidthDp = DEFAULT_QUOTE_BAR_WIDTH_DP)
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
 +                }
 +            }
 +        }
@@ -7188,7 +7351,7 @@ index 0000000..4448270
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..576923a 100644
+index 2ee9d11..9e9709f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.Row
@@ -7236,17 +7399,19 @@ index 2ee9d11..576923a 100644
  import me.rerere.rikkahub.utils.plus
  import org.koin.androidx.compose.koinViewModel
  import java.io.File
-@@ -68,6 +75,9 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -68,6 +75,11 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
      val toaster = LocalToaster.current
      val scope = rememberCoroutineScope()
      val chatFontFamily = rememberChatFontFamily(displaySetting)
-+    // 消息正文排版：行距倍数（0.8–2.0，步进 0.05）与段落间距（0–24dp）
++    // 消息正文排版：行距倍数（0.8–2.0，步进 0.05）与段落间距**增量**（-8..24dp）
 +    val chatLineHeightScale = displaySetting.chatLineHeightScale.coerceIn(0.8f, 2.0f)
-+    val chatParagraphSpacing = displaySetting.chatParagraphSpacingDp.coerceIn(0, 24)
++    val chatParagraphSpacing = displaySetting.chatParagraphSpacingDp.coerceIn(-8, 24)
++    // 自定义字号百分比（0 = 跟随档位，50–140% 覆盖正文倍率）
++    val chatFontSizePercent = displaySetting.chatFontSizePercent
  
      fun updateDisplaySetting(setting: DisplaySetting) {
          displaySetting = setting
-@@ -86,11 +96,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -86,11 +98,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                      importCustomChatFontInternal(context, uri)
                  }
              }.onSuccess { importedFont ->
@@ -7286,7 +7451,7 @@ index 2ee9d11..576923a 100644
                      )
                  )
                  toaster.show(importSuccessMsg, type = ToastType.Success)
-@@ -140,6 +176,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -140,6 +178,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -7327,7 +7492,7 @@ index 2ee9d11..576923a 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
-@@ -209,6 +279,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -209,6 +281,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -7358,7 +7523,7 @@ index 2ee9d11..576923a 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
-@@ -283,40 +377,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -283,40 +379,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          }
                      )
@@ -7514,7 +7679,7 @@ index 2ee9d11..576923a 100644
                                          }
                                      ) {
                                          Icon(
-@@ -326,10 +507,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -326,10 +509,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                              )
                                          )
                                      }
@@ -7541,7 +7706,46 @@ index 2ee9d11..576923a 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
                          supportingContent = {
-@@ -361,6 +555,82 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -358,9 +554,124 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+                                         fontFamily = chatFontFamily
+                                     )
+                                 )
++                                // 自定义字号：0 = 跟随上面的档位；拖了滑块就按百分比直接覆盖正文倍率。
++                                // 只影响消息正文，设置界面自身的排版照旧（见 ChatMessage 的 LocalChatFontSizeRatio）
++                                Text("自定义字号（在档位之外细调，只影响消息正文）")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = if (chatFontSizePercent > 0) {
++                                            chatFontSizePercent.coerceIn(50, 140).toFloat()
++                                        } else {
++                                            (displaySetting.fontSizeRatio * 100f).coerceIn(50f, 140f)
++                                        },
++                                        onValueChange = { value ->
++                                            updateDisplaySetting(
++                                                displaySetting.copy(chatFontSizePercent = value.roundToInt())
++                                            )
++                                        },
++                                        valueRange = 50f..140f,
++                                        steps = 18,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(
++                                        text = if (chatFontSizePercent > 0) "${chatFontSizePercent}%"
++                                        else "跟随档位"
++                                    )
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(displaySetting.copy(chatFontSizePercent = 0))
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
                              }
                          }
                      )
@@ -7589,7 +7793,7 @@ index 2ee9d11..576923a 100644
 +                        headlineContent = { Text("段落间距") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("消息正文里段落之间、块之间的垂直间距，0 就是现在的样子（只影响消息正文）")
++                                Text("段落间距（在默认间距上增减，负值更紧），0 就是现在的样子（只影响消息正文）")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -7604,11 +7808,14 @@ index 2ee9d11..576923a 100644
 +                                                )
 +                                            )
 +                                        },
-+                                        valueRange = 0f..24f,
-+                                        steps = 23,
++                                        valueRange = -8f..24f,
++                                        steps = 31,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
-+                                    Text(text = "${chatParagraphSpacing} dp")
++                                    Text(
++                                        text = if (chatParagraphSpacing > 0) "+${chatParagraphSpacing} dp"
++                                        else "${chatParagraphSpacing} dp"
++                                    )
 +                                }
 +                                TextButton(
 +                                    onClick = {
@@ -7624,7 +7831,7 @@ index 2ee9d11..576923a 100644
                  }
              }
  
-@@ -466,7 +736,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -466,7 +777,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
              throw IllegalArgumentException(error.message ?: "Invalid font file", error)
          }
  
@@ -7633,7 +7840,7 @@ index 2ee9d11..576923a 100644
      } catch (error: Throwable) {
          tempFile.delete()
          throw error
-@@ -477,27 +747,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -477,27 +788,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
      return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
  }
  
