@@ -23,8 +23,12 @@ jobs:
       - name: 修 2.5.3 的 material3 版本（alpha28 编不过）
         run: |
           cd src
-          sed -i 's/^material3 = "1.5.0-alpha28"/material3 = "1.5.0-rc01"/' gradle/libs.versions.toml
-          grep -n '^material3 = ' gradle/libs.versions.toml
+          sed -i 's/^material3 = ".*"/material3 = "1.5.0-rc01"/' gradle/libs.versions.toml
+          echo "--- 改后 catalog ---"
+          grep -nE '^material3 =|^composeBom =' gradle/libs.versions.toml
+          sed -i 's|implementation(libs.androidx.material3)|implementation("androidx.compose.material3:material3:1.5.0-rc01")|' material3/build.gradle.kts
+          echo "--- material3 模块依赖 ---"
+          grep -n "material3" material3/build.gradle.kts
 
       - name: 打上美化补丁（不适用就跳过）
         run: |
@@ -69,6 +73,11 @@ jobs:
             -storepass yg123456 -keypass yg123456 \
             -dname "CN=Rikka Bei, OU=YG, O=YG, L=CN, S=CN, C=CN"
           printf 'storeFile=%s/ci.jks\nstorePassword=yg123456\nkeyAlias=ci\nkeyPassword=yg123456\n' "$GITHUB_WORKSPACE" > src/local.properties
+
+      - name: 查 material3 实际解析到的版本
+        working-directory: src
+        run: |
+          ./gradlew :material3:dependencies --configuration releaseCompileClasspath --no-daemon 2>&1 | grep -iE "compose.material3:material3" | head -10 || true
 
       - name: 编译 release 版
         working-directory: src
