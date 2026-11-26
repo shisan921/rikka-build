@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..16ffc0c 100644
+index 205e822..19b5884 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1555,7 +1555,7 @@ index 205e822..16ffc0c 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +716,104 @@ data class DisplaySetting(
+@@ -642,8 +716,106 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1620,6 +1620,8 @@ index 205e822..16ffc0c 100644
 +    val quoteBarOffsetDp: Int = 1,
 +    // 对白样式·行首竖线粗细（dp，1..5）：drawRoundRect 的 width，圆角仍然 1dp，默认 2dp（= 老版本行为）
 +    val quoteBarWidthDp: Int = 2,
++    // 下划线左右两端比底色块再往里收多少（dp），越大越缩进
++    val quoteUnderlineInsetDp: Int = 2,
 +    // 消息正文行高（0.8f..2.0f，步进 0.05）：乘在正文行高上，1f = 与原来逐像素一致
 +    val chatLineHeightScale: Float = 1f,
 +    // 消息正文的段落 / 块间距**增量**（dp，-8..24）：0 = 沿用原来按字号算的间距（原样），
@@ -3245,10 +3247,10 @@ index a316327..6ea5bdc 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..ebedb28
+index 0000000..5fac411
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,841 @@
+@@ -0,0 +1,845 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -3447,6 +3449,7 @@ index 0000000..ebedb28
 +    val leadingBarOffsetDp: Int = 1,
 +    /** 行首竖线粗细（dp，1..5）：drawRect / drawRoundRect 的 width，默认 2dp */
 +    val quoteBarWidthDp: Int = 2,
++    val underlineInsetDp: Int = 2,
 +    val backgroundCorner: Int = 4,
 +    /**
 +     * 行与行之间底色留白（dp），**上下各取一半**（默认 2dp）。
@@ -3642,6 +3645,7 @@ index 0000000..ebedb28
 +        backgroundGap = displaySetting.quoteBackgroundGap.coerceIn(0, 24),
 +        // 「下划线与文字的距离」滑块（0..10dp）与「虚线与点线的密度」滑块（0.2x..3.0x，越大越密）
 +        underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, MAX_UNDERLINE_OFFSET),
++        underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12),
 +        dashScale = displaySetting.quoteDashScale.coerceIn(MIN_DASH_DENSITY, MAX_DASH_DENSITY),
 +        selfDrawn = selfDrawn,
 +    )
@@ -3998,8 +4002,10 @@ index 0000000..ebedb28
 +                    // 既不会长出引号，也不会像用行/字符端点那样在某些行算不出长度而漏画。
 +                    // 再比底色块往里收 2dp：底色的边缘会吃进「引号与相邻文字之间的空白」，
 +                    // 线要是贴着底色边缘，就会看起来盖住了引号外侧的空白（用户截图那个现象）
-+                    val underlineLeft = spanLeft + underlineEndShrinkPx
-+                    val underlineRight = spanRight - underlineEndShrinkPx
++                    val underlineInsetPx =
++                        with(density) { style.underlineInsetDp.coerceIn(0, 12).dp.toPx() }
++                    val underlineLeft = spanLeft + underlineInsetPx
++                    val underlineRight = spanRight - underlineInsetPx
 +                    run {
 +                        if (underlineRight - underlineLeft > 0f) {
 +                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
@@ -6624,10 +6630,10 @@ index c296a24..f747ad6 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..541f170
+index 0000000..e816eb9
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,733 @@
+@@ -0,0 +1,771 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -6759,6 +6765,7 @@ index 0000000..541f170
 +    val barHeightScale = displaySetting.quoteBarHeightScale.coerceIn(0.3f, 1.2f)
 +    val barOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(-4, 8)
 +    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(1, 5)
++    val underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12)
 +
 +    // ---- 颜色项：文字 / 底色 / 实线 / 虚线 / 点线 / 竖线，各管各的字段，互不串色 ----
 +    val textColorField = ColorField(
@@ -7256,6 +7263,43 @@ index 0000000..541f170
 +                                    onClick = {
 +                                        applyDisplaySetting {
 +                                            it.copy(quoteBarOffsetDp = DEFAULT_QUOTE_BAR_OFFSET_DP)
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    // 下划线左右内缩：线比底色块再往里收多少，收得多就不会碰到引号外侧的空白
++                    item(
++                        headlineContent = { Text("下划线左右内缩") },
++                        supportingContent = {
++                            Column {
++                                Text("下划线两端比底色块再往里收多少（0–12dp），觉得线盖到引号外侧就调大")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = underlineInsetDp.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteUnderlineInsetDp = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 0f..12f,
++                                        steps = 11,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${underlineInsetDp}dp")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(quoteUnderlineInsetDp = 2)
 +                                        }
 +                                    },
 +                                    modifier = Modifier.align(Alignment.End),
