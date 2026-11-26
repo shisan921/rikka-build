@@ -1,19 +1,818 @@
 diff --git a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-index bef7871..b56ecb8 100644
+index bef7871..85f9034 100644
 --- a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-@@ -109,6 +109,10 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
+@@ -1,220 +1,225 @@
+-package me.rerere.rikkahub
+-
+-import android.annotation.SuppressLint
+-import android.content.Intent
+-import android.os.Build
+-import android.os.Bundle
+-import android.view.KeyEvent
+-import androidx.activity.ComponentActivity
+-import androidx.activity.compose.setContent
+-import androidx.activity.enableEdgeToEdge
+-import androidx.compose.animation.AnimatedVisibility
+-import androidx.compose.animation.SharedTransitionLayout
+-import androidx.compose.animation.fadeIn
+-import androidx.compose.animation.fadeOut
+-import androidx.compose.animation.scaleIn
+-import androidx.compose.animation.scaleOut
+-import androidx.compose.animation.slideInHorizontally
+-import androidx.compose.animation.slideOutHorizontally
+-import androidx.compose.animation.togetherWith
+-import androidx.compose.foundation.background
+-import androidx.compose.foundation.layout.Arrangement
+-import androidx.compose.foundation.layout.Box
+-import androidx.compose.foundation.layout.Column
+-import androidx.compose.foundation.layout.fillMaxSize
+-import androidx.compose.foundation.layout.padding
+-import androidx.compose.material3.CircularProgressIndicator
+-import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.Text
+-import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.CompositionLocalProvider
+-import androidx.compose.runtime.LaunchedEffect
+-import androidx.compose.runtime.SideEffect
+-import androidx.compose.runtime.getValue
+-import androidx.compose.ui.Alignment
+-import androidx.compose.ui.Modifier
+-import androidx.compose.ui.semantics.semantics
+-import androidx.compose.ui.ExperimentalComposeUiApi
+-import androidx.compose.ui.res.stringResource
+-import androidx.compose.ui.semantics.testTagsAsResourceId
+-import androidx.compose.ui.unit.dp
+-import androidx.core.net.toUri
+-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+-import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+-import androidx.navigation3.runtime.NavKey
+-import androidx.navigation3.runtime.entryProvider
+-import androidx.navigation3.runtime.rememberNavBackStack
+-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+-import androidx.navigation3.ui.NavDisplay
+-import coil3.ImageLoader
+-import coil3.compose.setSingletonImageLoaderFactory
+-import coil3.gif.AnimatedImageDecoder
+-import coil3.gif.GifDecoder
+-import coil3.network.cachecontrol.CacheControlCacheStrategy
+-import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+-import coil3.request.crossfade
+-import coil3.svg.SvgDecoder
+-import com.dokar.sonner.Toaster
+-import com.dokar.sonner.rememberToasterState
+-import kotlinx.serialization.Serializable
+-import me.rerere.rikkahub.data.datastore.SettingsStore
+-import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
+-import me.rerere.rikkahub.data.db.MigrationState
+-import me.rerere.rikkahub.data.event.AppEvent
+-import me.rerere.rikkahub.data.event.AppEventBus
+-import me.rerere.rikkahub.ui.activity.SafeModeActivity
+-import me.rerere.rikkahub.ui.components.ui.TTSController
+-import me.rerere.rikkahub.ui.context.LocalASRState
+-import me.rerere.rikkahub.ui.context.LocalNavController
+-import me.rerere.rikkahub.ui.context.LocalSettings
+-import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
+-import me.rerere.rikkahub.ui.context.LocalTTSState
+-import me.rerere.rikkahub.ui.context.LocalToaster
+-import me.rerere.rikkahub.ui.context.Navigator
+-import me.rerere.rikkahub.ui.hooks.readBooleanPreference
+-import me.rerere.rikkahub.ui.hooks.readStringPreference
+-import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
+-import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
+-import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
+-import me.rerere.rikkahub.ui.pages.backup.BackupPage
+-import me.rerere.rikkahub.ui.pages.chat.ChatPage
+-import me.rerere.rikkahub.ui.pages.debug.DebugPage
+-import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+-import me.rerere.rikkahub.ui.pages.extensions.PromptPage
+-import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
+-import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
+-import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
+-import me.rerere.workspace.WorkspaceStorageArea
+-import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
+-import me.rerere.rikkahub.ui.pages.history.HistoryPage
+-import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
+-import me.rerere.rikkahub.ui.pages.log.LogPage
+-import me.rerere.rikkahub.ui.pages.search.SearchPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
++package me.rerere.rikkahub
++
++import android.annotation.SuppressLint
++import android.content.Intent
++import android.os.Build
++import android.os.Bundle
++import android.view.KeyEvent
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.activity.enableEdgeToEdge
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.SharedTransitionLayout
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.scaleIn
++import androidx.compose.animation.scaleOut
++import androidx.compose.animation.slideInHorizontally
++import androidx.compose.animation.slideOutHorizontally
++import androidx.compose.animation.togetherWith
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.SideEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.ExperimentalComposeUiApi
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.semantics.testTagsAsResourceId
++import androidx.compose.ui.unit.dp
++import androidx.core.net.toUri
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
++import androidx.navigation3.runtime.NavKey
++import androidx.navigation3.runtime.entryProvider
++import androidx.navigation3.runtime.rememberNavBackStack
++import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
++import androidx.navigation3.ui.NavDisplay
++import coil3.ImageLoader
++import coil3.compose.setSingletonImageLoaderFactory
++import coil3.gif.AnimatedImageDecoder
++import coil3.gif.GifDecoder
++import coil3.network.cachecontrol.CacheControlCacheStrategy
++import coil3.network.okhttp.OkHttpNetworkFetcherFactory
++import coil3.request.crossfade
++import coil3.svg.SvgDecoder
++import com.dokar.sonner.Toaster
++import com.dokar.sonner.rememberToasterState
++import kotlinx.serialization.Serializable
++import me.rerere.rikkahub.data.datastore.SettingsStore
++import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
++import me.rerere.rikkahub.data.db.MigrationState
++import me.rerere.rikkahub.data.event.AppEvent
++import me.rerere.rikkahub.data.event.AppEventBus
++import me.rerere.rikkahub.ui.activity.SafeModeActivity
++import me.rerere.rikkahub.ui.components.ui.TTSController
++import me.rerere.rikkahub.ui.context.LocalASRState
++import me.rerere.rikkahub.ui.context.LocalNavController
++import me.rerere.rikkahub.ui.context.LocalSettings
++import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
++import me.rerere.rikkahub.ui.context.LocalTTSState
++import me.rerere.rikkahub.ui.context.LocalToaster
++import me.rerere.rikkahub.ui.context.Navigator
++import me.rerere.rikkahub.ui.hooks.readBooleanPreference
++import me.rerere.rikkahub.ui.hooks.readStringPreference
++import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
++import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
++import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
++import me.rerere.rikkahub.ui.pages.backup.BackupPage
++import me.rerere.rikkahub.ui.pages.chat.ChatPage
++import me.rerere.rikkahub.ui.pages.debug.DebugPage
++import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
++import me.rerere.rikkahub.ui.pages.extensions.PromptPage
++import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
++import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
++import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
++import me.rerere.workspace.WorkspaceStorageArea
++import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
++import me.rerere.rikkahub.ui.pages.history.HistoryPage
++import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
++import me.rerere.rikkahub.ui.pages.log.LogPage
++import me.rerere.rikkahub.ui.pages.search.SearchPage
++import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
+-import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
+-import me.rerere.rikkahub.ui.pages.stats.StatsPage
+-import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
+-import me.rerere.rikkahub.ui.pages.webview.WebViewPage
+-import me.rerere.rikkahub.ui.theme.LocalDarkMode
+-import me.rerere.rikkahub.ui.theme.RikkahubTheme
+-import me.rerere.rikkahub.utils.CrashHandler
+-import me.rerere.rikkahub.utils.openUsageAccessSettings
+-import okhttp3.OkHttpClient
+-import org.koin.android.ext.android.inject
+-import org.koin.compose.koinInject
+-import kotlin.uuid.Uuid
+-
+-private const val TAG = "RouteActivity"
+-private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
+-
+-class RouteActivity : ComponentActivity() {
+-    private val okHttpClient by inject<OkHttpClient>()
+-    private val settingsStore by inject<SettingsStore>()
+-    private var navStack: MutableList<NavKey>? = null
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesColorsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAlphaPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesImagesPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesMaterialPage
- import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
- import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
- import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
-@@ -424,6 +428,22 @@ class RouteActivity : ComponentActivity() {
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesQuotePage
++import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
++import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
++import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
++import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPage
++import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
++import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
++import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
++import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
++import me.rerere.rikkahub.ui.pages.stats.StatsPage
++import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
++import me.rerere.rikkahub.ui.pages.webview.WebViewPage
++import me.rerere.rikkahub.ui.theme.LocalDarkMode
++import me.rerere.rikkahub.ui.theme.RikkahubTheme
++import me.rerere.rikkahub.utils.CrashHandler
++import me.rerere.rikkahub.utils.openUsageAccessSettings
++import okhttp3.OkHttpClient
++import org.koin.android.ext.android.inject
++import org.koin.compose.koinInject
++import kotlin.uuid.Uuid
++
++private const val TAG = "RouteActivity"
++private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
++
++class RouteActivity : ComponentActivity() {
++    private val okHttpClient by inject<OkHttpClient>()
++    private val settingsStore by inject<SettingsStore>()
++    private var navStack: MutableList<NavKey>? = null
+     private val pendingIntents = ArrayDeque<Intent>()
+-
+-    // Volume key listener registry — last registered handler wins
+-    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
+-
+-    @SuppressLint("RestrictedApi")
+-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+-        if (event.action == KeyEvent.ACTION_DOWN) {
+-            val isVolumeUp = when (event.keyCode) {
+-                KeyEvent.KEYCODE_VOLUME_UP -> true
+-                KeyEvent.KEYCODE_VOLUME_DOWN -> false
+-                else -> return super.dispatchKeyEvent(event)
+-            }
+-            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+-        }
+-        return super.dispatchKeyEvent(event)
+-    }
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        enableEdgeToEdge()
+-        disableNavigationBarContrast()
+-        super.onCreate(savedInstanceState)
+-        if (CrashHandler.hasCrashed(this)) {
+-            startActivity(Intent(this, SafeModeActivity::class.java))
+-            finish()
+-            return
++
++    // Volume key listener registry — last registered handler wins
++    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
++
++    @SuppressLint("RestrictedApi")
++    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
++        if (event.action == KeyEvent.ACTION_DOWN) {
++            val isVolumeUp = when (event.keyCode) {
++                KeyEvent.KEYCODE_VOLUME_UP -> true
++                KeyEvent.KEYCODE_VOLUME_DOWN -> false
++                else -> return super.dispatchKeyEvent(event)
++            }
++            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
++        }
++        return super.dispatchKeyEvent(event)
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        enableEdgeToEdge()
++        disableNavigationBarContrast()
++        super.onCreate(savedInstanceState)
++        if (CrashHandler.hasCrashed(this)) {
++            startActivity(Intent(this, SafeModeActivity::class.java))
++            finish()
++            return
+         }
+         if (savedInstanceState == null) {
+             handleIntent(intent)
+-        }
+-        setContent {
+-            RikkahubTheme {
+-                setSingletonImageLoaderFactory { context ->
+-                    ImageLoader.Builder(context)
+-                        .crossfade(true)
+-                        .components {
+-                            add(
+-                                OkHttpNetworkFetcherFactory(
+-                                    callFactory = { okHttpClient },
+-                                    cacheStrategy = { CacheControlCacheStrategy() },
+-                                )
+-                            )
+-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+-                                add(AnimatedImageDecoder.Factory())
+-                            } else {
+-                                add(GifDecoder.Factory())
+-                            }
+-                            add(SvgDecoder.Factory(scaleToDensity = true))
+-                        }
+-                        .build()
+-                }
+-                AppRoutes()
+-            }
+-        }
+-    }
+-
+-    private fun disableNavigationBarContrast() {
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+-            window.isNavigationBarContrastEnforced = false
+-        }
+-    }
+-
++        }
++        setContent {
++            RikkahubTheme {
++                setSingletonImageLoaderFactory { context ->
++                    ImageLoader.Builder(context)
++                        .crossfade(true)
++                        .components {
++                            add(
++                                OkHttpNetworkFetcherFactory(
++                                    callFactory = { okHttpClient },
++                                    cacheStrategy = { CacheControlCacheStrategy() },
++                                )
++                            )
++                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++                                add(AnimatedImageDecoder.Factory())
++                            } else {
++                                add(GifDecoder.Factory())
++                            }
++                            add(SvgDecoder.Factory(scaleToDensity = true))
++                        }
++                        .build()
++                }
++                AppRoutes()
++            }
++        }
++    }
++
++    private fun disableNavigationBarContrast() {
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++            window.isNavigationBarContrastEnforced = false
++        }
++    }
++
+     override fun onNewIntent(intent: Intent) {
+         super.onNewIntent(intent)
+         setIntent(intent)
+         handleIntent(intent)
+-    }
+-
++    }
++
+     private fun handleIntent(intent: Intent) {
+         val backStack = navStack ?: run {
+             // Compose 尚未创建导航栈，待就绪后处理。
+             pendingIntents.addLast(intent)
+-            return
+-        }
++            return
++        }
+         val destination = when (intent.action) {
+             ACTION_TRANSLATE -> Screen.Translator
+             Intent.ACTION_SEND -> Screen.ShareHandler(
+@@ -228,507 +233,542 @@ class RouteActivity : ComponentActivity() {
+         }
+         if (destination != null && backStack.lastOrNull() != destination) {
+             backStack.add(destination)
+-        }
+-    }
+-
+-    @OptIn(ExperimentalComposeUiApi::class)
+-    @Composable
+-    fun AppRoutes() {
+-        val toastState = rememberToasterState()
+-        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+-        val tts = rememberCustomTtsState()
+-        val asr = rememberCustomAsrState()
+-        val eventBus = koinInject<AppEventBus>()
+-        LaunchedEffect(tts) {
+-            eventBus.events.collect { event ->
+-                when (event) {
+-                    is AppEvent.Speak -> tts.speak(event.text)
+-                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
+-                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
+-                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
+-                }
+-            }
+-        }
+-        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
+-
+-        val startScreen = Screen.Chat(
+-            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
+-                Uuid.random().toString()
+-            } else {
+-                readStringPreference(
+-                    "lastConversationId",
+-                    Uuid.random().toString()
+-                ) ?: Uuid.random().toString()
+-            }
+-        )
+-
++        }
++    }
++
++    @OptIn(ExperimentalComposeUiApi::class)
++    @Composable
++    fun AppRoutes() {
++        val toastState = rememberToasterState()
++        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
++        val tts = rememberCustomTtsState()
++        val asr = rememberCustomAsrState()
++        val eventBus = koinInject<AppEventBus>()
++        LaunchedEffect(tts) {
++            eventBus.events.collect { event ->
++                when (event) {
++                    is AppEvent.Speak -> tts.speak(event.text)
++                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
++                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
++                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
++                }
++            }
++        }
++        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
++
++        val startScreen = Screen.Chat(
++            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
++                Uuid.random().toString()
++            } else {
++                readStringPreference(
++                    "lastConversationId",
++                    Uuid.random().toString()
++                ) ?: Uuid.random().toString()
++            }
++        )
++
+         val backStack = rememberNavBackStack(startScreen)
+         SideEffect {
+             navStack = backStack
+             while (pendingIntents.isNotEmpty()) {
+                 handleIntent(pendingIntents.removeFirst())
+             }
+-        }
+-
+-        SharedTransitionLayout {
+-            CompositionLocalProvider(
+-                LocalNavController provides Navigator(backStack),
+-                LocalSharedTransitionScope provides this,
+-                LocalSettings provides settings,
+-                LocalToaster provides toastState,
+-                LocalTTSState provides tts,
+-                LocalASRState provides asr,
+-            ) {
+-                Toaster(
+-                    state = toastState,
+-                    darkTheme = LocalDarkMode.current,
+-                    richColors = true,
+-                    alignment = Alignment.TopCenter,
+-                    showCloseButton = true,
+-                )
+-                TTSController()
+-                Box(
+-                    modifier = Modifier
+-                        .fillMaxSize()
+-                        .semantics { testTagsAsResourceId = true }
+-                        .background(MaterialTheme.colorScheme.background)
+-                ) {
+-                    NavDisplay(
+-                        backStack = backStack,
+-                        entryDecorators = listOf(
+-                            rememberSaveableStateHolderNavEntryDecorator(),
+-                            rememberViewModelStoreNavEntryDecorator(),
+-                        ),
+-                        modifier = Modifier.fillMaxSize(),
+-                        onBack = { backStack.removeLastOrNull() },
+-                        transitionSpec = {
+-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+-                            else {
+-                                slideInHorizontally { it } togetherWith
+-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+-                            }
+-                        },
+-                        popTransitionSpec = {
+-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+-                                slideOutHorizontally { it }
+-                        },
+-                        predictivePopTransitionSpec = {
+-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+-                                slideOutHorizontally { it }
+-                        },
+-                        entryProvider = entryProvider {
+-                            entry<Screen.Chat>(
+-                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+-                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+-                            ) { key ->
+-                                ChatPage(
+-                                    id = Uuid.parse(key.id),
+-                                    text = key.text,
+-                                    files = key.files.map { it.toUri() },
+-                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
+-                                )
+-                            }
+-
+-                            entry<Screen.ShareHandler> { key ->
+-                                ShareHandlerPage(
+-                                    text = key.text,
+-                                    image = key.streamUri
+-                                )
+-                            }
+-
+-                            entry<Screen.History> {
+-                                HistoryPage()
+-                            }
+-
+-                            entry<Screen.Favorite> {
+-                                FavoritePage()
+-                            }
+-
+-                            entry<Screen.Assistant> {
+-                                AssistantPage()
+-                            }
+-
+-                            entry<Screen.AssistantDetail> { key ->
+-                                AssistantDetailPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantBasic> { key ->
+-                                AssistantBasicPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantPrompt> { key ->
+-                                AssistantPromptPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantMemory> { key ->
+-                                AssistantMemoryPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantRequest> { key ->
+-                                AssistantRequestPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantMcp> { key ->
+-                                AssistantMcpPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantLocalTool> { key ->
+-                                AssistantLocalToolPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantInjections> { key ->
+-                                AssistantExtensionsPage(key.id)
+-                            }
+-
+-                            entry<Screen.Translator> {
+-                                TranslatorPage()
+-                            }
+-
+-                            entry<Screen.Setting> {
+-                                SettingPage()
+-                            }
+-
+-                            entry<Screen.Backup> {
+-                                BackupPage()
+-                            }
+-
+-                            entry<Screen.ImageGen> {
+-                                ImageGenPage()
+-                            }
+-
+-                            entry<Screen.WebView> { key ->
+-                                WebViewPage(key.url, key.contentId)
+-                            }
+-
+-                            entry<Screen.SettingTheme> {
+-                                SettingThemePage()
+-                            }
+-
+-                            entry<Screen.SettingPreferences> {
+-                                SettingPreferencesPage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesTheme> {
+-                                SettingPreferencesThemePage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesNotification> {
+-                                SettingPreferencesNotificationPage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesGeneral> {
+-                                SettingPreferencesGeneralPage()
+-                            }
+-
++        }
++
++        SharedTransitionLayout {
++            CompositionLocalProvider(
++                LocalNavController provides Navigator(backStack),
++                LocalSharedTransitionScope provides this,
++                LocalSettings provides settings,
++                LocalToaster provides toastState,
++                LocalTTSState provides tts,
++                LocalASRState provides asr,
++            ) {
++                Toaster(
++                    state = toastState,
++                    darkTheme = LocalDarkMode.current,
++                    richColors = true,
++                    alignment = Alignment.TopCenter,
++                    showCloseButton = true,
++                )
++                TTSController()
++                Box(
++                    modifier = Modifier
++                        .fillMaxSize()
++                        .semantics { testTagsAsResourceId = true }
++                        .background(MaterialTheme.colorScheme.background)
++                ) {
++                    NavDisplay(
++                        backStack = backStack,
++                        entryDecorators = listOf(
++                            rememberSaveableStateHolderNavEntryDecorator(),
++                            rememberViewModelStoreNavEntryDecorator(),
++                        ),
++                        modifier = Modifier.fillMaxSize(),
++                        onBack = { backStack.removeLastOrNull() },
++                        transitionSpec = {
++                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
++                            else {
++                                slideInHorizontally { it } togetherWith
++                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
++                            }
++                        },
++                        popTransitionSpec = {
++                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
++                                slideOutHorizontally { it }
++                        },
++                        predictivePopTransitionSpec = {
++                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
++                                slideOutHorizontally { it }
++                        },
++                        entryProvider = entryProvider {
++                            entry<Screen.Chat>(
++                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
++                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
++                            ) { key ->
++                                ChatPage(
++                                    id = Uuid.parse(key.id),
++                                    text = key.text,
++                                    files = key.files.map { it.toUri() },
++                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
++                                )
++                            }
++
++                            entry<Screen.ShareHandler> { key ->
++                                ShareHandlerPage(
++                                    text = key.text,
++                                    image = key.streamUri
++                                )
++                            }
++
++                            entry<Screen.History> {
++                                HistoryPage()
++                            }
++
++                            entry<Screen.Favorite> {
++                                FavoritePage()
++                            }
++
++                            entry<Screen.Assistant> {
++                                AssistantPage()
++                            }
++
++                            entry<Screen.AssistantDetail> { key ->
++                                AssistantDetailPage(key.id)
++                            }
++
++                            entry<Screen.AssistantBasic> { key ->
++                                AssistantBasicPage(key.id)
++                            }
++
++                            entry<Screen.AssistantPrompt> { key ->
++                                AssistantPromptPage(key.id)
++                            }
++
++                            entry<Screen.AssistantMemory> { key ->
++                                AssistantMemoryPage(key.id)
++                            }
++
++                            entry<Screen.AssistantRequest> { key ->
++                                AssistantRequestPage(key.id)
++                            }
++
++                            entry<Screen.AssistantMcp> { key ->
++                                AssistantMcpPage(key.id)
++                            }
++
++                            entry<Screen.AssistantLocalTool> { key ->
++                                AssistantLocalToolPage(key.id)
++                            }
++
++                            entry<Screen.AssistantInjections> { key ->
++                                AssistantExtensionsPage(key.id)
++                            }
++
++                            entry<Screen.Translator> {
++                                TranslatorPage()
++                            }
++
++                            entry<Screen.Setting> {
++                                SettingPage()
++                            }
++
++                            entry<Screen.Backup> {
++                                BackupPage()
++                            }
++
++                            entry<Screen.ImageGen> {
++                                ImageGenPage()
++                            }
++
++                            entry<Screen.WebView> { key ->
++                                WebViewPage(key.url, key.contentId)
++                            }
++
++                            entry<Screen.SettingTheme> {
++                                SettingThemePage()
++                            }
++
++                            entry<Screen.SettingPreferences> {
++                                SettingPreferencesPage()
++                            }
++
++                            entry<Screen.SettingPreferencesTheme> {
++                                SettingPreferencesThemePage()
++                            }
++
++                            entry<Screen.SettingPreferencesNotification> {
++                                SettingPreferencesNotificationPage()
++                            }
++
++                            entry<Screen.SettingPreferencesGeneral> {
++                                SettingPreferencesGeneralPage()
++                            }
++
+                             entry<Screen.SettingPreferencesUI> {
                                  SettingPreferencesUIPage()
                              }
  
@@ -33,11 +832,469 @@ index bef7871..b56ecb8 100644
 +                                SettingPreferencesMaterialPage()
 +                            }
 +
++                            entry<Screen.SettingPreferencesQuote> {
++                                SettingPreferencesQuotePage()
++                            }
++
                              entry<Screen.SettingPreferencesNetwork> {
                                  SettingPreferencesNetworkPage()
                              }
-@@ -657,6 +677,18 @@ sealed interface Screen : NavKey {
-     @Serializable
+-
+-                            entry<Screen.SettingProvider> {
+-                                SettingProviderPage()
+-                            }
+-
+-                            entry<Screen.SettingProviderDetail> { key ->
+-                                val id = Uuid.parse(key.providerId)
+-                                SettingProviderDetailPage(id = id)
+-                            }
+-
+-                            entry<Screen.SettingModels> {
+-                                SettingModelPage()
+-                            }
+-
+-                            entry<Screen.SettingAbout> {
+-                                SettingAboutPage()
+-                            }
+-
+-                            entry<Screen.SettingSearch> {
+-                                SettingSearchPage()
+-                            }
+-
+-                            entry<Screen.SettingSearchDetail> { key ->
+-                                val id = Uuid.parse(key.serviceId)
+-                                SettingSearchDetailPage(id)
+-                            }
+-
+-                            entry<Screen.SettingSpeech> {
+-                                SettingSpeechPage()
+-                            }
+-
+-                            entry<Screen.SettingMcp> {
+-                                SettingMcpPage()
+-                            }
+-
+-                            entry<Screen.SettingDonate> {
+-                                SettingDonatePage()
+-                            }
+-
+-                            entry<Screen.SettingFiles> {
+-                                SettingFilesPage()
+-                            }
+-
+-                            entry<Screen.SettingWeb> {
+-                                SettingWebPage()
+-                            }
+-
+-                            entry<Screen.Debug> {
+-                                DebugPage()
+-                            }
+-
+-                            entry<Screen.Log> {
+-                                LogPage()
+-                            }
+-
+-                            entry<Screen.Extensions> {
+-                                ExtensionsPage()
+-                            }
+-
+-                            entry<Screen.QuickMessages> {
+-                                QuickMessagesPage()
+-                            }
+-
+-                            entry<Screen.Prompts> {
+-                                PromptPage()
+-                            }
+-
+-                            entry<Screen.Skills> {
+-                                SkillsPage()
+-                            }
+-
+-                            entry<Screen.Workspaces> {
+-                                WorkspacePage()
+-                            }
+-
+-                            entry<Screen.WorkspaceDetail> { key ->
+-                                WorkspaceDetailPage(key.id)
+-                            }
+-
+-                            entry<Screen.WorkspaceTerminal> { key ->
+-                                WorkspaceTerminalPage(key.id)
+-                            }
+-
+-                            entry<Screen.WorkspaceFileEditor> { key ->
+-                                WorkspaceFileEditorPage(
+-                                    id = key.id,
+-                                    area = WorkspaceStorageArea.valueOf(key.area),
+-                                    path = key.path,
+-                                )
+-                            }
+-
+-                            entry<Screen.SkillDetail> { key ->
+-                                SkillDetailPage(skillName = key.skillName)
+-                            }
+-
+-                            entry<Screen.MessageSearch> {
+-                                SearchPage()
+-                            }
+-
+-                            entry<Screen.Stats> {
+-                                StatsPage()
+-                            }
+-                        }
+-                    )
+-                    if (BuildConfig.DEBUG) {
+-                        Text(
+-                            text = "[开发模式]",
+-                            modifier = Modifier
+-                                .align(Alignment.TopCenter)
+-                                .padding(top = 4.dp),
+-                            style = MaterialTheme.typography.labelSmall,
+-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+-                        )
+-                    }
+-                    AnimatedVisibility(
+-                        visible = migrationState is MigrationState.Migrating,
+-                        enter = fadeIn(),
+-                        exit = fadeOut(),
+-                        modifier = Modifier.fillMaxSize()
+-                    ) {
+-                        val state = migrationState as? MigrationState.Migrating
+-                        Box(
+-                            modifier = Modifier
+-                                .fillMaxSize()
+-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+-                            contentAlignment = Alignment.Center
+-                        ) {
+-                            Column(
+-                                horizontalAlignment = Alignment.CenterHorizontally,
+-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+-                            ) {
+-                                CircularProgressIndicator()
+-                                Text(
+-                                    text = stringResource(R.string.db_migrating),
+-                                    style = MaterialTheme.typography.bodyLarge
+-                                )
+-                                if (state != null) {
+-                                    Text(
+-                                        text = "v${state.from} → v${state.to}",
+-                                        style = MaterialTheme.typography.bodySmall,
+-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+-                                    )
+-                                }
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-sealed interface Screen : NavKey {
+-    @Serializable
+-    data class Chat(
+-        val id: String,
+-        val text: String? = null,
+-        val files: List<String> = emptyList(),
+-        val nodeId: String? = null
+-    ) : Screen
+-
+-    @Serializable
+-    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
+-
+-    @Serializable
+-    data object History : Screen
+-
+-    @Serializable
+-    data object Favorite : Screen
+-
+-    @Serializable
+-    data object Assistant : Screen
+-
+-    @Serializable
+-    data class AssistantDetail(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantBasic(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantPrompt(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantMemory(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantRequest(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantMcp(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantLocalTool(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantInjections(val id: String) : Screen
+-
+-    @Serializable
+-    data object Translator : Screen
+-
+-    @Serializable
+-    data object Setting : Screen
+-
+-    @Serializable
+-    data object Backup : Screen
+-
+-    @Serializable
+-    data object ImageGen : Screen
+-
+-    @Serializable
+-    data class WebView(val url: String = "", val contentId: String = "") : Screen
+-
+-    @Serializable
+-    data object SettingTheme : Screen
+-
+-    @Serializable
+-    data object SettingPreferences : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesTheme : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesNotification : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesGeneral : Screen
+-
+-    @Serializable
++
++                            entry<Screen.SettingProvider> {
++                                SettingProviderPage()
++                            }
++
++                            entry<Screen.SettingProviderDetail> { key ->
++                                val id = Uuid.parse(key.providerId)
++                                SettingProviderDetailPage(id = id)
++                            }
++
++                            entry<Screen.SettingModels> {
++                                SettingModelPage()
++                            }
++
++                            entry<Screen.SettingAbout> {
++                                SettingAboutPage()
++                            }
++
++                            entry<Screen.SettingSearch> {
++                                SettingSearchPage()
++                            }
++
++                            entry<Screen.SettingSearchDetail> { key ->
++                                val id = Uuid.parse(key.serviceId)
++                                SettingSearchDetailPage(id)
++                            }
++
++                            entry<Screen.SettingSpeech> {
++                                SettingSpeechPage()
++                            }
++
++                            entry<Screen.SettingMcp> {
++                                SettingMcpPage()
++                            }
++
++                            entry<Screen.SettingDonate> {
++                                SettingDonatePage()
++                            }
++
++                            entry<Screen.SettingFiles> {
++                                SettingFilesPage()
++                            }
++
++                            entry<Screen.SettingWeb> {
++                                SettingWebPage()
++                            }
++
++                            entry<Screen.Debug> {
++                                DebugPage()
++                            }
++
++                            entry<Screen.Log> {
++                                LogPage()
++                            }
++
++                            entry<Screen.Extensions> {
++                                ExtensionsPage()
++                            }
++
++                            entry<Screen.QuickMessages> {
++                                QuickMessagesPage()
++                            }
++
++                            entry<Screen.Prompts> {
++                                PromptPage()
++                            }
++
++                            entry<Screen.Skills> {
++                                SkillsPage()
++                            }
++
++                            entry<Screen.Workspaces> {
++                                WorkspacePage()
++                            }
++
++                            entry<Screen.WorkspaceDetail> { key ->
++                                WorkspaceDetailPage(key.id)
++                            }
++
++                            entry<Screen.WorkspaceTerminal> { key ->
++                                WorkspaceTerminalPage(key.id)
++                            }
++
++                            entry<Screen.WorkspaceFileEditor> { key ->
++                                WorkspaceFileEditorPage(
++                                    id = key.id,
++                                    area = WorkspaceStorageArea.valueOf(key.area),
++                                    path = key.path,
++                                )
++                            }
++
++                            entry<Screen.SkillDetail> { key ->
++                                SkillDetailPage(skillName = key.skillName)
++                            }
++
++                            entry<Screen.MessageSearch> {
++                                SearchPage()
++                            }
++
++                            entry<Screen.Stats> {
++                                StatsPage()
++                            }
++                        }
++                    )
++                    if (BuildConfig.DEBUG) {
++                        Text(
++                            text = "[开发模式]",
++                            modifier = Modifier
++                                .align(Alignment.TopCenter)
++                                .padding(top = 4.dp),
++                            style = MaterialTheme.typography.labelSmall,
++                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
++                        )
++                    }
++                    AnimatedVisibility(
++                        visible = migrationState is MigrationState.Migrating,
++                        enter = fadeIn(),
++                        exit = fadeOut(),
++                        modifier = Modifier.fillMaxSize()
++                    ) {
++                        val state = migrationState as? MigrationState.Migrating
++                        Box(
++                            modifier = Modifier
++                                .fillMaxSize()
++                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
++                            contentAlignment = Alignment.Center
++                        ) {
++                            Column(
++                                horizontalAlignment = Alignment.CenterHorizontally,
++                                verticalArrangement = Arrangement.spacedBy(16.dp)
++                            ) {
++                                CircularProgressIndicator()
++                                Text(
++                                    text = stringResource(R.string.db_migrating),
++                                    style = MaterialTheme.typography.bodyLarge
++                                )
++                                if (state != null) {
++                                    Text(
++                                        text = "v${state.from} → v${state.to}",
++                                        style = MaterialTheme.typography.bodySmall,
++                                        color = MaterialTheme.colorScheme.onSurfaceVariant
++                                    )
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
++
++sealed interface Screen : NavKey {
++    @Serializable
++    data class Chat(
++        val id: String,
++        val text: String? = null,
++        val files: List<String> = emptyList(),
++        val nodeId: String? = null
++    ) : Screen
++
++    @Serializable
++    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
++
++    @Serializable
++    data object History : Screen
++
++    @Serializable
++    data object Favorite : Screen
++
++    @Serializable
++    data object Assistant : Screen
++
++    @Serializable
++    data class AssistantDetail(val id: String) : Screen
++
++    @Serializable
++    data class AssistantBasic(val id: String) : Screen
++
++    @Serializable
++    data class AssistantPrompt(val id: String) : Screen
++
++    @Serializable
++    data class AssistantMemory(val id: String) : Screen
++
++    @Serializable
++    data class AssistantRequest(val id: String) : Screen
++
++    @Serializable
++    data class AssistantMcp(val id: String) : Screen
++
++    @Serializable
++    data class AssistantLocalTool(val id: String) : Screen
++
++    @Serializable
++    data class AssistantInjections(val id: String) : Screen
++
++    @Serializable
++    data object Translator : Screen
++
++    @Serializable
++    data object Setting : Screen
++
++    @Serializable
++    data object Backup : Screen
++
++    @Serializable
++    data object ImageGen : Screen
++
++    @Serializable
++    data class WebView(val url: String = "", val contentId: String = "") : Screen
++
++    @Serializable
++    data object SettingTheme : Screen
++
++    @Serializable
++    data object SettingPreferences : Screen
++
++    @Serializable
++    data object SettingPreferencesTheme : Screen
++
++    @Serializable
++    data object SettingPreferencesNotification : Screen
++
++    @Serializable
++    data object SettingPreferencesGeneral : Screen
++
++    @Serializable
      data object SettingPreferencesUI : Screen
  
 +    @Serializable
@@ -52,11 +1309,159 @@ index bef7871..b56ecb8 100644
 +    @Serializable
 +    data object SettingPreferencesMaterial : Screen
 +
++    @Serializable
++    data object SettingPreferencesQuote : Screen
++
      @Serializable
      data object SettingPreferencesNetwork : Screen
- 
+-
+-    @Serializable
+-    data object SettingProvider : Screen
+-
+-    @Serializable
+-    data class SettingProviderDetail(val providerId: String) : Screen
+-
+-    @Serializable
+-    data object SettingModels : Screen
+-
+-    @Serializable
+-    data object SettingAbout : Screen
+-
+-    @Serializable
+-    data object SettingSearch : Screen
+-
+-    @Serializable
+-    data class SettingSearchDetail(val serviceId: String) : Screen
+-
+-    @Serializable
+-    data object SettingSpeech : Screen
+-
+-    @Serializable
+-    data object SettingMcp : Screen
+-
+-    @Serializable
+-    data object SettingDonate : Screen
+-
+-    @Serializable
+-    data object SettingFiles : Screen
+-
+-    @Serializable
+-    data object SettingWeb : Screen
+-
+-    @Serializable
+-    data object Debug : Screen
+-
+-    @Serializable
+-    data object Log : Screen
+-
+-    @Serializable
+-    data object Extensions : Screen
+-
+-    @Serializable
+-    data object QuickMessages : Screen
+-
+-    @Serializable
+-    data object Prompts : Screen
+-
+-    @Serializable
+-    data object Skills : Screen
+-
+-    @Serializable
+-    data object Workspaces : Screen
+-
+-    @Serializable
+-    data class WorkspaceDetail(val id: String) : Screen
+-
+-    @Serializable
+-    data class WorkspaceTerminal(val id: String) : Screen
+-
+-    @Serializable
+-    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
+-
+-    @Serializable
+-    data class SkillDetail(val skillName: String) : Screen
+-
+-    @Serializable
+-    data object MessageSearch : Screen
+-
+-    @Serializable
+-    data object Stats : Screen
+-}
++
++    @Serializable
++    data object SettingProvider : Screen
++
++    @Serializable
++    data class SettingProviderDetail(val providerId: String) : Screen
++
++    @Serializable
++    data object SettingModels : Screen
++
++    @Serializable
++    data object SettingAbout : Screen
++
++    @Serializable
++    data object SettingSearch : Screen
++
++    @Serializable
++    data class SettingSearchDetail(val serviceId: String) : Screen
++
++    @Serializable
++    data object SettingSpeech : Screen
++
++    @Serializable
++    data object SettingMcp : Screen
++
++    @Serializable
++    data object SettingDonate : Screen
++
++    @Serializable
++    data object SettingFiles : Screen
++
++    @Serializable
++    data object SettingWeb : Screen
++
++    @Serializable
++    data object Debug : Screen
++
++    @Serializable
++    data object Log : Screen
++
++    @Serializable
++    data object Extensions : Screen
++
++    @Serializable
++    data object QuickMessages : Screen
++
++    @Serializable
++    data object Prompts : Screen
++
++    @Serializable
++    data object Skills : Screen
++
++    @Serializable
++    data object Workspaces : Screen
++
++    @Serializable
++    data class WorkspaceDetail(val id: String) : Screen
++
++    @Serializable
++    data class WorkspaceTerminal(val id: String) : Screen
++
++    @Serializable
++    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
++
++    @Serializable
++    data class SkillDetail(val skillName: String) : Screen
++
++    @Serializable
++    data object MessageSearch : Screen
++
++    @Serializable
++    data object Stats : Screen
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..c97fdd2 100644
+index 205e822..e6dded6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -76,7 +1481,7 @@ index 205e822..c97fdd2 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +614,58 @@ enum class BackgroundEffectType {
+@@ -604,17 +614,73 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -115,6 +1520,21 @@ index 205e822..c97fdd2 100644
 +    NEUTRAL,
 +}
 +
++/**
++ * 对白下划线样式。
++ *
++ * 只做「无」和「实线」两种：Compose 的 `SpanStyle` 只能画实线下划线（`TextDecoration` 没有虚线能力），
++ * 虚线必须自绘，风险太高，这一版明确不做。新增枚举值带 `@SerialName`，老数据反序列化不受影响。
++ */
++@Serializable
++enum class QuoteUnderline {
++    @SerialName("none")
++    NONE,
++
++    @SerialName("solid")
++    SOLID,
++}
++
  @Serializable
  data class DisplaySetting(
      val userAvatar: Avatar = Avatar.Dummy,
@@ -135,7 +1555,7 @@ index 205e822..c97fdd2 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +693,46 @@ data class DisplaySetting(
+@@ -642,8 +708,56 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -152,10 +1572,20 @@ index 205e822..c97fdd2 100644
 +    // 主题基色：给一个颜色自动生成整套浅色/深色配色，null 表示不启用
 +    val themeSeedColor: Long? = null,
 +    val chatTextColor: Long? = null,
++    // 消息时间颜色：null 表示跟随正文文字色（chatTextColor），正文也是默认时再退回主题 onSurface
++    val messageTimeColor: Long? = null,
 +    // 引号内文字高亮：开启后 AI 回复里被 “…” / "..." 包住的文字用 quoteHighlightColor 显示
 +    val enableQuoteHighlight: Boolean = false,
 +    // 引号高亮色，null 表示跟随主题（tertiary）
 +    val quoteHighlightColor: Long? = null,
++    // 对白样式·背景色：null 表示不加底色，取值是 ARGB（0xAARRGGBB），透明度由下面那项控制
++    val quoteHighlightBackground: Long? = null,
++    // 对白样式·背景透明度：0f = 完全透明，1f = 完全不透明，滑块步长 0.05
++    val quoteHighlightBackgroundAlpha: Float = 0.18f,
++    // 对白样式·下划线：NONE / SOLID（虚线这一版不做，见 QuoteUnderline）
++    val quoteUnderline: QuoteUnderline = QuoteUnderline.NONE,
++    // 对白样式·下划线颜色：null 表示跟随文字颜色
++    val quoteUnderlineColor: Long? = null,
 +    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
 +    val recentColors: List<Long> = emptyList(),
 +    // 气泡圆角（dp），-1 表示沿用默认圆角
@@ -1034,7 +2464,7 @@ index 20f0c33..015bddc 100644
                  color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                  maxLines = 1,
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
-index b66320e..3b6258e 100644
+index b66320e..58ab1e3 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt
 @@ -1,13 +1,17 @@
@@ -1118,7 +2548,7 @@ index b66320e..3b6258e 100644
              verticalAlignment = Alignment.CenterVertically,
              modifier = modifier
          ) {
-@@ -72,47 +95,73 @@ fun ChatMessageAssistantAvatar(
+@@ -72,47 +95,79 @@ fun ChatMessageAssistantAvatar(
                  if (showIcon) {
                      UIAvatar(
                          name = assistant.name,
@@ -1193,6 +2623,10 @@ index b66320e..3b6258e 100644
 +/**
 + * 昵称下方的那一行消息时间。
 + * 只在「在消息中显示日期和时间」和「时间显示在昵称下方」都打开时出现，格式固定为 2026年5月20日 23:06:49。
++ *
++ * 颜色三级回退：自己设的「消息时间颜色」→「聊天正文文字色」→ 主题 onSurface。
++ * 之前只有「正文色 → onSurfaceVariant 60%」两级，正文色没自定义（跟主题默认）时时间就不跟正文走，
++ * 所以这里补上独立的时间颜色，并让最终兜底和正文的默认色一致。
 + */
 +@Composable
 +fun ChatMessageHeaderTime(
@@ -1206,17 +2640,19 @@ index b66320e..3b6258e 100644
 +    val timeText = remember(message.createdAt) {
 +        message.createdAt.toJavaLocalDateTime().toMessageTimeFullString()
 +    }
-+    val customTextColor = settings.chatTextColor?.let { Color(it) }
++    val timeColor = settings.messageTimeColor?.let { Color(it) }
++        ?: settings.chatTextColor?.let { Color(it) }
++        ?: MaterialTheme.colorScheme.onSurface
 +    Text(
 +        text = timeText,
 +        style = MaterialTheme.typography.labelSmall,
-+        color = customTextColor ?: MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
++        color = timeColor,
 +        maxLines = 1,
 +        modifier = modifier,
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..3dccced 100644
+index 3d21e9f..dce474f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -623,7 +623,7 @@ private fun MarkdownNode(
@@ -1232,8 +2668,8 @@ index 3d21e9f..3dccced 100644
          node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
      }
      val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
-+    // 引号内文字高亮色：开关关掉时是 null，整条渲染路径与改动前一致
-+    val quoteColor = quoteHighlightColorOrNull()
++    // 对白样式（颜色 / 底色 / 下划线）：开关关掉时是 null，整条渲染路径与改动前一致
++    val quoteStyle = quoteStyleOrNull()
  
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
@@ -1243,7 +2679,7 @@ index 3d21e9f..3dccced 100644
      ) {
 -        val annotatedString = remember(content, enableLatexRendering, latexColorArgb) {
 +        // 每条消息只切一次引号（key 含 content / 开关 / 颜色），不在组合期反复扫描
-+        val annotatedString = remember(content, enableLatexRendering, latexColorArgb, quoteColor) {
++        val annotatedString = remember(content, enableLatexRendering, latexColorArgb, quoteStyle) {
              buildAnnotatedString {
                  node.children.fastForEach { child ->
                      appendMarkdownNodeContent(
@@ -1251,7 +2687,7 @@ index 3d21e9f..3dccced 100644
                          trim = trim,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
-+                        quoteColor = quoteColor,
++                        quoteStyle = quoteStyle,
                      )
                  }
              }
@@ -1259,8 +2695,8 @@ index 3d21e9f..3dccced 100644
      enableLatexRendering: Boolean = true,
      latexColorArgb: Int = 0,
      onClickCitation: (String) -> Unit = {},
-+    /** 引号高亮色；null 表示不启用（关闭开关时走这个分支，输出与改动前完全一致） */
-+    quoteColor: Color? = null,
++    /** 对白样式；null 表示不启用（关闭开关时走这个分支，输出与改动前完全一致） */
++    quoteStyle: QuoteStyle? = null,
  ) {
      when {
          node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
@@ -1273,7 +2709,7 @@ index 3d21e9f..3dccced 100644
 -            )
 +            // 代码块 / 行内代码在上面的分支里就已经处理完，不会走到这里，
 +            // 所以这里的引号一律是正文里的引号，可以放心上色
-+            appendQuotedText(text = text, quoteColor = quoteColor)
++            appendQuotedText(text = text, quoteStyle = quoteStyle)
          }
  
          node.type == MarkdownElementTypes.EMPH -> {
@@ -1283,7 +2719,7 @@ index 3d21e9f..3dccced 100644
                          latexColorArgb = latexColorArgb,
 -                        onClickCitation = onClickCitation
 +                        onClickCitation = onClickCitation,
-+                        quoteColor = quoteColor
++                        quoteStyle = quoteStyle
                      )
                  }
              }
@@ -1293,7 +2729,7 @@ index 3d21e9f..3dccced 100644
                          latexColorArgb = latexColorArgb,
 -                        onClickCitation = onClickCitation
 +                        onClickCitation = onClickCitation,
-+                        quoteColor = quoteColor
++                        quoteStyle = quoteStyle
                      )
                  }
              }
@@ -1303,7 +2739,7 @@ index 3d21e9f..3dccced 100644
                          latexColorArgb = latexColorArgb,
 -                        onClickCitation = onClickCitation
 +                        onClickCitation = onClickCitation,
-+                        quoteColor = quoteColor
++                        quoteStyle = quoteStyle
                      )
                  }
              }
@@ -1313,12 +2749,12 @@ index 3d21e9f..3dccced 100644
                      latexColorArgb = latexColorArgb,
 -                    onClickCitation = onClickCitation
 +                    onClickCitation = onClickCitation,
-+                    quoteColor = quoteColor
++                    quoteStyle = quoteStyle
                  )
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
-index a316327..23d75b2 100644
+index a316327..aaef8ab 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
 @@ -188,7 +188,7 @@ private fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
@@ -1334,8 +2770,8 @@ index a316327..23d75b2 100644
      val hasInlineMath = element.select("span.math").any { it.attr("inline") == "true" }
      val colorScheme = MaterialTheme.colorScheme
      val textStyle = LocalTextStyle.current
-+    // 引号内文字高亮色：开关关掉时是 null
-+    val quoteColor = quoteHighlightColorOrNull()
++    // 对白样式：开关关掉时是 null
++    val quoteStyle = quoteStyleOrNull()
  
      val (annotatedString, inlineContents) = remember(
          element.outerHtml(),
@@ -1343,7 +2779,7 @@ index a316327..23d75b2 100644
          density,
          textStyle,
          onClickCitation,
-+        quoteColor,
++        quoteStyle,
      ) {
          val contents = mutableMapOf<String, InlineTextContent>()
          val text = buildAnnotatedString {
@@ -1351,7 +2787,7 @@ index a316327..23d75b2 100644
                      style = textStyle,
                      enableLatexRendering = enableLatexRendering,
                      onClickCitation = onClickCitation,
-+                    quoteColor = quoteColor,
++                    quoteStyle = quoteStyle,
                  )
              }
          }
@@ -1359,7 +2795,7 @@ index a316327..23d75b2 100644
      val colorScheme = MaterialTheme.colorScheme
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
-+    val quoteColor = quoteHighlightColorOrNull()
++    val quoteStyle = quoteStyleOrNull()
  
      val key = remember(nodes) { nodes.joinToString("") { if (it is Element) it.outerHtml() else it.toString() } }
      val (annotatedString, inlineContents) = remember(
@@ -1367,7 +2803,7 @@ index a316327..23d75b2 100644
          density,
          textStyle,
          onClickCitation,
-+        quoteColor,
++        quoteStyle,
      ) {
          val contents = mutableMapOf<String, InlineTextContent>()
          val text = buildAnnotatedString {
@@ -1375,7 +2811,7 @@ index a316327..23d75b2 100644
                      style = textStyle,
                      enableLatexRendering = enableLatexRendering,
                      onClickCitation = onClickCitation,
-+                    quoteColor = quoteColor,
++                    quoteStyle = quoteStyle,
                  )
              }
          }
@@ -1392,12 +2828,12 @@ index a316327..23d75b2 100644
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
-+    /** 引号高亮色；null 表示不启用。`<code>` / `<pre>` 走独立分支，不会经过这里上色 */
-+    quoteColor: Color? = null,
++    /** 对白样式；null 表示不启用。`<code>` / `<pre>` 走独立分支，不会经过这里上色 */
++    quoteStyle: QuoteStyle? = null,
  ) {
      when (node) {
 -        is TextNode -> append(node.text())
-+        is TextNode -> appendQuotedText(text = node.text(), quoteColor = quoteColor)
++        is TextNode -> appendQuotedText(text = node.text(), quoteStyle = quoteStyle)
          is Element -> appendHtmlInlineElement(
              element = node,
              colorScheme = colorScheme,
@@ -1405,7 +2841,7 @@ index a316327..23d75b2 100644
              style = style,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
-+            quoteColor = quoteColor,
++            quoteStyle = quoteStyle,
          )
      }
  }
@@ -1413,7 +2849,7 @@ index a316327..23d75b2 100644
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
-+    quoteColor: Color? = null,
++    quoteStyle: QuoteStyle? = null,
  ) {
      val cssStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
          parseInlineSpanStyle(
@@ -1421,16 +2857,16 @@ index a316327..23d75b2 100644
              style = inheritedStyle,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
-+            quoteColor = quoteColor,
++            quoteStyle = quoteStyle,
          )
      }
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..cc1ef3a
+index 0000000..96cf4f5
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,219 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.MaterialTheme
@@ -1440,7 +2876,9 @@ index 0000000..cc1ef3a
 +import androidx.compose.ui.text.AnnotatedString
 +import androidx.compose.ui.text.SpanStyle
 +import androidx.compose.ui.text.buildAnnotatedString
++import androidx.compose.ui.text.style.TextDecoration
 +import androidx.compose.ui.text.withStyle
++import me.rerere.rikkahub.data.datastore.QuoteUnderline
 +import me.rerere.rikkahub.ui.context.LocalSettings
 +
 +/**
@@ -1449,13 +2887,13 @@ index 0000000..cc1ef3a
 + * 2.5.3 的 markdown 渲染没有「主题」对象可以配置（`com.github.rikkahub:markdown` 只提供
 + * org.intellij.markdown 的解析器，AST → Compose 的渲染全部在 [Markdown] / [MarkdownNew] 里），
 + * 所以这里不走「把引号内容伪装成别的内联元素」的预处理，直接在渲染层的文本追加点上给引号内的
-+ * 那一段文字套一个 `SpanStyle(color = 引号高亮色)`：
++ * 那一段文字套一个完整的 `SpanStyle`（文字色 + 半透明底色 + 实线下划线，见 [QuoteStyle.toSpanStyle]）：
 + *
 + * - 不新增任何 markdown 语法，消息原文不改，复制/导出拿到的还是用户看到的原文；
 + * - 代码天然不受影响：行内代码（CODE_SPAN / `<code>`）和代码块（CODE_FENCE / `<pre>`）在渲染器里
 + *   都有独立分支，文本压根不经过 [appendQuotedText]，不需要正则去跳过 ``` 围栏；
-+ * - 关闭开关时 [quoteHighlightColorOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
-+ *   与改动前的输出完全一致。
++ * - 关闭开关时 [quoteStyleOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
++ *   与改动前的输出逐像素一致。
 + */
 +
 +/** 中文左引号、中文右引号、英文双引号。单引号 / 「」不处理，避免把英文撇号和日式引用一起染上色。 */
@@ -1546,19 +2984,59 @@ index 0000000..cc1ef3a
 +)
 +
 +/**
-+ * 往 AnnotatedString 里追加一段纯文本，[quoteColor] 非 null 时给引号内的文字套上颜色。
++ * 一条消息的「对白样式」：引号内文字的颜色 + 可选底色 + 可选下划线。
 + *
-+ * 只加 color，不动 fontFamily / fontSize / fontStyle，所以外面已有的加粗、斜体、删除线、
-+ * 链接、行内公式等样式不会被破坏。
++ * [background] 是已经乘好透明度的颜色（见 [quoteStyleOrNull]），null 表示不加底色；
++ * [underlineColor] null 表示跟随文字颜色。整个对象是不可变 data class，可以直接当 `remember` 的 key 用
++ * （Compose 的 `Color` 是值类，比较的是 ARGB），改任何一个字段都会让缓存失效重新拼 AnnotatedString。
 + */
-+internal fun AnnotatedString.Builder.appendQuotedText(text: String, quoteColor: Color?) {
-+    if (quoteColor == null) {
++internal data class QuoteStyle(
++    val color: Color,
++    val background: Color? = null,
++    val underline: QuoteUnderline = QuoteUnderline.NONE,
++    val underlineColor: Color? = null,
++) {
++    /** 只有 SOLID 才画下划线 */
++    val hasUnderline: Boolean get() = underline == QuoteUnderline.SOLID
++}
++
++/**
++ * 把 [QuoteStyle] 拼成真正交给渲染层的 `SpanStyle`。
++ *
++ * - `color`：引号内文字颜色；
++ * - `background`：带 alpha 的颜色就是「半透明底色」，`Color.Unspecified` 等价于不设背景；
++ * - `textDecoration`：只在实线时给 `TextDecoration.Underline`，不设时传 null（继承外层样式）。
++ *
++ * 刻意只动这三样：fontFamily / fontSize / fontWeight / fontStyle / shadow 都不碰，外面已有的加粗、
++ * 斜体、删除线、链接、行内公式样式不会被破坏。
++ *
++ * 明确不做虚线：`TextDecoration` 只有实线，虚线要自绘，风险太高。
++ * 同理 `SpanStyle` 没有「独立下划线颜色」槽位，下划线永远和这个 span 的文字同色，
++ * 所以 [QuoteStyle.underlineColor] 只做落库和界面预览，不进 SpanStyle（见报告说明）。
++ */
++internal fun QuoteStyle.toSpanStyle(): SpanStyle {
++    return SpanStyle(
++        color = color,
++        background = background ?: Color.Unspecified,
++        textDecoration = if (hasUnderline) TextDecoration.Underline else null,
++    )
++}
++
++/**
++ * 往 AnnotatedString 里追加一段纯文本，[quoteStyle] 非 null 时给引号内的文字套上完整对白样式
++ * （颜色 + 底色 + 下划线）。
++ *
++ * [quoteStyle] 为 null 时退化成 `append(text)`，逐像素与改动前的渲染一致。
++ */
++internal fun AnnotatedString.Builder.appendQuotedText(text: String, quoteStyle: QuoteStyle?) {
++    if (quoteStyle == null) {
 +        append(text)
 +        return
 +    }
++    val spanStyle = quoteStyle.toSpanStyle()
 +    splitQuotedSegments(text).forEach { segment ->
 +        if (segment.quoted) {
-+            withStyle(SpanStyle(color = quoteColor)) {
++            withStyle(spanStyle) {
 +                append(segment.text)
 +            }
 +        } else {
@@ -1568,29 +3046,44 @@ index 0000000..cc1ef3a
 +}
 +
 +/**
-+ * 当前这条消息该用的引号高亮色：开关关掉就是 null（渲染路径完全不变）；
++ * 当前这条消息该用的对白样式：开关关掉就是 null（渲染路径完全不变）；
 + * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
++ *
++ * 底色的最终 alpha 直接取「背景透明度」滑块（取色盘里那个 alpha 不参与，避免两处透明度打架），
++ * 滑块为 0 时视为「不加底色」。
 + */
 +@Composable
-+internal fun quoteHighlightColorOrNull(): Color? {
++internal fun quoteStyleOrNull(): QuoteStyle? {
 +    val displaySetting = LocalSettings.current.displaySetting
 +    if (!displaySetting.enableQuoteHighlight) return null
-+    val custom = displaySetting.quoteHighlightColor
-+    if (custom != null) return Color(custom)
 +    val colorScheme = MaterialTheme.colorScheme
 +    // tertiary 是 Material3 的必有槽位，真拿不到（Unspecified）时退回 primary 兜底
-+    return if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
++    val themeQuoteColor =
++        if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
++    val textColor = displaySetting.quoteHighlightColor?.let { Color(it) } ?: themeQuoteColor
++    val backgroundAlpha = displaySetting.quoteHighlightBackgroundAlpha.coerceIn(0f, 1f)
++    val backgroundColor = displaySetting.quoteHighlightBackground
++        ?.let { Color(it) }
++        ?.takeIf { backgroundAlpha > 0f }
++        ?.copy(alpha = backgroundAlpha)
++    return QuoteStyle(
++        color = textColor,
++        background = backgroundColor,
++        underline = displaySetting.quoteUnderline,
++        underlineColor = displaySetting.quoteUnderlineColor?.let { Color(it) },
++    )
 +}
 +
 +/**
 + * 给独立渲染的文本节点用（不走 AnnotatedString 段落的那几条分支）。
-+ * 每条消息只算一次：key 是文本 + 颜色，开关关掉时等价于 `AnnotatedString(text)`。
++ * 每条消息只算一次：key 是文本 + 整个 [QuoteStyle]（颜色 / 底色 / 下划线 / 下划线颜色都在里面），
++ * 开关关掉时等价于 `AnnotatedString(text)`。
 + */
 +@Composable
 +internal fun rememberQuotedText(text: String): AnnotatedString {
-+    val quoteColor = quoteHighlightColorOrNull()
-+    return remember(text, quoteColor) {
-+        buildAnnotatedString { appendQuotedText(text = text, quoteColor = quoteColor) }
++    val quoteStyle = quoteStyleOrNull()
++    return remember(text, quoteStyle) {
++        buildAnnotatedString { appendQuotedText(text = text, quoteStyle = quoteStyle) }
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt
@@ -3053,10 +4546,10 @@ index 0000000..a96c05b
 +)
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
 new file mode 100644
-index 0000000..ae8fc28
+index 0000000..4f17f67
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
-@@ -0,0 +1,413 @@
+@@ -0,0 +1,373 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -3078,7 +4571,6 @@ index 0000000..ae8fc28
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.RadioButton
 +import androidx.compose.material3.Scaffold
-+import androidx.compose.material3.Switch
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
 +import androidx.compose.material3.TopAppBarDefaults
@@ -3108,10 +4600,11 @@ index 0000000..ae8fc28
 +import org.koin.androidx.compose.koinViewModel
 +
 +/**
-+ * 颜色自定义页：顶部「主题基色」+ 气泡 / 背景 / 输入框 / 主色调 / 正文文字色共 6 个颜色。
++ * 颜色自定义页：顶部「主题基色」+ 配色风格 + 气泡 / 背景 / 输入框 / 主色调 / 正文文字色 / 消息时间颜色共 7 个颜色。
 + *
 + * 所有颜色都是可选项，`null` 表示「跟随主题」。点任意一行都打开取色盘（色域 + 色相 + 透明度 + HEX + 记忆色），
-+ * 只有点「确认」才会写回设置。透明度滑块在「透明度设置」页，气泡圆角和插图素材在「插图素材」页。
++ * 只有点「确认」才会写回设置。透明度滑块在「透明度设置」页，气泡圆角和插图素材在「插图素材」页，
++ * 「对白样式」（引号高亮 / 底色 / 下划线）已经搬到 SettingPreferencesQuotePage。
 + */
 +@Composable
 +fun SettingPreferencesColorsPage(vm: SettingVM = koinViewModel()) {
@@ -3196,16 +4689,15 @@ index 0000000..ae8fc28
 +            supporting = { it?.toHexArgb() ?: "跟随主题" },
 +            apply = { setting, value -> setting.copy(chatTextColor = value) },
 +        ),
-+    )
-+
-+    // 引号内文字高亮色：默认跟随主题的 tertiary 色
-+    val quoteField = ColorField(
-+        key = "quoteHighlight",
-+        title = "引号高亮颜色",
-+        value = displaySetting.quoteHighlightColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
-+        supporting = { it?.toHexArgb() ?: "跟随主题（tertiary 色）" },
-+        apply = { setting, value -> setting.copy(quoteHighlightColor = value) },
++        // 消息时间颜色：三级回退（自己设的颜色 → 正文文字色 → 主题 onSurface），所以副标题写「跟随正文」
++        ColorField(
++            key = "messageTime",
++            title = "消息时间颜色",
++            value = displaySetting.messageTimeColor,
++            preview = MaterialTheme.colorScheme.onSurface,
++            supporting = { it?.toHexArgb() ?: "跟随正文文字色" },
++            apply = { setting, value -> setting.copy(messageTimeColor = value) },
++        ),
 +    )
 +
 +    Scaffold(
@@ -3281,50 +4773,11 @@ index 0000000..ae8fc28
 +                    }
 +                }
 +            }
-+            // 引号内文字高亮：开关 + 颜色，关掉时 AI 回复的样式与原来完全一致
-+            item {
-+                CardGroup(
-+                    modifier = Modifier.padding(horizontal = 8.dp),
-+                    title = { Text("引号高亮") },
-+                ) {
-+                    item(
-+                        headlineContent = { Text("引号内文字高亮") },
-+                        supportingContent = {
-+                            Text("AI 回复里被 “引号” 包住的文字用下面的颜色显示")
-+                        },
-+                        trailingContent = {
-+                            Switch(
-+                                checked = displaySetting.enableQuoteHighlight,
-+                                onCheckedChange = { checked ->
-+                                    applyDisplaySetting { it.copy(enableQuoteHighlight = checked) }
-+                                },
-+                            )
-+                        },
-+                    )
-+                    if (displaySetting.enableQuoteHighlight) {
-+                        item(
-+                            onClick = { colorTargetKey = quoteField.key },
-+                            headlineContent = { Text(quoteField.title) },
-+                            supportingContent = {
-+                                Text(quoteField.supporting(quoteField.value))
-+                            },
-+                            trailingContent = {
-+                                Box(
-+                                    modifier = Modifier
-+                                        .size(28.dp)
-+                                        .clip(CircleShape)
-+                                        .background(quoteField.value?.let { Color(it) } ?: quoteField.preview),
-+                                )
-+                            },
-+                        )
-+                    }
-+                }
-+            }
 +        }
 +    }
 +
 +    val activeField = colorTargetKey?.let { key ->
-+        (listOf(seedField) + colorFields + quoteField).firstOrNull { it.key == key }
++        (listOf(seedField) + colorFields).firstOrNull { it.key == key }
 +    }
 +    if (activeField != null) {
 +        ColorPickerDialog(
@@ -3430,7 +4883,7 @@ index 0000000..ae8fc28
 + * [apply] 是纯函数：拿当前 [DisplaySetting] 和新颜色算出新设置，这样确认时永远基于最新状态改，
 + * 不会因为弹窗开着期间设置变过而把别的字段（比如记忆色）覆盖回去。
 + */
-+private class ColorField(
++internal class ColorField(
 +    val key: String,
 +    val title: String,
 +    val value: Long?,
@@ -3990,10 +5443,10 @@ index 0000000..30e7557
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-index c296a24..7910ae0 100644
+index c296a24..dafc2e6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-@@ -18,9 +18,13 @@ import androidx.compose.ui.unit.dp
+@@ -18,9 +18,14 @@ import androidx.compose.ui.unit.dp
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Notification01
  import me.rerere.hugeicons.stroke.Internet
@@ -4003,11 +5456,12 @@ index c296a24..7910ae0 100644
  import me.rerere.hugeicons.stroke.PaintBoard
  import me.rerere.hugeicons.stroke.Settings03
  import me.rerere.hugeicons.stroke.Sun01
++import me.rerere.hugeicons.stroke.TextSelection
 +import me.rerere.hugeicons.stroke.WebDesign01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
  import me.rerere.rikkahub.ui.components.nav.BackButton
-@@ -65,6 +69,30 @@ fun SettingPreferencesPage() {
+@@ -65,6 +70,36 @@ fun SettingPreferencesPage() {
                          headlineContent = { Text(stringResource(R.string.setting_page_preferences_theme)) },
                          supportingContent = { Text(stringResource(R.string.setting_page_preferences_theme_desc)) },
                      )
@@ -4035,9 +5489,333 @@ index c296a24..7910ae0 100644
 +                        headlineContent = { Text("界面材质") },
 +                        supportingContent = { Text("纯色、磨砂玻璃、液态玻璃") },
 +                    )
++                    item(
++                        onClick = { navController.navigate(Screen.SettingPreferencesQuote) },
++                        leadingContent = { Icon(HugeIcons.TextSelection, null) },
++                        headlineContent = { Text("对白样式") },
++                        supportingContent = { Text("引号内文字的颜色、底色和下划线") },
++                    )
                      item(
                          onClick = { navController.navigate(Screen.SettingPreferencesNotification) },
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
+new file mode 100644
+index 0000000..fbefb78
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
+@@ -0,0 +1,312 @@
++package me.rerere.rikkahub.ui.pages.setting
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.material3.LargeFlexibleTopAppBar
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.SegmentedButton
++import androidx.compose.material3.SegmentedButtonDefaults
++import androidx.compose.material3.SingleChoiceSegmentedButtonRow
++import androidx.compose.material3.Slider
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import kotlin.math.roundToInt
++import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.QuoteUnderline
++import me.rerere.rikkahub.ui.components.nav.BackButton
++import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
++import me.rerere.rikkahub.ui.components.ui.pushRecentColor
++import me.rerere.rikkahub.ui.theme.CustomColors
++import me.rerere.rikkahub.utils.plus
++import org.koin.androidx.compose.koinViewModel
++
++/** 背景透明度滑块的默认值，和 DisplaySetting.quoteHighlightBackgroundAlpha 保持一致 */
++private const val DEFAULT_QUOTE_BACKGROUND_ALPHA = 0.18f
++private val DEFAULT_QUOTE_UNDERLINE = QuoteUnderline.NONE
++
++/** 下划线的两个选项（虚线这一版明确不做，所以只有两项） */
++private val QUOTE_UNDERLINE_OPTIONS = listOf(
++    QuoteUnderline.NONE to "无",
++    QuoteUnderline.SOLID to "实线",
++)
++
++/**
++ * 对白样式页：AI 回复里被 “引号” 包住的文字怎么画。
++ *
++ * 六行：高亮开关 → 文字颜色 → 背景色 → 背景透明度 → 下划线样式 → 下划线颜色。
++ * 所有字段都带默认值（开关关、无底色、无下划线），默认状态下渲染结果与没有这个功能时逐像素一致。
++ *
++ * 明确不做虚线：`SpanStyle` 的 `TextDecoration` 只有实线，虚线必须自绘，风险太高。
++ */
++@Composable
++fun SettingPreferencesQuotePage(vm: SettingVM = koinViewModel()) {
++    val settings by vm.settings.collectAsStateWithLifecycle()
++    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
++    // 只记「正在改哪一项」的 key，颜色值 / 更新函数每次都从当前组合里重新取，避免弹窗拿到过期的闭包
++    var colorTargetKey by remember { mutableStateOf<String?>(null) }
++
++    fun applyDisplaySetting(transform: (DisplaySetting) -> DisplaySetting) {
++        val next = transform(displaySetting)
++        displaySetting = next
++        vm.updateSettings(settings.copy(displaySetting = next))
++    }
++
++    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
++    val backgroundAlpha = displaySetting.quoteHighlightBackgroundAlpha.coerceIn(0f, 1f)
++
++    val textColorField = ColorField(
++        key = "quoteText",
++        title = "文字颜色",
++        value = displaySetting.quoteHighlightColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { it?.toHexArgb() ?: "跟随主题（tertiary 色）" },
++        apply = { setting, value -> setting.copy(quoteHighlightColor = value) },
++    )
++    val backgroundColorField = ColorField(
++        key = "quoteBackground",
++        title = "背景色",
++        value = displaySetting.quoteHighlightBackground,
++        preview = MaterialTheme.colorScheme.surfaceContainerHigh,
++        supporting = { it?.toHexArgb() ?: "不加底色" },
++        apply = { setting, value -> setting.copy(quoteHighlightBackground = value) },
++    )
++    // 下划线颜色只做记录：Compose 的 SpanStyle 没有独立的下划线颜色槽位，下划线永远跟文字同色，
++    // 想真正染上颜色只能自绘下划线，这一版不做，所以副标题里直接写明，别让用户以为是没生效的 bug
++    val underlineColorField = ColorField(
++        key = "quoteUnderlineColor",
++        title = "下划线颜色",
++        value = displaySetting.quoteUnderlineColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { value ->
++            value?.let { "${it.toHexArgb()}（下划线与文字同色，这一版不单独上色）" } ?: "跟随文字颜色"
++        },
++        apply = { setting, value -> setting.copy(quoteUnderlineColor = value) },
++    )
++    val colorFields = listOf(textColorField, backgroundColorField, underlineColorField)
++
++    Scaffold(
++        topBar = {
++            LargeFlexibleTopAppBar(
++                title = { Text("对白样式") },
++                navigationIcon = {
++                    BackButton()
++                },
++                scrollBehavior = scrollBehavior,
++                colors = CustomColors.topBarColors
++            )
++        },
++        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++        containerColor = CustomColors.topBarColors.containerColor
++    ) { contentPadding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize(),
++            contentPadding = contentPadding + PaddingValues(8.dp),
++            verticalArrangement = Arrangement.spacedBy(16.dp)
++        ) {
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("引号高亮") },
++                ) {
++                    item(
++                        headlineContent = { Text("引号内文字高亮") },
++                        supportingContent = {
++                            Text("AI 回复里被 “引号” 包住的文字用下面的样式显示")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.enableQuoteHighlight,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting { it.copy(enableQuoteHighlight = checked) }
++                                },
++                            )
++                        },
++                    )
++                }
++            }
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("文字与底色") },
++                ) {
++                    colorFields.forEach { field ->
++                        item(
++                            onClick = { colorTargetKey = field.key },
++                            headlineContent = { Text(field.title) },
++                            supportingContent = {
++                                Text(field.supporting(field.value))
++                            },
++                            trailingContent = {
++                                Box(
++                                    modifier = Modifier
++                                        .size(28.dp)
++                                        .clip(CircleShape)
++                                        .background(field.value?.let { Color(it) } ?: field.preview),
++                                )
++                            },
++                        )
++                    }
++                    // 背景透明度：只在设了背景色时才有意义，0% 等于不加底色
++                    item(
++                        headlineContent = { Text("背景透明度") },
++                        supportingContent = {
++                            Column {
++                                Text("底色浓淡，0% 就是不显示底色")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = backgroundAlpha,
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(
++                                                    quoteHighlightBackgroundAlpha = value.coerceIn(0f, 1f)
++                                                )
++                                            }
++                                        },
++                                        valueRange = 0f..1f,
++                                        steps = 19,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${(backgroundAlpha * 100).roundToInt()}%")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(
++                                                quoteHighlightBackgroundAlpha =
++                                                    DEFAULT_QUOTE_BACKGROUND_ALPHA
++                                            )
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                }
++            }
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("下划线") },
++                ) {
++                    item(
++                        headlineContent = { Text("下划线样式") },
++                        supportingContent = {
++                            Column {
++                                Text("只支持实线；虚线需要自绘，这一版不做")
++                                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
++                                    QUOTE_UNDERLINE_OPTIONS.forEachIndexed { index, (value, label) ->
++                                        SegmentedButton(
++                                            selected = displaySetting.quoteUnderline == value,
++                                            onClick = {
++                                                applyDisplaySetting {
++                                                    it.copy(quoteUnderline = value)
++                                                }
++                                            },
++                                            shape = SegmentedButtonDefaults.itemShape(
++                                                index = index,
++                                                count = QUOTE_UNDERLINE_OPTIONS.size,
++                                            ),
++                                        ) {
++                                            Text(label)
++                                        }
++                                    }
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(quoteUnderline = DEFAULT_QUOTE_UNDERLINE)
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    item(
++                        onClick = { colorTargetKey = underlineColorField.key },
++                        headlineContent = { Text(underlineColorField.title) },
++                        supportingContent = {
++                            Text(underlineColorField.supporting(underlineColorField.value))
++                        },
++                        trailingContent = {
++                            Box(
++                                modifier = Modifier
++                                    .size(28.dp)
++                                    .clip(CircleShape)
++                                    .background(
++                                        underlineColorField.value?.let { Color(it) }
++                                            ?: underlineColorField.preview
++                                    ),
++                            )
++                        },
++                    )
++                }
++            }
++        }
++    }
++
++    val activeField = colorTargetKey?.let { key ->
++        colorFields.firstOrNull { it.key == key }
++    }
++    if (activeField != null) {
++        ColorPickerDialog(
++            title = activeField.title,
++            initialColor = activeField.value,
++            fallbackColor = activeField.preview,
++            recentColors = displaySetting.recentColors,
++            onRecentColorsChange = { colors ->
++                applyDisplaySetting { it.copy(recentColors = colors) }
++            },
++            onDismiss = { colorTargetKey = null },
++            // 确认：既写颜色，也把颜色收进记忆色（单次写入，避免两次 update 互相覆盖）
++            onConfirm = { color ->
++                applyDisplaySetting { setting ->
++                    activeField.apply(setting, color).copy(
++                        recentColors = pushRecentColor(setting.recentColors, color),
++                    )
++                }
++                colorTargetKey = null
++            },
++            canReset = true,
++            onReset = {
++                applyDisplaySetting { setting -> activeField.apply(setting, null) }
++                colorTargetKey = null
++            },
++        )
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 index 2ee9d11..d6aa969 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
