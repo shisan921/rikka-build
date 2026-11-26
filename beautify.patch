@@ -56,7 +56,7 @@ index bef7871..b56ecb8 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..9dc8277 100644
+index 205e822..45deb36 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -604,6 +604,41 @@ enum class BackgroundEffectType {
@@ -101,7 +101,7 @@ index 205e822..9dc8277 100644
  @Serializable
  data class DisplaySetting(
      val userAvatar: Avatar = Avatar.Dummy,
-@@ -644,6 +679,38 @@ data class DisplaySetting(
+@@ -644,6 +679,42 @@ data class DisplaySetting(
      val chatCustomFontName: String = "",
      val enableVolumeKeyScroll: Boolean = false,
      val volumeKeyScrollRatio: Float = 1.0f,
@@ -114,6 +114,10 @@ index 205e822..9dc8277 100644
 +    // 主题基色：给一个颜色自动生成整套浅色/深色配色，null 表示不启用
 +    val themeSeedColor: Long? = null,
 +    val chatTextColor: Long? = null,
++    // 引号内文字高亮：开启后 AI 回复里被 “…” / "..." 包住的文字用 quoteHighlightColor 显示
++    val enableQuoteHighlight: Boolean = false,
++    // 引号高亮色，null 表示跟随主题（tertiary）
++    val quoteHighlightColor: Long? = null,
 +    // 取色盘里收藏的记忆色：最近的在前，最多 12 个，存 0xAARRGGBB
 +    val recentColors: List<Long> = emptyList(),
 +    // 气泡圆角（dp），-1 表示沿用默认圆角
@@ -907,6 +911,358 @@ index a18dd69..c01b8b1 100644
                                  } else {
                                      MarkdownBlock(
                                          content = part.text.replaceRegexes(
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
+index 3d21e9f..3dccced 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
+@@ -623,7 +623,7 @@ private fun MarkdownNode(
+         MarkdownTokenTypes.TEXT -> {
+             val text = node.getTextInNode(content)
+             Text(
+-                text = text,
++                text = rememberQuotedText(text),
+                 modifier = modifier,
+             )
+         }
+@@ -790,6 +790,8 @@ private fun Paragraph(
+         node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
+     }
+     val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
++    // 引号内文字高亮色：开关关掉时是 null，整条渲染路径与改动前一致
++    val quoteColor = quoteHighlightColorOrNull()
+ 
+     val textStyle = LocalTextStyle.current
+     val density = LocalDensity.current
+@@ -800,7 +802,8 @@ private fun Paragraph(
+             else Modifier
+         )
+     ) {
+-        val annotatedString = remember(content, enableLatexRendering, latexColorArgb) {
++        // 每条消息只切一次引号（key 含 content / 开关 / 颜色），不在组合期反复扫描
++        val annotatedString = remember(content, enableLatexRendering, latexColorArgb, quoteColor) {
+             buildAnnotatedString {
+                 node.children.fastForEach { child ->
+                     appendMarkdownNodeContent(
+@@ -814,6 +817,7 @@ private fun Paragraph(
+                         trim = trim,
+                         enableLatexRendering = enableLatexRendering,
+                         latexColorArgb = latexColorArgb,
++                        quoteColor = quoteColor,
+                     )
+                 }
+             }
+@@ -999,6 +1003,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+     enableLatexRendering: Boolean = true,
+     latexColorArgb: Int = 0,
+     onClickCitation: (String) -> Unit = {},
++    /** 引号高亮色；null 表示不启用（关闭开关时走这个分支，输出与改动前完全一致） */
++    quoteColor: Color? = null,
+ ) {
+     when {
+         node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
+@@ -1020,9 +1026,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+                     it
+                 }.replace(BREAK_LINE_REGEX, "\n")
+             }
+-            append(
+-                text = text,
+-            )
++            // 代码块 / 行内代码在上面的分支里就已经处理完，不会走到这里，
++            // 所以这里的引号一律是正文里的引号，可以放心上色
++            appendQuotedText(text = text, quoteColor = quoteColor)
+         }
+ 
+         node.type == MarkdownElementTypes.EMPH -> {
+@@ -1037,7 +1043,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+                         style = style,
+                         enableLatexRendering = enableLatexRendering,
+                         latexColorArgb = latexColorArgb,
+-                        onClickCitation = onClickCitation
++                        onClickCitation = onClickCitation,
++                        quoteColor = quoteColor
+                     )
+                 }
+             }
+@@ -1055,7 +1062,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+                         style = style,
+                         enableLatexRendering = enableLatexRendering,
+                         latexColorArgb = latexColorArgb,
+-                        onClickCitation = onClickCitation
++                        onClickCitation = onClickCitation,
++                        quoteColor = quoteColor
+                     )
+                 }
+             }
+@@ -1073,7 +1081,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+                         style = style,
+                         enableLatexRendering = enableLatexRendering,
+                         latexColorArgb = latexColorArgb,
+-                        onClickCitation = onClickCitation
++                        onClickCitation = onClickCitation,
++                        quoteColor = quoteColor
+                     )
+                 }
+             }
+@@ -1240,7 +1249,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+                     style = style,
+                     enableLatexRendering = enableLatexRendering,
+                     latexColorArgb = latexColorArgb,
+-                    onClickCitation = onClickCitation
++                    onClickCitation = onClickCitation,
++                    quoteColor = quoteColor
+                 )
+             }
+         }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
+index a316327..23d75b2 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
+@@ -188,7 +188,7 @@ private fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
+         is Element -> HtmlBlockElement(element = node, onClickCitation = onClickCitation)
+         is TextNode -> {
+             val text = node.text().trim()
+-            if (text.isNotEmpty()) Text(text = text)
++            if (text.isNotEmpty()) Text(text = rememberQuotedText(text))
+         }
+     }
+ }
+@@ -345,6 +345,8 @@ private fun HtmlParagraphContent(
+     val hasInlineMath = element.select("span.math").any { it.attr("inline") == "true" }
+     val colorScheme = MaterialTheme.colorScheme
+     val textStyle = LocalTextStyle.current
++    // 引号内文字高亮色：开关关掉时是 null
++    val quoteColor = quoteHighlightColorOrNull()
+ 
+     val (annotatedString, inlineContents) = remember(
+         element.outerHtml(),
+@@ -353,6 +355,7 @@ private fun HtmlParagraphContent(
+         density,
+         textStyle,
+         onClickCitation,
++        quoteColor,
+     ) {
+         val contents = mutableMapOf<String, InlineTextContent>()
+         val text = buildAnnotatedString {
+@@ -365,6 +368,7 @@ private fun HtmlParagraphContent(
+                     style = textStyle,
+                     enableLatexRendering = enableLatexRendering,
+                     onClickCitation = onClickCitation,
++                    quoteColor = quoteColor,
+                 )
+             }
+         }
+@@ -700,6 +704,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+     val colorScheme = MaterialTheme.colorScheme
+     val textStyle = LocalTextStyle.current
+     val density = LocalDensity.current
++    val quoteColor = quoteHighlightColorOrNull()
+ 
+     val key = remember(nodes) { nodes.joinToString("") { if (it is Element) it.outerHtml() else it.toString() } }
+     val (annotatedString, inlineContents) = remember(
+@@ -709,6 +714,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+         density,
+         textStyle,
+         onClickCitation,
++        quoteColor,
+     ) {
+         val contents = mutableMapOf<String, InlineTextContent>()
+         val text = buildAnnotatedString {
+@@ -721,6 +727,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+                     style = textStyle,
+                     enableLatexRendering = enableLatexRendering,
+                     onClickCitation = onClickCitation,
++                    quoteColor = quoteColor,
+                 )
+             }
+         }
+@@ -743,7 +750,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
+     when (node) {
+         is TextNode -> {
+             val text = node.text()
+-            if (text.isNotEmpty()) Text(text = text)
++            if (text.isNotEmpty()) Text(text = rememberQuotedText(text))
+         }
+ 
+         is Element -> {
+@@ -817,9 +824,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+     style: TextStyle,
+     enableLatexRendering: Boolean,
+     onClickCitation: (String) -> Unit,
++    /** 引号高亮色；null 表示不启用。`<code>` / `<pre>` 走独立分支，不会经过这里上色 */
++    quoteColor: Color? = null,
+ ) {
+     when (node) {
+-        is TextNode -> append(node.text())
++        is TextNode -> appendQuotedText(text = node.text(), quoteColor = quoteColor)
+         is Element -> appendHtmlInlineElement(
+             element = node,
+             colorScheme = colorScheme,
+@@ -828,6 +837,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+             style = style,
+             enableLatexRendering = enableLatexRendering,
+             onClickCitation = onClickCitation,
++            quoteColor = quoteColor,
+         )
+     }
+ }
+@@ -840,6 +850,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+     style: TextStyle,
+     enableLatexRendering: Boolean,
+     onClickCitation: (String) -> Unit,
++    quoteColor: Color? = null,
+ ) {
+     val cssStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
+         parseInlineSpanStyle(
+@@ -858,6 +869,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+             style = inheritedStyle,
+             enableLatexRendering = enableLatexRendering,
+             onClickCitation = onClickCitation,
++            quoteColor = quoteColor,
+         )
+     }
+ 
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
+new file mode 100644
+index 0000000..90ebad3
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
+@@ -0,0 +1,136 @@
++package me.rerere.rikkahub.ui.components.richtext
++
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.remember
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.AnnotatedString
++import androidx.compose.ui.text.SpanStyle
++import androidx.compose.ui.text.buildAnnotatedString
++import androidx.compose.ui.text.withStyle
++import me.rerere.rikkahub.ui.context.LocalSettings
++
++/**
++ * 引号内文字高亮。
++ *
++ * 2.5.3 的 markdown 渲染没有「主题」对象可以配置（`com.github.rikkahub:markdown` 只提供
++ * org.intellij.markdown 的解析器，AST → Compose 的渲染全部在 [Markdown] / [MarkdownNew] 里），
++ * 所以这里不走「把引号内容伪装成别的内联元素」的预处理，直接在渲染层的文本追加点上给引号内的
++ * 那一段文字套一个 `SpanStyle(color = 引号高亮色)`：
++ *
++ * - 不新增任何 markdown 语法，消息原文不改，复制/导出拿到的还是用户看到的原文；
++ * - 代码天然不受影响：行内代码（CODE_SPAN / `<code>`）和代码块（CODE_FENCE / `<pre>`）在渲染器里
++ *   都有独立分支，文本压根不经过 [appendQuotedText]，不需要正则去跳过 ``` 围栏；
++ * - 关闭开关时 [quoteHighlightColorOrNull] 返回 null，[appendQuotedText] 退化成 `append(text)`，
++ *   与改动前的输出完全一致。
++ */
++
++/** 中文左引号、中文右引号、英文双引号。单引号 / 「」不处理，避免把英文撇号和日式引用一起染上色。 */
++private const val QUOTE_OPEN = '\u201C'   // “
++private const val QUOTE_CLOSE = '\u201D'  // ”
++private const val QUOTE_ASCII = '"'
++
++/**
++ * 纯函数：把一段纯文本按引号切成若干段，标出哪几段在引号内。
++ *
++ * 规则（结果拼起来永远等于入参 [text]，不会有字符丢失）：
++ * 1. `“` 与 `"` 当作开引号，`”` 当作闭引号；已经在引号里时遇到 `“` / `"` 当作闭引号（多引号混用的兜底）；
++ * 2. 引号符号本身不算高亮内容，只有被包住的文字才算；
++ * 3. **必须成对出现才高亮**：段落末尾还没闭合的引号（流式输出打了一半 / AI 少打一个引号）整段按普通文本处理，
++ *    不会把后面正文一起染上色；
++ * 4. 没有引号字符时原样返回一段普通文本，零额外开销。
++ */
++internal fun splitQuotedSegments(text: String): List<QuotedTextSegment> {
++    if (text.isEmpty()) return emptyList()
++    val hasQuote = text.any { it == QUOTE_OPEN || it == QUOTE_CLOSE || it == QUOTE_ASCII }
++    if (!hasQuote) return listOf(QuotedTextSegment(text = text, quoted = false))
++
++    val segments = ArrayList<QuotedTextSegment>(8)
++    val buffer = StringBuilder()
++    var inQuote = false
++
++    // 按顺序吐出 buffer 里的内容，绝不改变字符相对位置（拼回去必须和原文一模一样）
++    fun flush(quoted: Boolean) {
++        if (buffer.isNotEmpty()) {
++            segments.add(QuotedTextSegment(text = buffer.toString(), quoted = quoted))
++            buffer.setLength(0)
++        }
++    }
++
++    for (ch in text) {
++        when (ch) {
++            QUOTE_OPEN, QUOTE_ASCII -> {
++                flush(inQuote)
++                inQuote = !inQuote
++                // 引号符号本身不上色，但必须按原位置作为一个普通文本段吐出去
++                segments.add(QuotedTextSegment(text = ch.toString(), quoted = false))
++            }
++
++            QUOTE_CLOSE -> {
++                flush(inQuote)
++                inQuote = false
++                segments.add(QuotedTextSegment(text = ch.toString(), quoted = false))
++            }
++
++            else -> buffer.append(ch)
++        }
++    }
++    // 剩下的是段尾：没闭合的引号内容按普通文本处理
++    flush(false)
++    return segments
++}
++
++/** [splitQuotedSegments] 的一段结果。[quoted] 为 true 表示这段文字要被上色。 */
++internal data class QuotedTextSegment(
++    val text: String,
++    val quoted: Boolean,
++)
++
++/**
++ * 往 AnnotatedString 里追加一段纯文本，[quoteColor] 非 null 时给引号内的文字套上颜色。
++ *
++ * 只加 color，不动 fontFamily / fontSize / fontStyle，所以外面已有的加粗、斜体、删除线、
++ * 链接、行内公式等样式不会被破坏。
++ */
++internal fun AnnotatedString.Builder.appendQuotedText(text: String, quoteColor: Color?) {
++    if (quoteColor == null) {
++        append(text)
++        return
++    }
++    splitQuotedSegments(text).forEach { segment ->
++        if (segment.quoted) {
++            withStyle(SpanStyle(color = quoteColor)) {
++                append(segment.text)
++            }
++        } else {
++            append(segment.text)
++        }
++    }
++}
++
++/**
++ * 当前这条消息该用的引号高亮色：开关关掉就是 null（渲染路径完全不变）；
++ * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
++ */
++@Composable
++internal fun quoteHighlightColorOrNull(): Color? {
++    val displaySetting = LocalSettings.current.displaySetting
++    if (!displaySetting.enableQuoteHighlight) return null
++    val custom = displaySetting.quoteHighlightColor
++    if (custom != null) return Color(custom)
++    val colorScheme = MaterialTheme.colorScheme
++    // tertiary 是 Material3 的必有槽位，真拿不到（Unspecified）时退回 primary 兜底
++    return if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
++}
++
++/**
++ * 给独立渲染的文本节点用（不走 AnnotatedString 段落的那几条分支）。
++ * 每条消息只算一次：key 是文本 + 颜色，开关关掉时等价于 `AnnotatedString(text)`。
++ */
++@Composable
++internal fun rememberQuotedText(text: String): AnnotatedString {
++    val quoteColor = quoteHighlightColorOrNull()
++    return remember(text, quoteColor) {
++        buildAnnotatedString { appendQuotedText(text = text, quoteColor = quoteColor) }
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ColorPickerDialog.kt
 new file mode 100644
 index 0000000..9619dfa
@@ -2367,10 +2723,10 @@ index 0000000..a96c05b
 +)
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
 new file mode 100644
-index 0000000..cd2de84
+index 0000000..ae8fc28
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
-@@ -0,0 +1,363 @@
+@@ -0,0 +1,413 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -2392,6 +2748,7 @@ index 0000000..cd2de84
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.RadioButton
 +import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Switch
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
 +import androidx.compose.material3.TopAppBarDefaults
@@ -2511,6 +2868,16 @@ index 0000000..cd2de84
 +        ),
 +    )
 +
++    // 引号内文字高亮色：默认跟随主题的 tertiary 色
++    val quoteField = ColorField(
++        key = "quoteHighlight",
++        title = "引号高亮颜色",
++        value = displaySetting.quoteHighlightColor,
++        preview = MaterialTheme.colorScheme.tertiary,
++        supporting = { it?.toHexArgb() ?: "跟随主题（tertiary 色）" },
++        apply = { setting, value -> setting.copy(quoteHighlightColor = value) },
++    )
++
 +    Scaffold(
 +        topBar = {
 +            LargeFlexibleTopAppBar(
@@ -2584,11 +2951,50 @@ index 0000000..cd2de84
 +                    }
 +                }
 +            }
++            // 引号内文字高亮：开关 + 颜色，关掉时 AI 回复的样式与原来完全一致
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("引号高亮") },
++                ) {
++                    item(
++                        headlineContent = { Text("引号内文字高亮") },
++                        supportingContent = {
++                            Text("AI 回复里被 “引号” 包住的文字用下面的颜色显示")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.enableQuoteHighlight,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting { it.copy(enableQuoteHighlight = checked) }
++                                },
++                            )
++                        },
++                    )
++                    if (displaySetting.enableQuoteHighlight) {
++                        item(
++                            onClick = { colorTargetKey = quoteField.key },
++                            headlineContent = { Text(quoteField.title) },
++                            supportingContent = {
++                                Text(quoteField.supporting(quoteField.value))
++                            },
++                            trailingContent = {
++                                Box(
++                                    modifier = Modifier
++                                        .size(28.dp)
++                                        .clip(CircleShape)
++                                        .background(quoteField.value?.let { Color(it) } ?: quoteField.preview),
++                                )
++                            },
++                        )
++                    }
++                }
++            }
 +        }
 +    }
 +
 +    val activeField = colorTargetKey?.let { key ->
-+        (listOf(seedField) + colorFields).firstOrNull { it.key == key }
++        (listOf(seedField) + colorFields + quoteField).firstOrNull { it.key == key }
 +    }
 +    if (activeField != null) {
 +        ColorPickerDialog(
