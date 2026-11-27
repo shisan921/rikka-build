@@ -72,7 +72,7 @@ index bef7871..5088a03 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..353c607 100644
+index 205e822..5efbe2e 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -206,7 +206,7 @@ index 205e822..353c607 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,147 @@ data class DisplaySetting(
+@@ -642,8 +748,158 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -351,11 +351,22 @@ index 205e822..353c607 100644
 +    // 界面字体选「自定义」时用的字体库路径（相对 filesDir），与 chatCustomFontPath 各存各的，
 +    // 这样界面字体和正文可以分别挑不同的字体
 +    val uiCustomFontPath: String = "",
++    // 全屏编辑页（输入框右侧「展开」弹出的整屏编辑面板）背景·是否跟随聊天背景。
++    // true = 用聊天背景色 + 当前助手的聊天背景图，与聊天页一致；false = 用下面四项自己的一套
++    val fullScreenEditorFollowChatBg: Boolean = true,
++    // 全屏编辑页背景色，null 表示不覆盖（不跟随聊天背景时才生效，都没设时回落到主题 surface）
++    val fullScreenEditorBgColor: Long? = null,
++    // 全屏编辑页背景图：保存的是复制到 App 内部目录后的绝对路径，空字符串表示未设置
++    val fullScreenEditorBgImage: String = "",
++    // 全屏编辑页背景图不透明度：0f = 完全看不见，1f = 原样显示
++    val fullScreenEditorBgImageAlpha: Float = 1f,
++    // 全屏编辑页背景图是否叠加主题色遮罩（保证文字可读）
++    val fullScreenEditorBgTint: Boolean = true,
  )
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..2266427 100644
+index 45c3d83..1bd85a2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -387,10 +398,11 @@ index 45c3d83..2266427 100644
  import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  import androidx.compose.ui.platform.LocalFocusManager
  import androidx.compose.ui.platform.LocalHapticFeedback
-@@ -97,7 +102,10 @@ import me.rerere.hugeicons.stroke.Fullscreen
+@@ -97,7 +102,11 @@ import me.rerere.hugeicons.stroke.Fullscreen
  import me.rerere.hugeicons.stroke.Zap
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.datastore.BackgroundEffectType
++import me.rerere.rikkahub.data.datastore.DisplaySetting
 +import coil3.compose.AsyncImage
 +import java.io.File
  import me.rerere.rikkahub.data.datastore.Settings
@@ -398,7 +410,7 @@ index 45c3d83..2266427 100644
  import me.rerere.rikkahub.data.datastore.getCurrentAssistant
  import me.rerere.rikkahub.data.datastore.getCurrentChatModel
  import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
-@@ -118,6 +126,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
+@@ -118,6 +127,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.context.LocalToaster
  import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -408,7 +420,7 @@ index 45c3d83..2266427 100644
  import me.rerere.rikkahub.utils.SoundEffectPlayer
  import org.koin.compose.koinInject
  import kotlin.time.Duration.Companion.seconds
-@@ -153,9 +164,35 @@ fun ChatInput(
+@@ -153,9 +165,35 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -446,7 +458,7 @@ index 45c3d83..2266427 100644
      }
  
      val keyboardController = LocalSoftwareKeyboardController.current
-@@ -217,6 +254,18 @@ fun ChatInput(
+@@ -217,6 +255,18 @@ fun ChatInput(
          }
      }
  
@@ -465,7 +477,7 @@ index 45c3d83..2266427 100644
      Surface(
          color = Color.Transparent,
      ) {
-@@ -240,167 +289,234 @@ fun ChatInput(
+@@ -240,167 +290,234 @@ fun ChatInput(
                      .fillMaxWidth()
                      .clip(containerShape)
                      .then(
@@ -835,7 +847,7 @@ index 45c3d83..2266427 100644
                  }
              }
  
-@@ -484,6 +600,12 @@ private fun TextInputRow(
+@@ -484,6 +601,12 @@ private fun TextInputRow(
      state: ChatInputState,
      completionProviders: List<ChatCompletionProvider>,
      onSendMessage: () -> Unit,
@@ -848,7 +860,7 @@ index 45c3d83..2266427 100644
  ) {
      val settings = LocalSettings.current
      val filesManager: FilesManager = koinInject()
-@@ -607,10 +729,29 @@ private fun TextInputRow(
+@@ -607,10 +730,29 @@ private fun TextInputRow(
              )
          }
  
@@ -878,7 +890,7 @@ index 45c3d83..2266427 100644
                  .testTag("chat_input")
                  .contentReceiver(receiveContentListener)
                  .onFocusChanged {
-@@ -618,7 +759,16 @@ private fun TextInputRow(
+@@ -618,7 +760,16 @@ private fun TextInputRow(
                  },
              shape = MaterialTheme.shapes.largeIncreased,
              placeholder = {
@@ -896,34 +908,174 @@ index 45c3d83..2266427 100644
              },
              lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
              keyboardOptions = KeyboardOptions(
-@@ -658,7 +808,7 @@ private fun TextInputRow(
+@@ -658,7 +809,15 @@ private fun TextInputRow(
              } else null,
          )
          if (isFullScreen) {
 -            FullScreenEditor(state = state) {
-+            FullScreenEditor(state = state, hint = hint) {
++            // 全屏编辑面板背景：跟随聊天背景时读聊天背景色 + 当前助手的聊天背景图，
++            // 关掉跟随时读 fullScreenEditorBg* 那四项（都在 DisplaySetting 里）
++            FullScreenEditor(
++                state = state,
++                hint = hint,
++                displaySetting = settings.displaySetting,
++                chatBackgroundImage = assistant.background,
++                chatBackgroundImageAlpha = assistant.backgroundOpacity,
++            ) {
                  isFullScreen = false
              }
          }
-@@ -796,7 +946,7 @@ private fun QuickMessageButton(
+@@ -796,8 +955,48 @@ private fun QuickMessageButton(
  
  @Composable
  private fun FullScreenEditor(
 -    state: ChatInputState, onDone: () -> Unit
-+    state: ChatInputState, hint: String = "", onDone: () -> Unit
++    state: ChatInputState,
++    hint: String = "",
++    // 全屏编辑面板背景的三个来源：显示设置、当前助手的聊天背景图、那张图的不透明度
++    displaySetting: DisplaySetting,
++    chatBackgroundImage: String?,
++    chatBackgroundImageAlpha: Float,
++    onDone: () -> Unit,
  ) {
++    // 跟随聊天背景：聊天页就是「chatBackgroundColor 打底 + 当前助手的背景图」这两层，
++    // 所以这里读同一对字段（DisplaySetting 里没有聊天页背景图字段，聊天背景图在 Assistant.background）
++    val followChatBg = displaySetting.fullScreenEditorFollowChatBg
++    val bgColor = (if (followChatBg) {
++        displaySetting.chatBackgroundColor
++    } else {
++        displaySetting.fullScreenEditorBgColor
++    })?.let { Color(it) }
++    // 跟随模式直接用助手背景图的原始地址（可能是本地文件，也可能是网络 URL，交给 Coil 判断），
++    // 自有模式用设置里复制到内部目录的绝对路径
++    val followImagePath = if (followChatBg) chatBackgroundImage.orEmpty() else ""
++    val followImageModel = remember(followImagePath) {
++        followImagePath.takeIf { it.isNotBlank() }
++    }
++    val customImagePath = if (followChatBg) "" else displaySetting.fullScreenEditorBgImage
++    val customImageModel = remember(customImagePath) {
++        customImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
++    }
++    val bgImageModel: Any? = if (followChatBg) followImageModel else customImageModel
++    val bgImageAlpha = if (followChatBg) {
++        chatBackgroundImageAlpha.coerceIn(0f, 1f)
++    } else {
++        displaySetting.fullScreenEditorBgImageAlpha.coerceIn(0f, 1f)
++    }
++    // 遮罩开关：跟随模式共用「所有背景图叠加主题色遮罩」那个全局开关，
++    // 自有模式用「背景图叠加主题色遮罩」这一项
++    val bgTintEnabled = if (followChatBg) {
++        displaySetting.backgroundImageTint
++    } else {
++        displaySetting.fullScreenEditorBgTint
++    }
++    // 遮罩色跟着底色走：没设底色时就是主题 surface（0.72 与输入框背景图的遮罩同一档）
++    val bgTintColor = bgColor ?: MaterialTheme.colorScheme.surface
++
      BasicAlertDialog(
          onDismissRequest = {
-@@ -841,7 +991,8 @@ private fun FullScreenEditor(
+             onDone()
+@@ -819,40 +1018,70 @@ private fun FullScreenEditor(
+                     .fillMaxHeight(0.9f),
+                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+             ) {
+-                Column(
+-                    modifier = Modifier
+-                        .padding(8.dp)
+-                        .fillMaxSize(),
+-                    horizontalAlignment = Alignment.End,
+-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+-                ) {
+-                    Row {
+-                        TextButton(
+-                            onClick = {
+-                                onDone()
+-                            }) {
+-                            Text(stringResource(R.string.chat_page_save))
++                Box(modifier = Modifier.fillMaxSize()) {
++                    // 背景三层，从下到上：底色 → 背景图 → 主题色遮罩。
++                    // 默认值（跟随聊天背景 + 聊天背景没设过）三层都不画，
++                    // 直接透出 Surface 自己的 surface 色，与改动前逐像素一致
++                    if (bgColor != null) {
++                        Box(
++                            modifier = Modifier
++                                .matchParentSize()
++                                .background(bgColor)
++                        )
++                    }
++                    if (bgImageModel != null) {
++                        AsyncImage(
++                            model = bgImageModel,
++                            contentDescription = null,
++                            contentScale = ContentScale.Crop,
++                            modifier = Modifier
++                                .matchParentSize()
++                                .alpha(bgImageAlpha),
++                        )
++                        if (bgTintEnabled) {
++                            Box(
++                                modifier = Modifier
++                                    .matchParentSize()
++                                    .background(bgTintColor.copy(alpha = 0.72f))
++                            )
+                         }
+                     }
+-                    TextField(
+-                        state = state.textContent,
++                    Column(
+                         modifier = Modifier
+-                            .padding(bottom = 2.dp)
++                            .padding(8.dp)
                              .fillMaxSize(),
-                         shape = RoundedCornerShape(32.dp),
-                         placeholder = {
+-                        shape = RoundedCornerShape(32.dp),
+-                        placeholder = {
 -                            Text(stringResource(R.string.chat_input_placeholder))
-+                            // 全屏编辑框和无障碍场景跟主输入框用同一份自定义提示语
-+                            Text(hint.ifBlank { stringResource(R.string.chat_input_placeholder) })
-                         },
-                         keyboardOptions = KeyboardOptions(
-                             capitalization = KeyboardCapitalization.Sentences,
+-                        },
+-                        keyboardOptions = KeyboardOptions(
+-                            capitalization = KeyboardCapitalization.Sentences,
+-                        ),
+-                        colors = TextFieldDefaults.colors().copy(
+-                            unfocusedIndicatorColor = Color.Transparent,
+-                            focusedIndicatorColor = Color.Transparent,
+-                            focusedContainerColor = Color.Transparent,
+-                            unfocusedContainerColor = Color.Transparent,
+-                        ),
+-                    )
++                        horizontalAlignment = Alignment.End,
++                        verticalArrangement = Arrangement.spacedBy(8.dp),
++                    ) {
++                        Row {
++                            TextButton(
++                                onClick = {
++                                    onDone()
++                                }) {
++                                Text(stringResource(R.string.chat_page_save))
++                            }
++                        }
++                        TextField(
++                            state = state.textContent,
++                            modifier = Modifier
++                                .padding(bottom = 2.dp)
++                                .fillMaxSize(),
++                            shape = RoundedCornerShape(32.dp),
++                            placeholder = {
++                                // 全屏编辑框和无障碍场景跟主输入框用同一份自定义提示语
++                                Text(hint.ifBlank { stringResource(R.string.chat_input_placeholder) })
++                            },
++                            keyboardOptions = KeyboardOptions(
++                                capitalization = KeyboardCapitalization.Sentences,
++                            ),
++                            colors = TextFieldDefaults.colors().copy(
++                                unfocusedIndicatorColor = Color.Transparent,
++                                focusedIndicatorColor = Color.Transparent,
++                                focusedContainerColor = Color.Transparent,
++                                unfocusedContainerColor = Color.Transparent,
++                            ),
++                        )
++                    }
+                 }
+             }
+         }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 index a18dd69..b12afcb 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
@@ -6102,10 +6254,10 @@ index 0000000..b5d3346
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt
 new file mode 100644
-index 0000000..9303aef
+index 0000000..9752d62
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesImagesPage.kt
-@@ -0,0 +1,386 @@
+@@ -0,0 +1,568 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import android.content.Context
@@ -6113,7 +6265,9 @@ index 0000000..9303aef
 +import androidx.activity.compose.rememberLauncherForActivityResult
 +import androidx.activity.result.PickVisualMediaRequest
 +import androidx.activity.result.contract.ActivityResultContracts
++import androidx.compose.foundation.background
 +import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.PaddingValues
 +import androidx.compose.foundation.layout.Row
@@ -6122,6 +6276,7 @@ index 0000000..9303aef
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.layout.size
 +import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.shape.CircleShape
 +import androidx.compose.foundation.shape.RoundedCornerShape
 +import androidx.compose.material3.LargeFlexibleTopAppBar
 +import androidx.compose.material3.MaterialTheme
@@ -6140,6 +6295,7 @@ index 0000000..9303aef
 +import androidx.compose.ui.Alignment
 +import androidx.compose.ui.Modifier
 +import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
 +import androidx.compose.ui.input.nestedscroll.nestedScroll
 +import androidx.compose.ui.layout.ContentScale
 +import androidx.compose.ui.platform.LocalContext
@@ -6156,13 +6312,16 @@ index 0000000..9303aef
 +import me.rerere.rikkahub.data.datastore.DisplaySetting
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
++import me.rerere.rikkahub.ui.components.ui.pushRecentColor
 +import me.rerere.rikkahub.ui.context.LocalToaster
 +import me.rerere.rikkahub.ui.theme.CustomColors
 +import me.rerere.rikkahub.utils.plus
 +import org.koin.androidx.compose.koinViewModel
 +
 +/**
-+ * 插图素材页：输入框 / 侧边栏 / 用户气泡 / AI 气泡四张背景图 + 气泡圆角 + 主题色遮罩开关。
++ * 插图素材页：输入框 / 侧边栏 / 用户气泡 / AI 气泡四张背景图 + 全屏编辑页背景
++ * + 气泡圆角 + 主题色遮罩开关。
 + *
 + * 选图之后一律先把图片复制到 App 内部目录（`filesDir/images/`），设置里只存复制后的绝对路径，
 + * 这样系统相册的临时授权过期、手机重启都不会让图片变成打不开的状态。
@@ -6179,6 +6338,9 @@ index 0000000..9303aef
 +        displaySetting = setting
 +        vm.updateSettings(settings.copy(displaySetting = setting))
 +    }
++
++    // 全屏编辑页背景色的取色盘开关（只在「不跟随聊天背景」时才有入口）
++    var showFullScreenEditorBgColorPicker by remember { mutableStateOf(false) }
 +
 +    // 一次只拉一个系统相册，用 pendingSlot 记住这次是给哪一项选的
 +    var pendingSlot by remember { mutableStateOf<ImageSlot?>(null) }
@@ -6345,6 +6507,143 @@ index 0000000..9303aef
 +                }
 +            }
 +
++            // 全屏编辑页（输入框右侧「展开」弹出的整屏编辑面板）自己的背景。
++            // 「跟随聊天背景」打开时下面四项都不显示：面板直接用聊天背景色 + 当前助手的聊天背景图。
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("全屏编辑页背景") },
++                ) {
++                    item(
++                        headlineContent = { Text("跟随聊天背景") },
++                        supportingContent = {
++                            Text(
++                                if (displaySetting.fullScreenEditorFollowChatBg) {
++                                    "面板背景与聊天页一致：聊天背景色 + 当前助手的聊天背景图"
++                                } else {
++                                    "面板改用下面这套单独设置的背景"
++                                }
++                            )
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.fullScreenEditorFollowChatBg,
++                                onCheckedChange = {
++                                    updateDisplaySetting(
++                                        displaySetting.copy(fullScreenEditorFollowChatBg = it)
++                                    )
++                                },
++                            )
++                        },
++                    )
++                    // 「跟随」关掉之后才显示下面四项；打开时它们完全不参与渲染
++                    if (!displaySetting.fullScreenEditorFollowChatBg) {
++                        item(
++                            onClick = { showFullScreenEditorBgColorPicker = true },
++                            headlineContent = { Text("背景色") },
++                            supportingContent = {
++                                Text(
++                                    displaySetting.fullScreenEditorBgColor?.toHexArgb()
++                                        ?: "跟随主题（surface）"
++                                )
++                            },
++                            trailingContent = {
++                                Box(
++                                    modifier = Modifier
++                                        .size(28.dp)
++                                        .clip(CircleShape)
++                                        .background(
++                                            displaySetting.fullScreenEditorBgColor
++                                                ?.let { Color(it) }
++                                                ?: MaterialTheme.colorScheme.surface
++                                        ),
++                                )
++                            },
++                        )
++                        item(
++                            headlineContent = { Text("背景图") },
++                            supportingContent = { Text("铺满整个编辑面板，按 Crop 裁剪") },
++                            trailingContent = {
++                                val fullScreenImagePath = displaySetting.fullScreenEditorBgImage
++                                Row(
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
++                                ) {
++                                    if (fullScreenImagePath.isNotBlank()) {
++                                        // 缩略图 model 按路径缓存，避免每次重组都新建 File
++                                        val thumbnail = remember(fullScreenImagePath) {
++                                            File(fullScreenImagePath)
++                                        }
++                                        AsyncImage(
++                                            model = thumbnail,
++                                            contentDescription = null,
++                                            contentScale = ContentScale.Crop,
++                                            modifier = Modifier
++                                                .size(40.dp)
++                                                .clip(RoundedCornerShape(8.dp)),
++                                        )
++                                    }
++                                    TextButton(onClick = { pickImage(ImageSlot.FULL_SCREEN) }) {
++                                        Text("选择图片")
++                                    }
++                                    if (fullScreenImagePath.isNotBlank()) {
++                                        TextButton(
++                                            onClick = {
++                                                updateDisplaySetting(
++                                                    displaySetting.withImage(ImageSlot.FULL_SCREEN, "")
++                                                )
++                                            }
++                                        ) {
++                                            Text("清除")
++                                        }
++                                    }
++                                }
++                            },
++                        )
++                        item(
++                            headlineContent = { Text("背景图不透明度") },
++                            supportingContent = {
++                                ImageAlphaSlider(
++                                    value = displaySetting.fullScreenEditorBgImageAlpha,
++                                    onValueChange = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(fullScreenEditorBgImageAlpha = it)
++                                        )
++                                    },
++                                    onReset = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(fullScreenEditorBgImageAlpha = 1f)
++                                        )
++                                    },
++                                )
++                            },
++                        )
++                        item(
++                            headlineContent = { Text("背景图叠加主题色遮罩") },
++                            supportingContent = {
++                                Text(
++                                    if (displaySetting.fullScreenEditorBgTint) {
++                                        "背景图上面压一层背景色，文字更好读"
++                                    } else {
++                                        "只显示图片本身，不加遮罩"
++                                    }
++                                )
++                            },
++                            trailingContent = {
++                                Switch(
++                                    checked = displaySetting.fullScreenEditorBgTint,
++                                    onCheckedChange = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(fullScreenEditorBgTint = it)
++                                        )
++                                    },
++                                )
++                            },
++                        )
++                    }
++                }
++            }
++
 +            item {
 +                CardGroup(
 +                    modifier = Modifier.padding(horizontal = 8.dp),
@@ -6403,6 +6702,34 @@ index 0000000..9303aef
 +            }
 +        }
 +    }
++
++    // 全屏编辑页背景色的取色盘：确认时同时写颜色和记忆色（一次写入，避免两次 update 互相覆盖）
++    if (showFullScreenEditorBgColorPicker) {
++        ColorPickerDialog(
++            title = "全屏编辑页背景色",
++            initialColor = displaySetting.fullScreenEditorBgColor,
++            fallbackColor = MaterialTheme.colorScheme.surface,
++            recentColors = displaySetting.recentColors,
++            onRecentColorsChange = { colors ->
++                updateDisplaySetting(displaySetting.copy(recentColors = colors))
++            },
++            onDismiss = { showFullScreenEditorBgColorPicker = false },
++            onConfirm = { color ->
++                updateDisplaySetting(
++                    displaySetting.copy(
++                        fullScreenEditorBgColor = color,
++                        recentColors = pushRecentColor(displaySetting.recentColors, color),
++                    )
++                )
++                showFullScreenEditorBgColorPicker = false
++            },
++            canReset = true,
++            onReset = {
++                updateDisplaySetting(displaySetting.copy(fullScreenEditorBgColor = null))
++                showFullScreenEditorBgColorPicker = false
++            },
++        )
++    }
 +}
 +
 +/**
@@ -6442,13 +6769,18 @@ index 0000000..9303aef
 +}
 +
 +/**
-+ * 四个可以放背景图的位置。[prefix] 同时用作内部文件名前缀，方便换图时清掉同一项的旧图。
++ * 可以放背景图的位置（四张通用图 + 全屏编辑页那一张）。[prefix] 同时用作内部文件名前缀，
++ * 方便换图时清掉同一项的旧图。
 + */
 +private enum class ImageSlot(val prefix: String) {
 +    INPUT("input-bg"),
 +    DRAWER("drawer-bg"),
 +    USER_BUBBLE("user-bubble"),
 +    ASSISTANT_BUBBLE("assistant-bubble"),
++
++    // 全屏编辑页背景图：只在「跟随聊天背景」关掉时用，所以不在上面的四张图列表里循环，
++    // 单独在「全屏编辑页背景」分组里选图，前缀 / 复制逻辑完全复用同一套
++    FULL_SCREEN("fullscreen-editor-bg"),
 +}
 +
 +/** 读某一项当前保存的图片路径（空字符串 = 未设置）。 */
@@ -6457,6 +6789,7 @@ index 0000000..9303aef
 +    ImageSlot.DRAWER -> drawerBackgroundImage
 +    ImageSlot.USER_BUBBLE -> userBubbleImage
 +    ImageSlot.ASSISTANT_BUBBLE -> assistantBubbleImage
++    ImageSlot.FULL_SCREEN -> fullScreenEditorBgImage
 +}
 +
 +/** 把图片路径写到对应字段，[path] 传空字符串就是清除。 */
@@ -6465,6 +6798,7 @@ index 0000000..9303aef
 +    ImageSlot.DRAWER -> copy(drawerBackgroundImage = path)
 +    ImageSlot.USER_BUBBLE -> copy(userBubbleImage = path)
 +    ImageSlot.ASSISTANT_BUBBLE -> copy(assistantBubbleImage = path)
++    ImageSlot.FULL_SCREEN -> copy(fullScreenEditorBgImage = path)
 +}
 +
 +/**
