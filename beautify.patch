@@ -2161,7 +2161,7 @@ index 205e822..6d23007 100644
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..0e6a65d 100644
+index 45c3d83..1bd85a2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -2226,7 +2226,7 @@ index 45c3d83..0e6a65d 100644
 +    // 输入框背景图：路径变化才重建 File，避免每帧新对象
 +    val inputImagePath = settings.displaySetting.inputBackgroundImage
 +    val inputBackgroundImage = remember(inputImagePath) {
-+        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
++        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +    }
 +    // 界面材质：纯色时和原版完全一致，半透明只改底色，磨砂 / 液态才换 style 和底色。
 +    // 输入框用的是它自己那一档 inputSurfaceMaterial（气泡有自己的 bubbleSurfaceMaterial），
@@ -2749,7 +2749,7 @@ index 45c3d83..0e6a65d 100644
 +    }
 +    val customImagePath = if (followChatBg) "" else displaySetting.fullScreenEditorBgImage
 +    val customImageModel = remember(customImagePath) {
-+        customImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
++        customImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +    }
 +    val bgImageModel: Any? = if (followChatBg) followImageModel else customImageModel
 +    val bgImageAlpha = if (followChatBg) {
@@ -3407,7 +3407,7 @@ index 0000000..ff528f6
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..716d158 100644
+index a18dd69..a847f32 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -3758,7 +3758,7 @@ index a18dd69..716d158 100644
 + */
 +@Composable
 +private fun rememberBubbleImage(path: String): File? {
-+    return remember(path) { path.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile } }
++    return remember(path) { path.takeIf { it.isNotBlank() }?.let { File(it) } }
 +}
 +
 +/**
@@ -6429,7 +6429,7 @@ index 0000000..806957f
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
-index 86fcdcf..25d9d01 100644
+index 86fcdcf..150eff6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 @@ -1,6 +1,7 @@
@@ -6515,7 +6515,7 @@ index 86fcdcf..25d9d01 100644
 +        // 侧边栏背景图：只有路径变化才重建 File，避免每帧新对象
 +        val drawerImagePath = settings.displaySetting.drawerBackgroundImage
 +        val drawerBackgroundImage = remember(drawerImagePath) {
-+            drawerImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
++            drawerImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +        }
 +        Box(
 +            modifier = Modifier
