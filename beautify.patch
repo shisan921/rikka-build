@@ -2160,6 +2160,90 @@ index 205e822..acf633b 100644
  )
  
  @Serializable
+diff --git a/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
+new file mode 100644
+index 0000000..ffffb35
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
+@@ -0,0 +1,78 @@
++package me.rerere.rikkahub.data.files
++
++import android.content.Context
++import me.rerere.rikkahub.data.datastore.DecorPreset
++import java.io.File
++
++/**
++ * 装扮用的图片快照。
++ *
++ * 为什么需要这一层：
++ * 装扮原来只记图片的**绝对路径**，而 App 里「换一张图」会把同一位置那张旧图直接删掉
++ * （见 `copyImageToInternal` 末尾的清理）。于是「存好的装扮 → 后来换过图 → 切回这套」
++ * 就会指向一个已经不存在的文件，输入框 / 侧边栏背景全部消失。
++ *
++ * 做法：存装扮的那一刻，把用到的每张图各复制一份到 `filesDir/decor/` 下，
++ * 文件名带装扮 id，装扮改记这个副本的路径。副本不参与「换图清理」，
++ * 所以这套装扮永远是完整的，跟相册里那张原图后来变成什么样都没关系。
++ */
++private const val DECOR_IMAGE_DIR = "decor"
++
++/** 装扮里最多这么多个图片槽位：输入框 / 侧边栏 / 用户气泡 / AI 气泡 / 全屏编辑页 */
++private const val SLOT_INPUT = "input"
++private const val SLOT_DRAWER = "drawer"
++private const val SLOT_USER_BUBBLE = "userBubble"
++private const val SLOT_ASSISTANT_BUBBLE = "assistantBubble"
++private const val SLOT_FULL_SCREEN = "fullScreen"
++
++/**
++ * 把 [preset] 里引用的图片全部落成本套装扮自己的副本，返回一份改好路径的新快照。
++ *
++ * 源文件已经不存在（老数据里路径悬空、或用户清过缓存）时，该槽位置空字符串，
++ * 而不是留一个死路径——留死路径会让界面反复尝试加载一个不存在的文件。
++ */
++fun snapshotDecorImages(context: Context, preset: DecorPreset): DecorPreset {
++    if (preset.id.isBlank()) return preset
++    val dir = File(context.filesDir, DECOR_IMAGE_DIR)
++
++    fun copySlot(path: String, slot: String): String {
++        if (path.isBlank()) return ""
++        val source = File(path)
++        if (!source.isFile) return ""
++        return runCatching {
++            if (!dir.exists()) dir.mkdirs()
++            val target = File(dir, "${preset.id}-$slot.jpg")
++            // 覆盖写：同一套装扮重复保存时只留最新那张，不会越攒越多
++            if (target.absolutePath == source.absolutePath) {
++                // 已经是本套装扮的副本（重复保存），不用再拷一次
++                target.absolutePath
++            } else {
++                if (target.exists()) target.delete()
++                source.copyTo(target, overwrite = true)
++                target.absolutePath
++            }
++        }.getOrElse { "" }
++    }
++
++    return preset.copy(
++        inputBackgroundImage = copySlot(preset.inputBackgroundImage, SLOT_INPUT),
++        drawerBackgroundImage = copySlot(preset.drawerBackgroundImage, SLOT_DRAWER),
++        userBubbleImage = copySlot(preset.userBubbleImage, SLOT_USER_BUBBLE),
++        assistantBubbleImage = copySlot(preset.assistantBubbleImage, SLOT_ASSISTANT_BUBBLE),
++        fullScreenEditorBgImage = copySlot(preset.fullScreenEditorBgImage, SLOT_FULL_SCREEN),
++    )
++}
++
++/**
++ * 删除装扮时顺手清掉它的图片副本，别在手机里攒垃圾。
++ * 找不到、删不掉都不影响主流程。
++ */
++fun deleteDecorImages(context: Context, presetId: String) {
++    if (presetId.isBlank()) return
++    val dir = File(context.filesDir, DECOR_IMAGE_DIR)
++    runCatching {
++        dir.listFiles()
++            ?.filter { it.name.startsWith("$presetId-") }
++            ?.forEach { it.delete() }
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 index 45c3d83..1bd85a2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
@@ -7969,10 +8053,10 @@ index 370fcc5..2901a13 100644
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
 new file mode 100644
-index 0000000..58b092f
+index 0000000..8b45c24
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,324 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -8003,14 +8087,19 @@ index 0000000..58b092f
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
 +import androidx.compose.runtime.setValue
 +import androidx.compose.ui.Alignment
 +import androidx.compose.ui.Modifier
 +import androidx.compose.ui.draw.clip
 +import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.platform.LocalContext
 +import androidx.compose.ui.input.nestedscroll.nestedScroll
 +import androidx.compose.ui.unit.dp
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
 +import me.rerere.hugeicons.HugeIcons
 +import me.rerere.hugeicons.stroke.Delete02
 +import me.rerere.hugeicons.stroke.MoreVertical
@@ -8018,6 +8107,8 @@ index 0000000..58b092f
 +import me.rerere.hugeicons.stroke.Refresh01
 +import me.rerere.hugeicons.stroke.PencilEdit01
 +import me.rerere.rikkahub.data.datastore.DecorPreset
++import me.rerere.rikkahub.data.files.deleteDecorImages
++import me.rerere.rikkahub.data.files.snapshotDecorImages
 +import me.rerere.rikkahub.ui.components.decor.decorPresetSummary
 +import me.rerere.rikkahub.ui.components.nav.BackButton
 +import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -8037,6 +8128,8 @@ index 0000000..58b092f
 +    val settings by vm.settings.collectAsStateWithLifecycle()
 +    val presets = settings.decorPresets
 +    val current = settings.displaySetting
++    val context = LocalContext.current
++    val scope = rememberCoroutineScope()
 +
 +    // 新建 / 改名共用一个输入弹窗
 +    var nameDialogFor by remember { mutableStateOf<DecorPreset?>(null) }
@@ -8176,15 +8269,20 @@ index 0000000..58b092f
 +                                                leadingIcon = { Icon(HugeIcons.Refresh01, null) },
 +                                                onClick = {
 +                                                    expanded = false
-+                                                    val updated = DecorPreset.capture(
-+                                                        from = current,
-+                                                        name = preset.name,
-+                                                        themeId = settings.themeId,
-+                                                        dynamicColor = settings.dynamicColor,
-+                                                    ).copy(id = preset.id, createdAt = preset.createdAt)
-+                                                    savePresets(presets.map {
-+                                                        if (it.id == preset.id) updated else it
-+                                                    })
++                                                    scope.launch {
++                                                        val captured = DecorPreset.capture(
++                                                            from = current,
++                                                            name = preset.name,
++                                                            themeId = settings.themeId,
++                                                            dynamicColor = settings.dynamicColor,
++                                                        ).copy(id = preset.id, createdAt = preset.createdAt)
++                                                        val updated = withContext(Dispatchers.IO) {
++                                                            snapshotDecorImages(context, captured)
++                                                        }
++                                                        savePresets(presets.map {
++                                                            if (it.id == preset.id) updated else it
++                                                        })
++                                                    }
 +                                                },
 +                                            )
 +                                            DropdownMenuItem(
@@ -8233,14 +8331,19 @@ index 0000000..58b092f
 +                        val name = nameDraft.trim().ifBlank { "未命名装扮" }
 +                        val target = nameDialogFor
 +                        if (target == null) {
-+                            savePresets(
-+                                presets + DecorPreset.capture(
++                            // 图片先落成这套装扮自己的副本，之后再换图也不会把它带走
++                            scope.launch {
++                                val captured = DecorPreset.capture(
 +                                    from = current,
 +                                    name = name,
 +                                    themeId = settings.themeId,
 +                                    dynamicColor = settings.dynamicColor,
 +                                )
-+                            )
++                                val withImages = withContext(Dispatchers.IO) {
++                                    snapshotDecorImages(context, captured)
++                                }
++                                savePresets(presets + withImages)
++                            }
 +                        } else {
 +                            savePresets(presets.map {
 +                                if (it.id == target.id) it.copy(name = name) else it
@@ -8264,7 +8367,10 @@ index 0000000..58b092f
 +            confirmButton = {
 +                TextButton(
 +                    onClick = {
-+                        savePresets(presets.filterNot { it.id == target.id })
++                        scope.launch {
++                            withContext(Dispatchers.IO) { deleteDecorImages(context, target.id) }
++                            savePresets(presets.filterNot { it.id == target.id })
++                        }
 +                        deleteTarget = null
 +                    }
 +                ) { Text("删除") }
