@@ -1478,7 +1478,7 @@ index bef7871..c53466b 100644
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 new file mode 100644
-index 0000000..24b07db
+index 0000000..4710e1d
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 @@ -0,0 +1,329 @@
@@ -1557,8 +1557,8 @@ index 0000000..24b07db
 +    val quoteUnderlineOffset: Int = 2,
 +    val quoteDashScale: Float = 1f,
 +    val quoteBarHeightScale: Float = 0.7f,
-+    val quoteBarOffsetDp: Int = 1,
-+    val quoteBarWidthDp: Int = 2,
++    val quoteBarOffsetDp: Int = 0,
++    val quoteBarWidthDp: Float = 2f,
 +    val quoteUnderlineInsetDp: Int = 2,
 +    val quoteOuterDecor: QuoteOuterDecor = QuoteOuterDecor.NONE,
 +    val quoteOuterDecorSpace: Int = 0,
@@ -1812,7 +1812,7 @@ index 0000000..24b07db
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..1a41a15 100644
+index 205e822..b18d58b 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -144,6 +144,8 @@ class SettingsStore(
@@ -1990,7 +1990,7 @@ index 205e822..1a41a15 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +757,165 @@ data class DisplaySetting(
+@@ -642,8 +757,168 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -2054,10 +2054,13 @@ index 205e822..1a41a15 100644
 +    val quoteDashScale: Float = 1f,
 +    // 对白样式·行首竖线高度（按行高的比例，0.3f..1.2f）：1.2f 可以略微超出整行，默认 0.7f
 +    val quoteBarHeightScale: Float = 0.7f,
-+    // 对白样式·行首竖线左右位置（dp，-4..8）：x = 开引号字符左边缘 - 这个值，默认 1（比早先固定的 2dp 更贴字）
-+    val quoteBarOffsetDp: Int = 1,
-+    // 对白样式·行首竖线粗细（dp，1..5）：drawRoundRect 的 width，圆角仍然 1dp，默认 2dp（= 老版本行为）
-+    val quoteBarWidthDp: Int = 2,
++    // 对白样式·行首竖线左右位置（dp，-8..4）：x = 开引号字符左边缘 **加** 这个值。
++    // 负数 = 竖线往左挪开引号，正数 = 往右压到引号上，0（默认）= 紧贴引号左边缘。
++    // （早先这里是减法、范围 -4..8，方向反直觉，已翻转；老配置里存的值会按新语义解释）
++    val quoteBarOffsetDp: Int = 0,
++    // 对白样式·行首竖线粗细（dp，0.1..8，滑块 0.01 一档）：drawRoundRect 的 width，
++    // 圆角仍然 1dp，默认 2f（= 老版本行为）。用 Float 是为了能落在 1 和 2 中间那档
++    val quoteBarWidthDp: Float = 2f,
 +    // 下划线左右两端比底色块再往里收多少（dp），越大越缩进
 +    val quoteUnderlineInsetDp: Int = 2,
 +    // 对白样式·外层符号：在引号内的对白外面再套一层符号（「“你好。”」/『“你好。”』），
@@ -4820,10 +4823,10 @@ index a316327..35a40f9 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..4714b76
+index 0000000..e1fb1f4
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1037 @@
+@@ -0,0 +1,1038 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -5034,7 +5037,7 @@ index 0000000..4714b76
 +    /** 行首竖线左右位置（dp，-4..8）：x = 开引号字符左边缘 - 这个值，正数把竖线往左推 */
 +    val leadingBarOffsetDp: Int = 1,
 +    /** 行首竖线粗细（dp，1..5）：drawRect / drawRoundRect 的 width，默认 2dp */
-+    val quoteBarWidthDp: Int = 2,
++    val quoteBarWidthDp: Float = 2f,
 +    val underlineInsetDp: Int = 2,
 +    val backgroundCorner: Int = 4,
 +    /**
@@ -5480,12 +5483,12 @@ index 0000000..4714b76
 +private const val MAX_BAR_HEIGHT_SCALE = 1.2f
 +
 +/** 行首竖线左右位置的下限 / 上限（dp），和设置页滑块范围一致 */
-+private const val MIN_BAR_OFFSET_DP = -4
-+private const val MAX_BAR_OFFSET_DP = 8
++private const val MIN_BAR_OFFSET_DP = -8
++private const val MAX_BAR_OFFSET_DP = 4
 +
 +/** 行首竖线粗细的下限 / 上限（dp），和设置页滑块范围一致 */
-+private const val MIN_BAR_WIDTH_DP = 1
-+private const val MAX_BAR_WIDTH_DP = 5
++private const val MIN_BAR_WIDTH_DP = 0.1f
++private const val MAX_BAR_WIDTH_DP = 8f
 +
 +/**
 + * 下划线终点的微收量（dp）。
@@ -5558,12 +5561,12 @@ index 0000000..4714b76
 + *   - 虚线：`dashPathEffect(2dp * m, 1.5dp * m)`，`m = 1f / dashScale`，颜色 `dashedUnderlineColor ?: 文字色`；
 + *   - 点线：`dashPathEffect(1dp * m, 1.2dp * m)`，`m = 1f / dashScale`，颜色 `dottedUnderlineColor ?: 文字色`；
 + * - **行首竖线（紧贴开引号的那一小段）**：x 取区间起点（也就是**开引号字符**）的
-+ *   `getBoundingBox(rangeStart).left` 减去「竖线左右位置」`leadingBarOffsetDp`（默认 1dp，
++ *   `getBoundingBox(rangeStart).left` 加上「竖线左右位置」`leadingBarOffsetDp`（默认 0，
 + *   比早先写死的 2dp 更贴字；范围 -4..8dp），所以竖线就在引号左边，不会跑到行首、
 + *   更不会落在段落左边缘（不 clamp 到 `getLineLeft`，引号在行中间时也照样贴着引号）；
 + *   高度 = 该行行高 × `leadingBarHeightScale`（默认 0.7x，范围 0.3x..1.2x），**以行中心为基准居中**，
 + *   不再是整行顶天立地；仍然**只覆盖开引号所在那一行**，跨行对白**不**往下延伸；
-+ *   宽度取「竖线粗细」滑块（`quoteBarWidthDp`，1..5dp，默认 2dp）、圆角 1dp，
++ *   宽度取「竖线粗细」滑块（`quoteBarWidthDp`，0.1..8dp 连续，默认 2dp）、圆角 1dp，
 + *   颜色 `leadingBarColor ?: 文字色`；
 + * - **层序**：底色（Path 填充）在最底层 → 下划线（三条 Path）→ 行首竖线在最上层，
 + *   三层互相独立、可以同时开启；竖线最后画，所以它永远压在底色之上；
@@ -5842,7 +5845,8 @@ index 0000000..4714b76
 +                } else {
 +                    layoutResult.getHorizontalPosition(rangeStart, usePrimaryDirection = false)
 +                }
-+                val barX = charLeft - barOffsetPx
++                // 负值 = 往左挪开引号，正值 = 往右压进引号（0 = 紧贴引号左边缘）
++                val barX = charLeft + barOffsetPx
 +                // 只覆盖开引号所在那一行，不再延伸到整段末尾；
 +                // 高度 = 行高 × 「竖线高度」比例（默认 0.7x），以这一行的垂直中心为基准居中
 +                val firstLineTop = layoutResult.getLineTop(firstLine)
@@ -10564,10 +10568,10 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..a0bf1d4
+index 0000000..241da17
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,960 @@
+@@ -0,0 +1,963 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -10636,10 +10640,10 @@ index 0000000..a0bf1d4
 +private const val DEFAULT_QUOTE_BAR_HEIGHT_SCALE = 0.7f
 +
 +/** 行首竖线左右位置默认值（dp），和 DisplaySetting.quoteBarOffsetDp 一致 */
-+private const val DEFAULT_QUOTE_BAR_OFFSET_DP = 1
++private const val DEFAULT_QUOTE_BAR_OFFSET_DP = 0
 +
 +/** 行首竖线粗细默认值（dp），和 DisplaySetting.quoteBarWidthDp 一致 */
-+private const val DEFAULT_QUOTE_BAR_WIDTH_DP = 2
++private const val DEFAULT_QUOTE_BAR_WIDTH_DP = 2f
 +
 +/** 外层符号与内容之间的间距默认值（薄空格个数），和 DisplaySetting.quoteOuterDecorSpace 一致 */
 +private const val DEFAULT_QUOTE_OUTER_DECOR_SPACE = 0
@@ -10672,11 +10676,12 @@ index 0000000..a0bf1d4
 + *              颜色                红 ●     ← 只在「点线」打开时出现
 + *              下划线与文字的距离   2dp      ← 滑块 0–10dp
 + *              虚线与点线的密度     1.0x     ← 滑块 0.2–3.0，步进 0.1，越大越密
++ *              下划线左右内缩       3dp      ← 滑块 0–12dp，两端比底色块再往里收多少
 + * ［行首竖线］ 行首竖线            [开关]
 + *              竖线颜色            红 ●     ← null 表示跟随文字颜色
 + *              竖线高度            0.7x     ← 滑块 0.3–1.2，按行高比例、行中心居中
-+ *              竖线左右位置        +2dp     ← 滑块 -4..8dp，x = 开引号左边缘 - 这个值
-+ *              竖线粗细            2dp      ← 滑块 1–5dp，竖线的宽度（圆角仍 1dp）
++ *              竖线左右位置        0dp      ← 滑块 -8..4dp，x = 开引号左边缘 + 这个值
++ *              竖线粗细            2.00dp   ← 滑块 0.1–8dp 连续（0.01 一档），圆角仍 1dp
 + * ```
 + *
 + * 几条硬要求：
@@ -10713,10 +10718,10 @@ index 0000000..a0bf1d4
 +    // 下划线两条滑块：和文字的距离（dp）、虚线点线的密度（0.2–3.0，越大越密）
 +    val underlineOffset = displaySetting.quoteUnderlineOffset.coerceIn(0, 10)
 +    val dashScale = displaySetting.quoteDashScale.coerceIn(0.2f, 3.0f)
-+    // 行首竖线三条滑块：高度（按行高比例 0.3–1.2）、左右位置（-4..8dp）、粗细（1–5dp）
++    // 行首竖线三条滑块：高度（按行高比例 0.3–1.2）、左右位置（-8..4dp）、粗细（0.1–8dp 连续）
 +    val barHeightScale = displaySetting.quoteBarHeightScale.coerceIn(0.3f, 1.2f)
-+    val barOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(-4, 8)
-+    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(1, 5)
++    val barOffsetDp = displaySetting.quoteBarOffsetDp.coerceIn(-8, 4)
++    val barWidthDp = displaySetting.quoteBarWidthDp.coerceIn(0.1f, 8f)
 +    val underlineInsetDp = displaySetting.quoteUnderlineInsetDp.coerceIn(0, 12)
 +    // 外层符号两条滑块：符号与内容之间的薄空格个数（0–3）、符号大小倍率（0.7–1.5）
 +    val outerDecorSpace = displaySetting.quoteOuterDecorSpace.coerceIn(-3, 3)
@@ -11261,6 +11266,43 @@ index 0000000..a0bf1d4
 +                            }
 +                        },
 +                    )
++                    // 下划线左右内缩：线比底色块再往里收多少，收得多就不会碰到引号外侧的空白
++                    item(
++                        headlineContent = { Text("下划线左右内缩") },
++                        supportingContent = {
++                            Column {
++                                Text("下划线两端比底色块再往里收多少（0–12dp），觉得线盖到引号外侧就调大")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = underlineInsetDp.toFloat(),
++                                        onValueChange = { value ->
++                                            applyDisplaySetting {
++                                                it.copy(quoteUnderlineInsetDp = value.roundToInt())
++                                            }
++                                        },
++                                        valueRange = 0f..12f,
++                                        steps = 11,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${underlineInsetDp}dp")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        applyDisplaySetting {
++                                            it.copy(quoteUnderlineInsetDp = 2)
++                                        }
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
 +                }
 +            }
 +            // ⑥ 行首竖线：开关 + 自己的颜色（null = 跟随文字颜色）
@@ -11330,12 +11372,12 @@ index 0000000..a0bf1d4
 +                            }
 +                        },
 +                    )
-+                    // 竖线左右位置：x = 开引号字符左边缘 - 这个值，正数把竖线往左推、负数往右压到字上
++                    // 竖线左右位置：x = 开引号字符左边缘 + 这个值，负数往左挪开、正数往右压进引号
 +                    item(
 +                        headlineContent = { Text("竖线左右位置") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("相对开引号左侧的偏移（-4–8dp），0 紧贴引号，数值越大越往左")
++                                Text("0 = 紧贴引号左侧；往左拖（负数）把竖线挪开，往右拖会压到引号上（-8–4dp）")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -11348,7 +11390,7 @@ index 0000000..a0bf1d4
 +                                                it.copy(quoteBarOffsetDp = value.roundToInt())
 +                                            }
 +                                        },
-+                                        valueRange = -4f..8f,
++                                        valueRange = -8f..4f,
 +                                        steps = 11,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
@@ -11367,66 +11409,31 @@ index 0000000..a0bf1d4
 +                            }
 +                        },
 +                    )
-+                    // 下划线左右内缩：线比底色块再往里收多少，收得多就不会碰到引号外侧的空白
-+                    item(
-+                        headlineContent = { Text("下划线左右内缩") },
-+                        supportingContent = {
-+                            Column {
-+                                Text("下划线两端比底色块再往里收多少（0–12dp），觉得线盖到引号外侧就调大")
-+                                Row(
-+                                    modifier = Modifier.fillMaxWidth(),
-+                                    verticalAlignment = Alignment.CenterVertically,
-+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-+                                ) {
-+                                    Slider(
-+                                        value = underlineInsetDp.toFloat(),
-+                                        onValueChange = { value ->
-+                                            applyDisplaySetting {
-+                                                it.copy(quoteUnderlineInsetDp = value.roundToInt())
-+                                            }
-+                                        },
-+                                        valueRange = 0f..12f,
-+                                        steps = 11,
-+                                        modifier = Modifier.weight(1f)
-+                                    )
-+                                    Text(text = "${underlineInsetDp}dp")
-+                                }
-+                                TextButton(
-+                                    onClick = {
-+                                        applyDisplaySetting {
-+                                            it.copy(quoteUnderlineInsetDp = 2)
-+                                        }
-+                                    },
-+                                    modifier = Modifier.align(Alignment.End),
-+                                ) {
-+                                    Text("恢复默认")
-+                                }
-+                            }
-+                        },
-+                    )
-+                    // 竖线粗细：drawRect 的 width（1–5dp，圆角仍然 1dp），默认 2dp = 老版本
++                    // 竖线粗细：drawRect 的 width（0.1–8dp 连续，圆角仍然 1dp），默认 2dp = 老版本
 +                    item(
 +                        headlineContent = { Text("竖线粗细") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("竖线的宽度（1–5dp），默认 2dp，圆角保持 1dp")
++                                Text("竖线的宽度（0.1–8dp，可精确到 0.01），默认 2dp，圆角保持 1dp")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
 +                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
 +                                ) {
 +                                    Slider(
-+                                        value = barWidthDp.toFloat(),
++                                        value = barWidthDp,
 +                                        onValueChange = { value ->
++                                            // 0.01 一档：连续滑块，落到数据层前先量化，避免 1.9999999 这种值
++                                            val snapped = (value * 100f).roundToInt() / 100f
 +                                            applyDisplaySetting {
-+                                                it.copy(quoteBarWidthDp = value.roundToInt())
++                                                it.copy(quoteBarWidthDp = snapped)
 +                                            }
 +                                        },
-+                                        valueRange = 1f..5f,
-+                                        steps = 3,
++                                        valueRange = 0.1f..8f,
++                                        steps = 0,
 +                                        modifier = Modifier.weight(1f)
 +                                    )
-+                                    Text(text = "${barWidthDp}dp")
++                                    Text(text = "%.2f dp".format(barWidthDp))
 +                                }
 +                                TextButton(
 +                                    onClick = {
