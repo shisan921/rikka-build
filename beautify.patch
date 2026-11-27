@@ -1,817 +1,20 @@
 diff --git a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-index bef7871..d036b40 100644
+index bef7871..b391e1c 100644
 --- a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-@@ -1,220 +1,224 @@
--package me.rerere.rikkahub
--
--import android.annotation.SuppressLint
--import android.content.Intent
--import android.os.Build
--import android.os.Bundle
--import android.view.KeyEvent
--import androidx.activity.ComponentActivity
--import androidx.activity.compose.setContent
--import androidx.activity.enableEdgeToEdge
--import androidx.compose.animation.AnimatedVisibility
--import androidx.compose.animation.SharedTransitionLayout
--import androidx.compose.animation.fadeIn
--import androidx.compose.animation.fadeOut
--import androidx.compose.animation.scaleIn
--import androidx.compose.animation.scaleOut
--import androidx.compose.animation.slideInHorizontally
--import androidx.compose.animation.slideOutHorizontally
--import androidx.compose.animation.togetherWith
--import androidx.compose.foundation.background
--import androidx.compose.foundation.layout.Arrangement
--import androidx.compose.foundation.layout.Box
--import androidx.compose.foundation.layout.Column
--import androidx.compose.foundation.layout.fillMaxSize
--import androidx.compose.foundation.layout.padding
--import androidx.compose.material3.CircularProgressIndicator
--import androidx.compose.material3.MaterialTheme
--import androidx.compose.material3.Text
--import androidx.compose.runtime.Composable
--import androidx.compose.runtime.CompositionLocalProvider
--import androidx.compose.runtime.LaunchedEffect
--import androidx.compose.runtime.SideEffect
--import androidx.compose.runtime.getValue
--import androidx.compose.ui.Alignment
--import androidx.compose.ui.Modifier
--import androidx.compose.ui.semantics.semantics
--import androidx.compose.ui.ExperimentalComposeUiApi
--import androidx.compose.ui.res.stringResource
--import androidx.compose.ui.semantics.testTagsAsResourceId
--import androidx.compose.ui.unit.dp
--import androidx.core.net.toUri
--import androidx.lifecycle.compose.collectAsStateWithLifecycle
--import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
--import androidx.navigation3.runtime.NavKey
--import androidx.navigation3.runtime.entryProvider
--import androidx.navigation3.runtime.rememberNavBackStack
--import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
--import androidx.navigation3.ui.NavDisplay
--import coil3.ImageLoader
--import coil3.compose.setSingletonImageLoaderFactory
--import coil3.gif.AnimatedImageDecoder
--import coil3.gif.GifDecoder
--import coil3.network.cachecontrol.CacheControlCacheStrategy
--import coil3.network.okhttp.OkHttpNetworkFetcherFactory
--import coil3.request.crossfade
--import coil3.svg.SvgDecoder
--import com.dokar.sonner.Toaster
--import com.dokar.sonner.rememberToasterState
--import kotlinx.serialization.Serializable
--import me.rerere.rikkahub.data.datastore.SettingsStore
--import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
--import me.rerere.rikkahub.data.db.MigrationState
--import me.rerere.rikkahub.data.event.AppEvent
--import me.rerere.rikkahub.data.event.AppEventBus
--import me.rerere.rikkahub.ui.activity.SafeModeActivity
--import me.rerere.rikkahub.ui.components.ui.TTSController
--import me.rerere.rikkahub.ui.context.LocalASRState
--import me.rerere.rikkahub.ui.context.LocalNavController
--import me.rerere.rikkahub.ui.context.LocalSettings
--import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
--import me.rerere.rikkahub.ui.context.LocalTTSState
--import me.rerere.rikkahub.ui.context.LocalToaster
--import me.rerere.rikkahub.ui.context.Navigator
--import me.rerere.rikkahub.ui.hooks.readBooleanPreference
--import me.rerere.rikkahub.ui.hooks.readStringPreference
--import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
--import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
--import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
--import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
--import me.rerere.rikkahub.ui.pages.backup.BackupPage
--import me.rerere.rikkahub.ui.pages.chat.ChatPage
--import me.rerere.rikkahub.ui.pages.debug.DebugPage
--import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
--import me.rerere.rikkahub.ui.pages.extensions.PromptPage
--import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
--import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
--import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
--import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
--import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
--import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
--import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
--import me.rerere.workspace.WorkspaceStorageArea
--import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
--import me.rerere.rikkahub.ui.pages.history.HistoryPage
--import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
--import me.rerere.rikkahub.ui.pages.log.LogPage
--import me.rerere.rikkahub.ui.pages.search.SearchPage
--import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
--import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
--import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
--import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
-+package me.rerere.rikkahub
-+
-+import android.annotation.SuppressLint
-+import android.content.Intent
-+import android.os.Build
-+import android.os.Bundle
-+import android.view.KeyEvent
-+import androidx.activity.ComponentActivity
-+import androidx.activity.compose.setContent
-+import androidx.activity.enableEdgeToEdge
-+import androidx.compose.animation.AnimatedVisibility
-+import androidx.compose.animation.SharedTransitionLayout
-+import androidx.compose.animation.fadeIn
-+import androidx.compose.animation.fadeOut
-+import androidx.compose.animation.scaleIn
-+import androidx.compose.animation.scaleOut
-+import androidx.compose.animation.slideInHorizontally
-+import androidx.compose.animation.slideOutHorizontally
-+import androidx.compose.animation.togetherWith
-+import androidx.compose.foundation.background
-+import androidx.compose.foundation.layout.Arrangement
-+import androidx.compose.foundation.layout.Box
-+import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.fillMaxSize
-+import androidx.compose.foundation.layout.padding
-+import androidx.compose.material3.CircularProgressIndicator
-+import androidx.compose.material3.MaterialTheme
-+import androidx.compose.material3.Text
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.CompositionLocalProvider
-+import androidx.compose.runtime.LaunchedEffect
-+import androidx.compose.runtime.SideEffect
-+import androidx.compose.runtime.getValue
-+import androidx.compose.ui.Alignment
-+import androidx.compose.ui.Modifier
-+import androidx.compose.ui.semantics.semantics
-+import androidx.compose.ui.ExperimentalComposeUiApi
-+import androidx.compose.ui.res.stringResource
-+import androidx.compose.ui.semantics.testTagsAsResourceId
-+import androidx.compose.ui.unit.dp
-+import androidx.core.net.toUri
-+import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
-+import androidx.navigation3.runtime.NavKey
-+import androidx.navigation3.runtime.entryProvider
-+import androidx.navigation3.runtime.rememberNavBackStack
-+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
-+import androidx.navigation3.ui.NavDisplay
-+import coil3.ImageLoader
-+import coil3.compose.setSingletonImageLoaderFactory
-+import coil3.gif.AnimatedImageDecoder
-+import coil3.gif.GifDecoder
-+import coil3.network.cachecontrol.CacheControlCacheStrategy
-+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
-+import coil3.request.crossfade
-+import coil3.svg.SvgDecoder
-+import com.dokar.sonner.Toaster
-+import com.dokar.sonner.rememberToasterState
-+import kotlinx.serialization.Serializable
-+import me.rerere.rikkahub.data.datastore.SettingsStore
-+import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
-+import me.rerere.rikkahub.data.db.MigrationState
-+import me.rerere.rikkahub.data.event.AppEvent
-+import me.rerere.rikkahub.data.event.AppEventBus
-+import me.rerere.rikkahub.ui.activity.SafeModeActivity
-+import me.rerere.rikkahub.ui.components.ui.TTSController
-+import me.rerere.rikkahub.ui.context.LocalASRState
-+import me.rerere.rikkahub.ui.context.LocalNavController
-+import me.rerere.rikkahub.ui.context.LocalSettings
-+import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
-+import me.rerere.rikkahub.ui.context.LocalTTSState
-+import me.rerere.rikkahub.ui.context.LocalToaster
-+import me.rerere.rikkahub.ui.context.Navigator
-+import me.rerere.rikkahub.ui.hooks.readBooleanPreference
-+import me.rerere.rikkahub.ui.hooks.readStringPreference
-+import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
-+import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
-+import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
-+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
-+import me.rerere.rikkahub.ui.pages.backup.BackupPage
-+import me.rerere.rikkahub.ui.pages.chat.ChatPage
-+import me.rerere.rikkahub.ui.pages.debug.DebugPage
-+import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
-+import me.rerere.rikkahub.ui.pages.extensions.PromptPage
-+import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
-+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
-+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
-+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
-+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
-+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
-+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
-+import me.rerere.workspace.WorkspaceStorageArea
-+import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
-+import me.rerere.rikkahub.ui.pages.history.HistoryPage
-+import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
-+import me.rerere.rikkahub.ui.pages.log.LogPage
-+import me.rerere.rikkahub.ui.pages.search.SearchPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
-+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
+@@ -109,6 +109,11 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
--import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
--import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
--import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
--import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
--import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
--import me.rerere.rikkahub.ui.pages.setting.SettingPage
--import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
--import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
--import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
--import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
--import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
--import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
--import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
--import me.rerere.rikkahub.ui.pages.stats.StatsPage
--import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
--import me.rerere.rikkahub.ui.pages.webview.WebViewPage
--import me.rerere.rikkahub.ui.theme.LocalDarkMode
--import me.rerere.rikkahub.ui.theme.RikkahubTheme
--import me.rerere.rikkahub.utils.CrashHandler
--import me.rerere.rikkahub.utils.openUsageAccessSettings
--import okhttp3.OkHttpClient
--import org.koin.android.ext.android.inject
--import org.koin.compose.koinInject
--import kotlin.uuid.Uuid
--
--private const val TAG = "RouteActivity"
--private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
--
--class RouteActivity : ComponentActivity() {
--    private val okHttpClient by inject<OkHttpClient>()
--    private val settingsStore by inject<SettingsStore>()
--    private var navStack: MutableList<NavKey>? = null
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesColorsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAlphaPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesImagesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesMaterialPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesQuotePage
-+import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
-+import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
-+import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
-+import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
-+import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
-+import me.rerere.rikkahub.ui.pages.stats.StatsPage
-+import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
-+import me.rerere.rikkahub.ui.pages.webview.WebViewPage
-+import me.rerere.rikkahub.ui.theme.LocalDarkMode
-+import me.rerere.rikkahub.ui.theme.RikkahubTheme
-+import me.rerere.rikkahub.utils.CrashHandler
-+import me.rerere.rikkahub.utils.openUsageAccessSettings
-+import okhttp3.OkHttpClient
-+import org.koin.android.ext.android.inject
-+import org.koin.compose.koinInject
-+import kotlin.uuid.Uuid
-+
-+private const val TAG = "RouteActivity"
-+private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
-+
-+class RouteActivity : ComponentActivity() {
-+    private val okHttpClient by inject<OkHttpClient>()
-+    private val settingsStore by inject<SettingsStore>()
-+    private var navStack: MutableList<NavKey>? = null
-     private val pendingIntents = ArrayDeque<Intent>()
--
--    // Volume key listener registry — last registered handler wins
--    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
--
--    @SuppressLint("RestrictedApi")
--    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
--        if (event.action == KeyEvent.ACTION_DOWN) {
--            val isVolumeUp = when (event.keyCode) {
--                KeyEvent.KEYCODE_VOLUME_UP -> true
--                KeyEvent.KEYCODE_VOLUME_DOWN -> false
--                else -> return super.dispatchKeyEvent(event)
--            }
--            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
--        }
--        return super.dispatchKeyEvent(event)
--    }
--
--    override fun onCreate(savedInstanceState: Bundle?) {
--        enableEdgeToEdge()
--        disableNavigationBarContrast()
--        super.onCreate(savedInstanceState)
--        if (CrashHandler.hasCrashed(this)) {
--            startActivity(Intent(this, SafeModeActivity::class.java))
--            finish()
--            return
-+
-+    // Volume key listener registry — last registered handler wins
-+    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
-+
-+    @SuppressLint("RestrictedApi")
-+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-+        if (event.action == KeyEvent.ACTION_DOWN) {
-+            val isVolumeUp = when (event.keyCode) {
-+                KeyEvent.KEYCODE_VOLUME_UP -> true
-+                KeyEvent.KEYCODE_VOLUME_DOWN -> false
-+                else -> return super.dispatchKeyEvent(event)
-+            }
-+            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
-+        }
-+        return super.dispatchKeyEvent(event)
-+    }
-+
-+    override fun onCreate(savedInstanceState: Bundle?) {
-+        enableEdgeToEdge()
-+        disableNavigationBarContrast()
-+        super.onCreate(savedInstanceState)
-+        if (CrashHandler.hasCrashed(this)) {
-+            startActivity(Intent(this, SafeModeActivity::class.java))
-+            finish()
-+            return
-         }
-         if (savedInstanceState == null) {
-             handleIntent(intent)
--        }
--        setContent {
--            RikkahubTheme {
--                setSingletonImageLoaderFactory { context ->
--                    ImageLoader.Builder(context)
--                        .crossfade(true)
--                        .components {
--                            add(
--                                OkHttpNetworkFetcherFactory(
--                                    callFactory = { okHttpClient },
--                                    cacheStrategy = { CacheControlCacheStrategy() },
--                                )
--                            )
--                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
--                                add(AnimatedImageDecoder.Factory())
--                            } else {
--                                add(GifDecoder.Factory())
--                            }
--                            add(SvgDecoder.Factory(scaleToDensity = true))
--                        }
--                        .build()
--                }
--                AppRoutes()
--            }
--        }
--    }
--
--    private fun disableNavigationBarContrast() {
--        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
--            window.isNavigationBarContrastEnforced = false
--        }
--    }
--
-+        }
-+        setContent {
-+            RikkahubTheme {
-+                setSingletonImageLoaderFactory { context ->
-+                    ImageLoader.Builder(context)
-+                        .crossfade(true)
-+                        .components {
-+                            add(
-+                                OkHttpNetworkFetcherFactory(
-+                                    callFactory = { okHttpClient },
-+                                    cacheStrategy = { CacheControlCacheStrategy() },
-+                                )
-+                            )
-+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-+                                add(AnimatedImageDecoder.Factory())
-+                            } else {
-+                                add(GifDecoder.Factory())
-+                            }
-+                            add(SvgDecoder.Factory(scaleToDensity = true))
-+                        }
-+                        .build()
-+                }
-+                AppRoutes()
-+            }
-+        }
-+    }
-+
-+    private fun disableNavigationBarContrast() {
-+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-+            window.isNavigationBarContrastEnforced = false
-+        }
-+    }
-+
-     override fun onNewIntent(intent: Intent) {
-         super.onNewIntent(intent)
-         setIntent(intent)
-         handleIntent(intent)
--    }
--
-+    }
-+
-     private fun handleIntent(intent: Intent) {
-         val backStack = navStack ?: run {
-             // Compose 尚未创建导航栈，待就绪后处理。
-             pendingIntents.addLast(intent)
--            return
--        }
-+            return
-+        }
-         val destination = when (intent.action) {
-             ACTION_TRANSLATE -> Screen.Translator
-             Intent.ACTION_SEND -> Screen.ShareHandler(
-@@ -228,507 +232,535 @@ class RouteActivity : ComponentActivity() {
-         }
-         if (destination != null && backStack.lastOrNull() != destination) {
-             backStack.add(destination)
--        }
--    }
--
--    @OptIn(ExperimentalComposeUiApi::class)
--    @Composable
--    fun AppRoutes() {
--        val toastState = rememberToasterState()
--        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
--        val tts = rememberCustomTtsState()
--        val asr = rememberCustomAsrState()
--        val eventBus = koinInject<AppEventBus>()
--        LaunchedEffect(tts) {
--            eventBus.events.collect { event ->
--                when (event) {
--                    is AppEvent.Speak -> tts.speak(event.text)
--                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
--                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
--                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
--                }
--            }
--        }
--        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
--
--        val startScreen = Screen.Chat(
--            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
--                Uuid.random().toString()
--            } else {
--                readStringPreference(
--                    "lastConversationId",
--                    Uuid.random().toString()
--                ) ?: Uuid.random().toString()
--            }
--        )
--
-+        }
-+    }
-+
-+    @OptIn(ExperimentalComposeUiApi::class)
-+    @Composable
-+    fun AppRoutes() {
-+        val toastState = rememberToasterState()
-+        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
-+        val tts = rememberCustomTtsState()
-+        val asr = rememberCustomAsrState()
-+        val eventBus = koinInject<AppEventBus>()
-+        LaunchedEffect(tts) {
-+            eventBus.events.collect { event ->
-+                when (event) {
-+                    is AppEvent.Speak -> tts.speak(event.text)
-+                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
-+                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
-+                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
-+                }
-+            }
-+        }
-+        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
-+
-+        val startScreen = Screen.Chat(
-+            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
-+                Uuid.random().toString()
-+            } else {
-+                readStringPreference(
-+                    "lastConversationId",
-+                    Uuid.random().toString()
-+                ) ?: Uuid.random().toString()
-+            }
-+        )
-+
-         val backStack = rememberNavBackStack(startScreen)
-         SideEffect {
-             navStack = backStack
-             while (pendingIntents.isNotEmpty()) {
-                 handleIntent(pendingIntents.removeFirst())
-             }
--        }
--
--        SharedTransitionLayout {
--            CompositionLocalProvider(
--                LocalNavController provides Navigator(backStack),
--                LocalSharedTransitionScope provides this,
--                LocalSettings provides settings,
--                LocalToaster provides toastState,
--                LocalTTSState provides tts,
--                LocalASRState provides asr,
--            ) {
--                Toaster(
--                    state = toastState,
--                    darkTheme = LocalDarkMode.current,
--                    richColors = true,
--                    alignment = Alignment.TopCenter,
--                    showCloseButton = true,
--                )
--                TTSController()
--                Box(
--                    modifier = Modifier
--                        .fillMaxSize()
--                        .semantics { testTagsAsResourceId = true }
--                        .background(MaterialTheme.colorScheme.background)
--                ) {
--                    NavDisplay(
--                        backStack = backStack,
--                        entryDecorators = listOf(
--                            rememberSaveableStateHolderNavEntryDecorator(),
--                            rememberViewModelStoreNavEntryDecorator(),
--                        ),
--                        modifier = Modifier.fillMaxSize(),
--                        onBack = { backStack.removeLastOrNull() },
--                        transitionSpec = {
--                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
--                            else {
--                                slideInHorizontally { it } togetherWith
--                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
--                            }
--                        },
--                        popTransitionSpec = {
--                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
--                                slideOutHorizontally { it }
--                        },
--                        predictivePopTransitionSpec = {
--                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
--                                slideOutHorizontally { it }
--                        },
--                        entryProvider = entryProvider {
--                            entry<Screen.Chat>(
--                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
--                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
--                            ) { key ->
--                                ChatPage(
--                                    id = Uuid.parse(key.id),
--                                    text = key.text,
--                                    files = key.files.map { it.toUri() },
--                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
--                                )
--                            }
--
--                            entry<Screen.ShareHandler> { key ->
--                                ShareHandlerPage(
--                                    text = key.text,
--                                    image = key.streamUri
--                                )
--                            }
--
--                            entry<Screen.History> {
--                                HistoryPage()
--                            }
--
--                            entry<Screen.Favorite> {
--                                FavoritePage()
--                            }
--
--                            entry<Screen.Assistant> {
--                                AssistantPage()
--                            }
--
--                            entry<Screen.AssistantDetail> { key ->
--                                AssistantDetailPage(key.id)
--                            }
--
--                            entry<Screen.AssistantBasic> { key ->
--                                AssistantBasicPage(key.id)
--                            }
--
--                            entry<Screen.AssistantPrompt> { key ->
--                                AssistantPromptPage(key.id)
--                            }
--
--                            entry<Screen.AssistantMemory> { key ->
--                                AssistantMemoryPage(key.id)
--                            }
--
--                            entry<Screen.AssistantRequest> { key ->
--                                AssistantRequestPage(key.id)
--                            }
--
--                            entry<Screen.AssistantMcp> { key ->
--                                AssistantMcpPage(key.id)
--                            }
--
--                            entry<Screen.AssistantLocalTool> { key ->
--                                AssistantLocalToolPage(key.id)
--                            }
--
--                            entry<Screen.AssistantInjections> { key ->
--                                AssistantExtensionsPage(key.id)
--                            }
--
--                            entry<Screen.Translator> {
--                                TranslatorPage()
--                            }
--
--                            entry<Screen.Setting> {
--                                SettingPage()
--                            }
--
--                            entry<Screen.Backup> {
--                                BackupPage()
--                            }
--
--                            entry<Screen.ImageGen> {
--                                ImageGenPage()
--                            }
--
--                            entry<Screen.WebView> { key ->
--                                WebViewPage(key.url, key.contentId)
--                            }
--
--                            entry<Screen.SettingTheme> {
--                                SettingThemePage()
--                            }
--
--                            entry<Screen.SettingPreferences> {
--                                SettingPreferencesPage()
--                            }
--
--                            entry<Screen.SettingPreferencesTheme> {
--                                SettingPreferencesThemePage()
--                            }
--
--                            entry<Screen.SettingPreferencesNotification> {
--                                SettingPreferencesNotificationPage()
--                            }
--
--                            entry<Screen.SettingPreferencesGeneral> {
--                                SettingPreferencesGeneralPage()
--                            }
--
-+        }
-+
-+        SharedTransitionLayout {
-+            CompositionLocalProvider(
-+                LocalNavController provides Navigator(backStack),
-+                LocalSharedTransitionScope provides this,
-+                LocalSettings provides settings,
-+                LocalToaster provides toastState,
-+                LocalTTSState provides tts,
-+                LocalASRState provides asr,
-+            ) {
-+                Toaster(
-+                    state = toastState,
-+                    darkTheme = LocalDarkMode.current,
-+                    richColors = true,
-+                    alignment = Alignment.TopCenter,
-+                    showCloseButton = true,
-+                )
-+                TTSController()
-+                Box(
-+                    modifier = Modifier
-+                        .fillMaxSize()
-+                        .semantics { testTagsAsResourceId = true }
-+                        .background(MaterialTheme.colorScheme.background)
-+                ) {
-+                    NavDisplay(
-+                        backStack = backStack,
-+                        entryDecorators = listOf(
-+                            rememberSaveableStateHolderNavEntryDecorator(),
-+                            rememberViewModelStoreNavEntryDecorator(),
-+                        ),
-+                        modifier = Modifier.fillMaxSize(),
-+                        onBack = { backStack.removeLastOrNull() },
-+                        transitionSpec = {
-+                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-+                            else {
-+                                slideInHorizontally { it } togetherWith
-+                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
-+                            }
-+                        },
-+                        popTransitionSpec = {
-+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-+                                slideOutHorizontally { it }
-+                        },
-+                        predictivePopTransitionSpec = {
-+                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-+                                slideOutHorizontally { it }
-+                        },
-+                        entryProvider = entryProvider {
-+                            entry<Screen.Chat>(
-+                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
-+                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
-+                            ) { key ->
-+                                ChatPage(
-+                                    id = Uuid.parse(key.id),
-+                                    text = key.text,
-+                                    files = key.files.map { it.toUri() },
-+                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
-+                                )
-+                            }
-+
-+                            entry<Screen.ShareHandler> { key ->
-+                                ShareHandlerPage(
-+                                    text = key.text,
-+                                    image = key.streamUri
-+                                )
-+                            }
-+
-+                            entry<Screen.History> {
-+                                HistoryPage()
-+                            }
-+
-+                            entry<Screen.Favorite> {
-+                                FavoritePage()
-+                            }
-+
-+                            entry<Screen.Assistant> {
-+                                AssistantPage()
-+                            }
-+
-+                            entry<Screen.AssistantDetail> { key ->
-+                                AssistantDetailPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantBasic> { key ->
-+                                AssistantBasicPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantPrompt> { key ->
-+                                AssistantPromptPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantMemory> { key ->
-+                                AssistantMemoryPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantRequest> { key ->
-+                                AssistantRequestPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantMcp> { key ->
-+                                AssistantMcpPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantLocalTool> { key ->
-+                                AssistantLocalToolPage(key.id)
-+                            }
-+
-+                            entry<Screen.AssistantInjections> { key ->
-+                                AssistantExtensionsPage(key.id)
-+                            }
-+
-+                            entry<Screen.Translator> {
-+                                TranslatorPage()
-+                            }
-+
-+                            entry<Screen.Setting> {
-+                                SettingPage()
-+                            }
-+
-+                            entry<Screen.Backup> {
-+                                BackupPage()
-+                            }
-+
-+                            entry<Screen.ImageGen> {
-+                                ImageGenPage()
-+                            }
-+
-+                            entry<Screen.WebView> { key ->
-+                                WebViewPage(key.url, key.contentId)
-+                            }
-+
-+                            entry<Screen.SettingTheme> {
-+                                SettingThemePage()
-+                            }
-+
-+                            entry<Screen.SettingPreferences> {
-+                                SettingPreferencesPage()
-+                            }
-+
-+                            entry<Screen.SettingPreferencesTheme> {
-+                                SettingPreferencesThemePage()
-+                            }
-+
-+                            entry<Screen.SettingPreferencesNotification> {
-+                                SettingPreferencesNotificationPage()
-+                            }
-+
-+                            entry<Screen.SettingPreferencesGeneral> {
-+                                SettingPreferencesGeneralPage()
-+                            }
-+
-                             entry<Screen.SettingPreferencesUI> {
+ import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
+ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
+ import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
+@@ -424,6 +429,26 @@ class RouteActivity : ComponentActivity() {
                                  SettingPreferencesUIPage()
                              }
  
@@ -827,6 +30,10 @@ index bef7871..d036b40 100644
 +                                SettingPreferencesImagesPage()
 +                            }
 +
++                            entry<Screen.SettingPreferencesMaterial> {
++                                SettingPreferencesMaterialPage()
++                            }
++
 +                            entry<Screen.SettingPreferencesQuote> {
 +                                SettingPreferencesQuotePage()
 +                            }
@@ -834,462 +41,8 @@ index bef7871..d036b40 100644
                              entry<Screen.SettingPreferencesNetwork> {
                                  SettingPreferencesNetworkPage()
                              }
--
--                            entry<Screen.SettingProvider> {
--                                SettingProviderPage()
--                            }
--
--                            entry<Screen.SettingProviderDetail> { key ->
--                                val id = Uuid.parse(key.providerId)
--                                SettingProviderDetailPage(id = id)
--                            }
--
--                            entry<Screen.SettingModels> {
--                                SettingModelPage()
--                            }
--
--                            entry<Screen.SettingAbout> {
--                                SettingAboutPage()
--                            }
--
--                            entry<Screen.SettingSearch> {
--                                SettingSearchPage()
--                            }
--
--                            entry<Screen.SettingSearchDetail> { key ->
--                                val id = Uuid.parse(key.serviceId)
--                                SettingSearchDetailPage(id)
--                            }
--
--                            entry<Screen.SettingSpeech> {
--                                SettingSpeechPage()
--                            }
--
--                            entry<Screen.SettingMcp> {
--                                SettingMcpPage()
--                            }
--
--                            entry<Screen.SettingDonate> {
--                                SettingDonatePage()
--                            }
--
--                            entry<Screen.SettingFiles> {
--                                SettingFilesPage()
--                            }
--
--                            entry<Screen.SettingWeb> {
--                                SettingWebPage()
--                            }
--
--                            entry<Screen.Debug> {
--                                DebugPage()
--                            }
--
--                            entry<Screen.Log> {
--                                LogPage()
--                            }
--
--                            entry<Screen.Extensions> {
--                                ExtensionsPage()
--                            }
--
--                            entry<Screen.QuickMessages> {
--                                QuickMessagesPage()
--                            }
--
--                            entry<Screen.Prompts> {
--                                PromptPage()
--                            }
--
--                            entry<Screen.Skills> {
--                                SkillsPage()
--                            }
--
--                            entry<Screen.Workspaces> {
--                                WorkspacePage()
--                            }
--
--                            entry<Screen.WorkspaceDetail> { key ->
--                                WorkspaceDetailPage(key.id)
--                            }
--
--                            entry<Screen.WorkspaceTerminal> { key ->
--                                WorkspaceTerminalPage(key.id)
--                            }
--
--                            entry<Screen.WorkspaceFileEditor> { key ->
--                                WorkspaceFileEditorPage(
--                                    id = key.id,
--                                    area = WorkspaceStorageArea.valueOf(key.area),
--                                    path = key.path,
--                                )
--                            }
--
--                            entry<Screen.SkillDetail> { key ->
--                                SkillDetailPage(skillName = key.skillName)
--                            }
--
--                            entry<Screen.MessageSearch> {
--                                SearchPage()
--                            }
--
--                            entry<Screen.Stats> {
--                                StatsPage()
--                            }
--                        }
--                    )
--                    if (BuildConfig.DEBUG) {
--                        Text(
--                            text = "[开发模式]",
--                            modifier = Modifier
--                                .align(Alignment.TopCenter)
--                                .padding(top = 4.dp),
--                            style = MaterialTheme.typography.labelSmall,
--                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
--                        )
--                    }
--                    AnimatedVisibility(
--                        visible = migrationState is MigrationState.Migrating,
--                        enter = fadeIn(),
--                        exit = fadeOut(),
--                        modifier = Modifier.fillMaxSize()
--                    ) {
--                        val state = migrationState as? MigrationState.Migrating
--                        Box(
--                            modifier = Modifier
--                                .fillMaxSize()
--                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
--                            contentAlignment = Alignment.Center
--                        ) {
--                            Column(
--                                horizontalAlignment = Alignment.CenterHorizontally,
--                                verticalArrangement = Arrangement.spacedBy(16.dp)
--                            ) {
--                                CircularProgressIndicator()
--                                Text(
--                                    text = stringResource(R.string.db_migrating),
--                                    style = MaterialTheme.typography.bodyLarge
--                                )
--                                if (state != null) {
--                                    Text(
--                                        text = "v${state.from} → v${state.to}",
--                                        style = MaterialTheme.typography.bodySmall,
--                                        color = MaterialTheme.colorScheme.onSurfaceVariant
--                                    )
--                                }
--                            }
--                        }
--                    }
--                }
--            }
--        }
--    }
--}
--
--sealed interface Screen : NavKey {
--    @Serializable
--    data class Chat(
--        val id: String,
--        val text: String? = null,
--        val files: List<String> = emptyList(),
--        val nodeId: String? = null
--    ) : Screen
--
--    @Serializable
--    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
--
--    @Serializable
--    data object History : Screen
--
--    @Serializable
--    data object Favorite : Screen
--
--    @Serializable
--    data object Assistant : Screen
--
--    @Serializable
--    data class AssistantDetail(val id: String) : Screen
--
--    @Serializable
--    data class AssistantBasic(val id: String) : Screen
--
--    @Serializable
--    data class AssistantPrompt(val id: String) : Screen
--
--    @Serializable
--    data class AssistantMemory(val id: String) : Screen
--
--    @Serializable
--    data class AssistantRequest(val id: String) : Screen
--
--    @Serializable
--    data class AssistantMcp(val id: String) : Screen
--
--    @Serializable
--    data class AssistantLocalTool(val id: String) : Screen
--
--    @Serializable
--    data class AssistantInjections(val id: String) : Screen
--
--    @Serializable
--    data object Translator : Screen
--
--    @Serializable
--    data object Setting : Screen
--
--    @Serializable
--    data object Backup : Screen
--
--    @Serializable
--    data object ImageGen : Screen
--
--    @Serializable
--    data class WebView(val url: String = "", val contentId: String = "") : Screen
--
--    @Serializable
--    data object SettingTheme : Screen
--
--    @Serializable
--    data object SettingPreferences : Screen
--
--    @Serializable
--    data object SettingPreferencesTheme : Screen
--
--    @Serializable
--    data object SettingPreferencesNotification : Screen
--
--    @Serializable
--    data object SettingPreferencesGeneral : Screen
--
--    @Serializable
-+
-+                            entry<Screen.SettingProvider> {
-+                                SettingProviderPage()
-+                            }
-+
-+                            entry<Screen.SettingProviderDetail> { key ->
-+                                val id = Uuid.parse(key.providerId)
-+                                SettingProviderDetailPage(id = id)
-+                            }
-+
-+                            entry<Screen.SettingModels> {
-+                                SettingModelPage()
-+                            }
-+
-+                            entry<Screen.SettingAbout> {
-+                                SettingAboutPage()
-+                            }
-+
-+                            entry<Screen.SettingSearch> {
-+                                SettingSearchPage()
-+                            }
-+
-+                            entry<Screen.SettingSearchDetail> { key ->
-+                                val id = Uuid.parse(key.serviceId)
-+                                SettingSearchDetailPage(id)
-+                            }
-+
-+                            entry<Screen.SettingSpeech> {
-+                                SettingSpeechPage()
-+                            }
-+
-+                            entry<Screen.SettingMcp> {
-+                                SettingMcpPage()
-+                            }
-+
-+                            entry<Screen.SettingDonate> {
-+                                SettingDonatePage()
-+                            }
-+
-+                            entry<Screen.SettingFiles> {
-+                                SettingFilesPage()
-+                            }
-+
-+                            entry<Screen.SettingWeb> {
-+                                SettingWebPage()
-+                            }
-+
-+                            entry<Screen.Debug> {
-+                                DebugPage()
-+                            }
-+
-+                            entry<Screen.Log> {
-+                                LogPage()
-+                            }
-+
-+                            entry<Screen.Extensions> {
-+                                ExtensionsPage()
-+                            }
-+
-+                            entry<Screen.QuickMessages> {
-+                                QuickMessagesPage()
-+                            }
-+
-+                            entry<Screen.Prompts> {
-+                                PromptPage()
-+                            }
-+
-+                            entry<Screen.Skills> {
-+                                SkillsPage()
-+                            }
-+
-+                            entry<Screen.Workspaces> {
-+                                WorkspacePage()
-+                            }
-+
-+                            entry<Screen.WorkspaceDetail> { key ->
-+                                WorkspaceDetailPage(key.id)
-+                            }
-+
-+                            entry<Screen.WorkspaceTerminal> { key ->
-+                                WorkspaceTerminalPage(key.id)
-+                            }
-+
-+                            entry<Screen.WorkspaceFileEditor> { key ->
-+                                WorkspaceFileEditorPage(
-+                                    id = key.id,
-+                                    area = WorkspaceStorageArea.valueOf(key.area),
-+                                    path = key.path,
-+                                )
-+                            }
-+
-+                            entry<Screen.SkillDetail> { key ->
-+                                SkillDetailPage(skillName = key.skillName)
-+                            }
-+
-+                            entry<Screen.MessageSearch> {
-+                                SearchPage()
-+                            }
-+
-+                            entry<Screen.Stats> {
-+                                StatsPage()
-+                            }
-+                        }
-+                    )
-+                    if (BuildConfig.DEBUG) {
-+                        Text(
-+                            text = "[开发模式]",
-+                            modifier = Modifier
-+                                .align(Alignment.TopCenter)
-+                                .padding(top = 4.dp),
-+                            style = MaterialTheme.typography.labelSmall,
-+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-+                        )
-+                    }
-+                    AnimatedVisibility(
-+                        visible = migrationState is MigrationState.Migrating,
-+                        enter = fadeIn(),
-+                        exit = fadeOut(),
-+                        modifier = Modifier.fillMaxSize()
-+                    ) {
-+                        val state = migrationState as? MigrationState.Migrating
-+                        Box(
-+                            modifier = Modifier
-+                                .fillMaxSize()
-+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
-+                            contentAlignment = Alignment.Center
-+                        ) {
-+                            Column(
-+                                horizontalAlignment = Alignment.CenterHorizontally,
-+                                verticalArrangement = Arrangement.spacedBy(16.dp)
-+                            ) {
-+                                CircularProgressIndicator()
-+                                Text(
-+                                    text = stringResource(R.string.db_migrating),
-+                                    style = MaterialTheme.typography.bodyLarge
-+                                )
-+                                if (state != null) {
-+                                    Text(
-+                                        text = "v${state.from} → v${state.to}",
-+                                        style = MaterialTheme.typography.bodySmall,
-+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-+                                    )
-+                                }
-+                            }
-+                        }
-+                    }
-+                }
-+            }
-+        }
-+    }
-+}
-+
-+sealed interface Screen : NavKey {
-+    @Serializable
-+    data class Chat(
-+        val id: String,
-+        val text: String? = null,
-+        val files: List<String> = emptyList(),
-+        val nodeId: String? = null
-+    ) : Screen
-+
-+    @Serializable
-+    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
-+
-+    @Serializable
-+    data object History : Screen
-+
-+    @Serializable
-+    data object Favorite : Screen
-+
-+    @Serializable
-+    data object Assistant : Screen
-+
-+    @Serializable
-+    data class AssistantDetail(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantBasic(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantPrompt(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantMemory(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantRequest(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantMcp(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantLocalTool(val id: String) : Screen
-+
-+    @Serializable
-+    data class AssistantInjections(val id: String) : Screen
-+
-+    @Serializable
-+    data object Translator : Screen
-+
-+    @Serializable
-+    data object Setting : Screen
-+
-+    @Serializable
-+    data object Backup : Screen
-+
-+    @Serializable
-+    data object ImageGen : Screen
-+
-+    @Serializable
-+    data class WebView(val url: String = "", val contentId: String = "") : Screen
-+
-+    @Serializable
-+    data object SettingTheme : Screen
-+
-+    @Serializable
-+    data object SettingPreferences : Screen
-+
-+    @Serializable
-+    data object SettingPreferencesTheme : Screen
-+
-+    @Serializable
-+    data object SettingPreferencesNotification : Screen
-+
-+    @Serializable
-+    data object SettingPreferencesGeneral : Screen
-+
-+    @Serializable
+@@ -657,6 +682,21 @@ sealed interface Screen : NavKey {
+     @Serializable
      data object SettingPreferencesUI : Screen
  
 +    @Serializable
@@ -1302,158 +55,16 @@ index bef7871..d036b40 100644
 +    data object SettingPreferencesImages : Screen
 +
 +    @Serializable
++    data object SettingPreferencesMaterial : Screen
++
++    @Serializable
 +    data object SettingPreferencesQuote : Screen
 +
      @Serializable
      data object SettingPreferencesNetwork : Screen
--
--    @Serializable
--    data object SettingProvider : Screen
--
--    @Serializable
--    data class SettingProviderDetail(val providerId: String) : Screen
--
--    @Serializable
--    data object SettingModels : Screen
--
--    @Serializable
--    data object SettingAbout : Screen
--
--    @Serializable
--    data object SettingSearch : Screen
--
--    @Serializable
--    data class SettingSearchDetail(val serviceId: String) : Screen
--
--    @Serializable
--    data object SettingSpeech : Screen
--
--    @Serializable
--    data object SettingMcp : Screen
--
--    @Serializable
--    data object SettingDonate : Screen
--
--    @Serializable
--    data object SettingFiles : Screen
--
--    @Serializable
--    data object SettingWeb : Screen
--
--    @Serializable
--    data object Debug : Screen
--
--    @Serializable
--    data object Log : Screen
--
--    @Serializable
--    data object Extensions : Screen
--
--    @Serializable
--    data object QuickMessages : Screen
--
--    @Serializable
--    data object Prompts : Screen
--
--    @Serializable
--    data object Skills : Screen
--
--    @Serializable
--    data object Workspaces : Screen
--
--    @Serializable
--    data class WorkspaceDetail(val id: String) : Screen
--
--    @Serializable
--    data class WorkspaceTerminal(val id: String) : Screen
--
--    @Serializable
--    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
--
--    @Serializable
--    data class SkillDetail(val skillName: String) : Screen
--
--    @Serializable
--    data object MessageSearch : Screen
--
--    @Serializable
--    data object Stats : Screen
--}
-+
-+    @Serializable
-+    data object SettingProvider : Screen
-+
-+    @Serializable
-+    data class SettingProviderDetail(val providerId: String) : Screen
-+
-+    @Serializable
-+    data object SettingModels : Screen
-+
-+    @Serializable
-+    data object SettingAbout : Screen
-+
-+    @Serializable
-+    data object SettingSearch : Screen
-+
-+    @Serializable
-+    data class SettingSearchDetail(val serviceId: String) : Screen
-+
-+    @Serializable
-+    data object SettingSpeech : Screen
-+
-+    @Serializable
-+    data object SettingMcp : Screen
-+
-+    @Serializable
-+    data object SettingDonate : Screen
-+
-+    @Serializable
-+    data object SettingFiles : Screen
-+
-+    @Serializable
-+    data object SettingWeb : Screen
-+
-+    @Serializable
-+    data object Debug : Screen
-+
-+    @Serializable
-+    data object Log : Screen
-+
-+    @Serializable
-+    data object Extensions : Screen
-+
-+    @Serializable
-+    data object QuickMessages : Screen
-+
-+    @Serializable
-+    data object Prompts : Screen
-+
-+    @Serializable
-+    data object Skills : Screen
-+
-+    @Serializable
-+    data object Workspaces : Screen
-+
-+    @Serializable
-+    data class WorkspaceDetail(val id: String) : Screen
-+
-+    @Serializable
-+    data class WorkspaceTerminal(val id: String) : Screen
-+
-+    @Serializable
-+    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
-+
-+    @Serializable
-+    data class SkillDetail(val skillName: String) : Screen
-+
-+    @Serializable
-+    data object MessageSearch : Screen
-+
-+    @Serializable
-+    data object Stats : Screen
-+}
+ 
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..bfdec00 100644
+index 205e822..da2df1f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1473,19 +84,24 @@ index 205e822..bfdec00 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +614,108 @@ enum class BackgroundEffectType {
+@@ -604,17 +614,113 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
 +/**
-+ * 界面材质：纯色 / 磨砂玻璃 / 液态玻璃。
++ * 界面材质：纯色 / 半透明 / 磨砂玻璃 / 液态玻璃。
 + *
-+ * SOLID 保持原版纯色外观，FROSTED / LIQUID 才会真正接 haze 模糊。
++ * SOLID 保持原版纯色外观；TRANSLUCENT 不模糊，只把底色 alpha 降下来（半透明）；
++ * FROSTED / LIQUID 才会真正接 haze 模糊。
++ * TRANSLUCENT 是新加的一档，带 @SerialName，老数据（只有 solid / frosted / liquid）反序列化不受影响。
 + */
 +@Serializable
 +enum class SurfaceMaterial {
 +    @SerialName("solid")
 +    SOLID,
++
++    @SerialName("translucent")
++    TRANSLUCENT,
 +
 +    @SerialName("frosted")
 +    FROSTED,
@@ -1582,7 +198,7 @@ index 205e822..bfdec00 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +743,133 @@ data class DisplaySetting(
+@@ -642,8 +748,138 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1690,6 +306,11 @@ index 205e822..bfdec00 100644
 +    val backgroundImageTint: Boolean = true,
 +    // 界面材质：纯色 / 磨砂玻璃 / 液态玻璃，SOLID 与原来完全一致
 +    val surfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    // 界面材质·输入框：输入框单独选材质（纯色 / 半透明 / 磨砂 / 液态玻璃）。
++    // 默认 SOLID = 与改动前逐像素一致；老字段 surfaceMaterial 保留不用，避免老配置迁移
++    val inputSurfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    // 界面材质·气泡：用户 / AI 气泡单独选材质，默认 SOLID = 与改动前逐像素一致
++    val bubbleSurfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
 +    // 材质模糊强度（dp），0..40，滑块范围一致
 +    val materialBlurRadius: Int = 16,
 +    // 聊天气泡实时模糊：性能敏感，默认关闭
@@ -1717,7 +338,7 @@ index 205e822..bfdec00 100644
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..0e1e23c 100644
+index 45c3d83..4f91629 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -1770,7 +391,7 @@ index 45c3d83..0e1e23c 100644
  import me.rerere.rikkahub.utils.SoundEffectPlayer
  import org.koin.compose.koinInject
  import kotlin.time.Duration.Companion.seconds
-@@ -153,9 +164,32 @@ fun ChatInput(
+@@ -153,9 +164,34 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -1783,9 +404,11 @@ index 45c3d83..0e1e23c 100644
 +    val inputBackgroundImage = remember(inputImagePath) {
 +        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
 +    }
-+    // 界面材质：纯色时和原版完全一致，磨砂 / 液态才换 style 和底色
++    // 界面材质：纯色时和原版完全一致，半透明只改底色，磨砂 / 液态才换 style 和底色。
++    // 输入框用的是它自己那一档 inputSurfaceMaterial（气泡有自己的 bubbleSurfaceMaterial），
++    // 强度仍然共用 materialBlurRadius
 +    val displaySetting = settings.displaySetting
-+    val surfaceMaterial = displaySetting.surfaceMaterial
++    val surfaceMaterial = displaySetting.inputSurfaceMaterial
 +    val materialBlurRadius = displaySetting.materialBlurRadius.coerceIn(0, 40)
 +    // 输入框提示语：空 = 仍然用资源里的 chat_input_placeholder（见 TextInputRow）
 +    val chatInputHint = displaySetting.chatInputHint
@@ -1805,14 +428,15 @@ index 45c3d83..0e1e23c 100644
      }
  
      val keyboardController = LocalSoftwareKeyboardController.current
-@@ -217,6 +251,17 @@ fun ChatInput(
+@@ -217,6 +253,18 @@ fun ChatInput(
          }
      }
  
 +    // 输入框底色：透明度只乘在这里（文字 / 图标在内容层，不受影响）。
-+    // 默认 0 时原样返回，保证与改动前逐像素一致
++    // 默认 0 时原样返回，保证与改动前逐像素一致；
++    // 半透明（TRANSLUCENT）会把底色 alpha 降到 0.55，再往下乘透明度滑块的系数
 +    val inputContainerColor = surfaceMaterialContainerColor(
-+        display = displaySetting,
++        material = surfaceMaterial,
 +        solid = if (displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
 +        frosted = hazeTintColor,
 +    ).let { base ->
@@ -1823,7 +447,7 @@ index 45c3d83..0e1e23c 100644
      Surface(
          color = Color.Transparent,
      ) {
-@@ -240,167 +285,230 @@ fun ChatInput(
+@@ -240,167 +288,233 @@ fun ChatInput(
                      .fillMaxWidth()
                      .clip(containerShape)
                      .then(
@@ -1868,6 +492,9 @@ index 45c3d83..0e1e23c 100644
 +                                    shape(containerShape)
 +                                },
 +                            )
++                            // 半透明：只把底色 alpha 降下来（见上面的 inputContainerColor），
++                            // 明确不接 haze——半透明 ≠ 模糊，连「背景模糊效果」开关也不在这档生效
++                            surfaceMaterial == SurfaceMaterial.TRANSLUCENT -> Modifier
 +                            // 纯色：原来的「背景模糊效果」开关照旧
 +                            displaySetting.enableBlurEffect -> {
 +                                when (displaySetting.backgroundEffectType) {
@@ -1900,7 +527,7 @@ index 45c3d83..0e1e23c 100644
 -                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
 -                color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
 +                border = surfaceMaterialBorder(
-+                    display = displaySetting,
++                    material = surfaceMaterial,
 +                    fallback = BorderStroke(
 +                        1.dp,
 +                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -2189,7 +816,7 @@ index 45c3d83..0e1e23c 100644
                  }
              }
  
-@@ -484,6 +592,10 @@ private fun TextInputRow(
+@@ -484,6 +598,10 @@ private fun TextInputRow(
      state: ChatInputState,
      completionProviders: List<ChatCompletionProvider>,
      onSendMessage: () -> Unit,
@@ -2200,7 +827,7 @@ index 45c3d83..0e1e23c 100644
  ) {
      val settings = LocalSettings.current
      val filesManager: FilesManager = koinInject()
-@@ -607,10 +719,41 @@ private fun TextInputRow(
+@@ -607,10 +725,41 @@ private fun TextInputRow(
              )
          }
  
@@ -2242,7 +869,7 @@ index 45c3d83..0e1e23c 100644
                  .testTag("chat_input")
                  .contentReceiver(receiveContentListener)
                  .onFocusChanged {
-@@ -618,7 +761,8 @@ private fun TextInputRow(
+@@ -618,7 +767,8 @@ private fun TextInputRow(
                  },
              shape = MaterialTheme.shapes.largeIncreased,
              placeholder = {
@@ -2252,7 +879,7 @@ index 45c3d83..0e1e23c 100644
              },
              lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
              keyboardOptions = KeyboardOptions(
-@@ -658,7 +802,7 @@ private fun TextInputRow(
+@@ -658,7 +808,7 @@ private fun TextInputRow(
              } else null,
          )
          if (isFullScreen) {
@@ -2261,7 +888,7 @@ index 45c3d83..0e1e23c 100644
                  isFullScreen = false
              }
          }
-@@ -796,7 +940,7 @@ private fun QuickMessageButton(
+@@ -796,7 +946,7 @@ private fun QuickMessageButton(
  
  @Composable
  private fun FullScreenEditor(
@@ -2270,7 +897,7 @@ index 45c3d83..0e1e23c 100644
  ) {
      BasicAlertDialog(
          onDismissRequest = {
-@@ -841,7 +985,8 @@ private fun FullScreenEditor(
+@@ -841,7 +991,8 @@ private fun FullScreenEditor(
                              .fillMaxSize(),
                          shape = RoundedCornerShape(32.dp),
                          placeholder = {
@@ -2281,7 +908,7 @@ index 45c3d83..0e1e23c 100644
                          keyboardOptions = KeyboardOptions(
                              capitalization = KeyboardCapitalization.Sentences,
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..fb86c2c 100644
+index a18dd69..b12afcb 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -2333,11 +960,12 @@ index a18dd69..fb86c2c 100644
  import kotlinx.coroutines.FlowPreview
  import kotlinx.coroutines.flow.debounce
  import kotlinx.serialization.json.jsonArray
-@@ -75,10 +82,15 @@ import me.rerere.hugeicons.stroke.MusicNote03
+@@ -75,10 +82,16 @@ import me.rerere.hugeicons.stroke.MusicNote03
  import me.rerere.hugeicons.stroke.Video01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
 +import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
  import me.rerere.rikkahub.data.model.Assistant
  import me.rerere.rikkahub.data.model.AssistantAffectScope
  import me.rerere.rikkahub.data.model.MessageNode
@@ -2349,20 +977,21 @@ index a18dd69..fb86c2c 100644
  import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
  import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
  import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
-@@ -89,6 +101,12 @@ import me.rerere.rikkahub.ui.context.LocalNavController
+@@ -89,6 +102,13 @@ import me.rerere.rikkahub.ui.context.LocalNavController
  import me.rerere.rikkahub.ui.modifier.shimmer
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
 +import me.rerere.rikkahub.ui.theme.BaseTypography
-+import dev.chrisbanes.haze.HazeInput
-+import dev.chrisbanes.haze.blur.HazeBlurStyle
-+import dev.chrisbanes.haze.blur.hazeBlur
-+import dev.chrisbanes.haze.blur.material3.Material3
++import me.rerere.rikkahub.ui.theme.TRANSLUCENT_CONTAINER_ALPHA
++import me.rerere.rikkahub.ui.theme.materialBlurDp
++import me.rerere.rikkahub.ui.theme.surfaceMaterialBlur
++import me.rerere.rikkahub.ui.theme.surfaceMaterialEffect
++import dev.chrisbanes.haze.HazeState
 +import me.rerere.rikkahub.ui.context.LocalChatHazeState
  import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
  import me.rerere.rikkahub.ui.theme.extendColors
  import me.rerere.rikkahub.utils.JsonInstant
-@@ -121,10 +139,31 @@ fun ChatMessage(
+@@ -121,10 +141,31 @@ fun ChatMessage(
      val message = node.messages[node.selectIndex]
      val settings = LocalSettings.current.displaySetting
      val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
@@ -2398,7 +1027,7 @@ index a18dd69..fb86c2c 100644
      )
      var showActionsSheet by remember { mutableStateOf(false) }
      var showSelectCopySheet by remember { mutableStateOf(false) }
-@@ -137,45 +176,70 @@ fun ChatMessage(
+@@ -137,45 +178,70 @@ fun ChatMessage(
          verticalArrangement = Arrangement.spacedBy(4.dp)
      ) {
          if (!message.parts.isEmptyUIMessage()) {
@@ -2503,13 +1132,13 @@ index a18dd69..fb86c2c 100644
              }
          }
  
-@@ -261,6 +325,100 @@ fun ChatMessage(
+@@ -261,6 +327,158 @@ fun ChatMessage(
      }
  }
  
 +/**
 + * 气泡配色：设置了自定义颜色就直接用它（自定义值自带 alpha，不再叠加 bubbleOpacity），
-+ * 没设置时沿用原来的主题色 + 气泡透明度。
++ * 没设置时沿用原来的主题色 + 气泡透明度。最后再过一遍气泡自己的材质（SOLID = 原样）。
 + */
 +@Composable
 +private fun userBubbleContainer(setting: DisplaySetting): Color {
@@ -2519,8 +1148,7 @@ index a18dd69..fb86c2c 100644
 +    } else {
 +        MaterialTheme.colorScheme.primaryContainer.copy(alpha = setting.bubbleOpacity)
 +    }
-+    // 开了气泡实时模糊就留一点透明度，否则气泡完全不透明，背后的模糊看不见
-+    return if (setting.bubbleRealtimeBlur) base.copy(alpha = (base.alpha * 0.55f).coerceIn(0.05f, 1f)) else base
++    return bubbleMaterialColor(setting, base)
 +}
 +
 +@Composable
@@ -2531,9 +1159,68 @@ index a18dd69..fb86c2c 100644
 +    } else {
 +        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = setting.bubbleOpacity)
 +    }
-+    // 同上：气泡模糊开着时给模糊留出可见度
-+    return if (setting.bubbleRealtimeBlur) base.copy(alpha = (base.alpha * 0.55f).coerceIn(0.05f, 1f)) else base
++    return bubbleMaterialColor(setting, base)
 +}
++
++/**
++ * 气泡底色按材质收一层：
++ *
++ * - SOLID：原样（实时模糊开着时仍然是原来那个 0.55 的软收缩，逐像素一致）；
++ * - TRANSLUCENT：不模糊，只把底色 alpha 压到 0.55，透出一点背景又还能读字；
++ * - FROSTED：底色常驻半透明，质感交给 haze（开关关掉时就是一张半透明底）；
++ * - LIQUID：真挂了 haze-glass 时底色交给 glass 自己上（透明），否则退回半透明底保证可读。
++ */
++private fun bubbleMaterialColor(setting: DisplaySetting, base: Color): Color {
++    // 实时模糊开着时给模糊留出可见度，与改动前完全一致
++    val withBlurRoom = if (setting.bubbleRealtimeBlur) {
++        base.copy(alpha = (base.alpha * 0.55f).coerceIn(0.05f, 1f))
++    } else {
++        base
++    }
++    val translucent = base.copy(alpha = (base.alpha * TRANSLUCENT_CONTAINER_ALPHA).coerceIn(0.05f, 1f))
++    return when (setting.bubbleSurfaceMaterial) {
++        SurfaceMaterial.SOLID -> withBlurRoom
++        SurfaceMaterial.TRANSLUCENT -> translucent
++        SurfaceMaterial.FROSTED -> translucent
++        SurfaceMaterial.LIQUID -> if (setting.bubbleRealtimeBlur) Color.Transparent else translucent
++    }
++}
++
++/**
++ * 气泡的材质装饰（性能护栏在这里）。
++ *
++ * - 半透明 / 纯色：不挂任何材质糊层（纯色沿用原来的实时模糊路径，见下）；
++ * - 「聊天气泡实时模糊」开关关掉时，气泡**一律**不做 haze 实时模糊，只留底色 / 半透明；
++ * - 开关打开才有 haze：SOLID 走原来的平地 hazeBlur（默认配置因此逐像素一致），
++ *   FROSTED / LIQUID 分别挂磨砂 / 液态玻璃。
++ * 另外 haze 源拿不到（不在聊天列表里）时也不挂，避免白算一遍。
++ */
++@Composable
++private fun bubbleMaterialModifier(
++    display: DisplaySetting,
++    hazeState: HazeState?,
++    shape: RoundedCornerShape,
++    tint: Color,
++): Modifier {
++    val material = display.bubbleSurfaceMaterial
++    // 半透明 = 只改底色，永远不模糊
++    if (material == SurfaceMaterial.TRANSLUCENT) return Modifier
++    if (!display.bubbleRealtimeBlur || hazeState == null) return Modifier
++    // 与原来的气泡模糊一样至少留 4dp，避免 0dp 时糊层等于没开还白算一遍
++    val blurDp = display.materialBlurDp().coerceAtLeast(4)
++    return when (material) {
++        SurfaceMaterial.SOLID -> Modifier.surfaceMaterialBlur(hazeState, blurDp)
++        SurfaceMaterial.TRANSLUCENT -> Modifier
++        SurfaceMaterial.FROSTED, SurfaceMaterial.LIQUID -> Modifier.surfaceMaterialEffect(
++            state = hazeState,
++            material = material,
++            blurDp = blurDp,
++            shape = shape,
++            tint = tint,
++        )
++    }
++}
++
 +
 +/**
 + * 思维链卡片的底色：跟 AI 气泡共用自定义色，透明度再乘上思维链自己的透明度。
@@ -2604,7 +1291,7 @@ index a18dd69..fb86c2c 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -280,7 +438,34 @@ private fun MessagePartsBlock(
+@@ -280,7 +498,22 @@ private fun MessagePartsBlock(
      // 消息输出HapticFeedback
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
@@ -2622,24 +1309,12 @@ index a18dd69..fb86c2c 100644
 +        )
 +    }
      val partsState by rememberUpdatedState(parts)
-+    // 气泡实时模糊：默认关闭；只有开关打开且真的拿到了 haze 源才加，避免白算
++    // 气泡实时模糊：默认关闭。haze 源拿不到时也不挂（见 bubbleMaterialModifier 的性能护栏）
 +    val chatHazeState = LocalChatHazeState.current
-+    val bubbleRealtimeBlur = settings.displaySetting.bubbleRealtimeBlur && chatHazeState != null
-+    val bubbleHazeStyle = HazeBlurStyle.Material3 {
-+        blurRadius(settings.displaySetting.materialBlurRadius.coerceIn(4, 40).dp)
-+    }
-+    val bubbleHazeModifier = if (bubbleRealtimeBlur && chatHazeState != null) {
-+        Modifier.hazeBlur(
-+            input = HazeInput.Sources(chatHazeState),
-+            style = bubbleHazeStyle,
-+        )
-+    } else {
-+        Modifier
-+    }
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +509,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +557,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -2652,19 +1327,27 @@ index a18dd69..fb86c2c 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,41 +554,69 @@ private fun MessagePartsBlock(
+@@ -365,41 +602,85 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
 +                                val userBubbleColor = userBubbleContainer(settings.displaySetting)
++                                val userBubbleShape = bubbleShape(settings.displaySetting.bubbleCornerRadius)
++                                // 气泡材质：磨砂 / 液态且实时模糊开关打开才真的挂 haze
++                                val userBubbleMaterial = bubbleMaterialModifier(
++                                    display = settings.displaySetting,
++                                    hazeState = chatHazeState,
++                                    shape = userBubbleShape,
++                                    tint = userBubbleColor,
++                                )
                                  Surface(
 -                                    modifier = Modifier.animateContentSize(),
 -                                    shape = RoundedCornerShape(16.dp),
 -                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
 +                                    modifier = Modifier
 +                                        .animateContentSize()
-+                                        .then(bubbleHazeModifier),
-+                                    shape = bubbleShape(settings.displaySetting.bubbleCornerRadius),
++                                        .then(userBubbleMaterial),
++                                    shape = userBubbleShape,
 +                                    color = userBubbleColor,
 +                                    contentColor = bubbleContentColor(settings.displaySetting, userBubbleColor),
                                      onClick = { onUserMessageClick?.invoke() },
@@ -2711,11 +1394,19 @@ index a18dd69..fb86c2c 100644
 +                            } else {
 +                                if (settings.displaySetting.showAssistantBubble) {
 +                                    val assistantBubbleColor = assistantBubbleContainer(settings.displaySetting)
++                                    val assistantBubbleShape = bubbleShape(settings.displaySetting.bubbleCornerRadius)
++                                    // 同上：性能护栏在 bubbleMaterialModifier 里
++                                    val assistantBubbleMaterial = bubbleMaterialModifier(
++                                        display = settings.displaySetting,
++                                        hazeState = chatHazeState,
++                                        shape = assistantBubbleShape,
++                                        tint = assistantBubbleColor,
++                                    )
 +                                    Surface(
 +                                        modifier = Modifier
 +                                            .animateContentSize()
-+                                            .then(bubbleHazeModifier),
-+                                        shape = bubbleShape(settings.displaySetting.bubbleCornerRadius),
++                                            .then(assistantBubbleMaterial),
++                                        shape = assistantBubbleShape,
 +                                        color = assistantBubbleColor,
 +                                        contentColor = bubbleContentColor(settings.displaySetting, assistantBubbleColor),
 +                                    ) {
@@ -2743,7 +1434,7 @@ index a18dd69..fb86c2c 100644
                                  } else {
                                      MarkdownBlock(
                                          content = part.text.replaceRegexes(
-@@ -408,6 +625,8 @@ private fun MessagePartsBlock(
+@@ -408,6 +689,8 @@ private fun MessagePartsBlock(
                                              visual = true,
                                          ),
                                          onClickCitation = handleClickCitation,
@@ -2752,7 +1443,7 @@ index a18dd69..fb86c2c 100644
                                          modifier = Modifier
                                              .animateContentSize()
                                      )
-@@ -420,10 +639,18 @@ private fun MessagePartsBlock(
+@@ -420,10 +703,18 @@ private fun MessagePartsBlock(
                          // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
                          // 生成结束后内容稳定，再启用文本选择。
                          if (loading) {
@@ -6961,11 +5652,283 @@ index 0000000..9303aef
 +            target.absolutePath
 +        }.getOrNull()
 +    }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
+new file mode 100644
+index 0000000..f375e8c
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesMaterialPage.kt
+@@ -0,0 +1,266 @@
++package me.rerere.rikkahub.ui.pages.setting
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.material3.LargeFlexibleTopAppBar
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.SegmentedButton
++import androidx.compose.material3.SegmentedButtonDefaults
++import androidx.compose.material3.SingleChoiceSegmentedButtonRow
++import androidx.compose.material3.Slider
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import kotlin.math.roundToInt
++import me.rerere.rikkahub.data.datastore.DisplaySetting
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
++import me.rerere.rikkahub.ui.components.nav.BackButton
++import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.theme.CustomColors
++import me.rerere.rikkahub.ui.theme.materialBlurDp
++import me.rerere.rikkahub.ui.theme.needsHaze
++import me.rerere.rikkahub.utils.plus
++import org.koin.androidx.compose.koinViewModel
++
++/**
++ * 界面材质页：输入框 / 气泡各自选一档材质（纯色 / 半透明 / 磨砂 / 液态玻璃），
++ * 再共用两个强度参数（模糊强度 dp + 聊天气泡实时模糊开关）。
++ *
++ * 三档带模糊的材质（磨砂 / 液态玻璃）都走 haze，半径统一取 materialBlurRadius；
++ * 半透明完全不碰 haze，只把作用面的底色 alpha 压到 0.55。
++ * 默认（全 SOLID）与改动前逐像素一致。
++ */
++@Composable
++fun SettingPreferencesMaterialPage(vm: SettingVM = koinViewModel()) {
++    val settings by vm.settings.collectAsStateWithLifecycle()
++    var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
++
++    fun updateDisplaySetting(setting: DisplaySetting) {
++        displaySetting = setting
++        vm.updateSettings(settings.copy(displaySetting = setting))
++    }
++
++    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
++
++    // 模糊强度：0..40 dp，与 DisplaySetting.materialBlurDp() 的收敛范围一致
++    val blurRadius = displaySetting.materialBlurDp()
++    val bubbleMaterial = displaySetting.bubbleSurfaceMaterial
++    val inputMaterial = displaySetting.inputSurfaceMaterial
++
++    Scaffold(
++        topBar = {
++            LargeFlexibleTopAppBar(
++                title = { Text("界面材质") },
++                navigationIcon = {
++                    BackButton()
++                },
++                scrollBehavior = scrollBehavior,
++                colors = CustomColors.topBarColors
++            )
++        },
++        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++        containerColor = CustomColors.topBarColors.containerColor
++    ) { contentPadding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize(),
++            contentPadding = contentPadding + PaddingValues(8.dp),
++            verticalArrangement = Arrangement.spacedBy(16.dp)
++        ) {
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("输入框") },
++                ) {
++                    item(
++                        headlineContent = { Text("材质") },
++                        supportingContent = {
++                            Column {
++                                MaterialSegmentedRow(
++                                    selected = inputMaterial,
++                                    onSelect = {
++                                        updateDisplaySetting(displaySetting.copy(inputSurfaceMaterial = it))
++                                    },
++                                )
++                                Text(
++                                    text = materialDescription(inputMaterial, realtimeBlur = true),
++                                )
++                            }
++                        },
++                    )
++                }
++            }
++
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("气泡") },
++                ) {
++                    item(
++                        headlineContent = { Text("材质") },
++                        supportingContent = {
++                            Column {
++                                MaterialSegmentedRow(
++                                    selected = bubbleMaterial,
++                                    onSelect = {
++                                        updateDisplaySetting(displaySetting.copy(bubbleSurfaceMaterial = it))
++                                    },
++                                )
++                                Text(
++                                    text = if (bubbleMaterial.needsHaze() && !displaySetting.bubbleRealtimeBlur) {
++                                        "磨砂 / 液态玻璃要打开下面的「聊天气泡实时模糊」才会真的模糊；现在只显示半透明底色"
++                                    } else {
++                                        materialDescription(
++                                            material = bubbleMaterial,
++                                            realtimeBlur = displaySetting.bubbleRealtimeBlur,
++                                        )
++                                    },
++                                )
++                            }
++                        },
++                    )
++                }
++            }
++
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("强度") },
++                ) {
++                    item(
++                        headlineContent = { Text("模糊强度") },
++                        supportingContent = {
++                            Column {
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = blurRadius.toFloat(),
++                                        onValueChange = {
++                                            updateDisplaySetting(
++                                                displaySetting.copy(materialBlurRadius = it.roundToInt())
++                                            )
++                                        },
++                                        valueRange = 0f..40f,
++                                        steps = 39,
++                                        modifier = Modifier.weight(1f),
++                                    )
++                                    Text("$blurRadius dp")
++                                }
++                                Text(
++                                    text = "输入框与气泡共用这一个强度；0 dp 时磨砂几乎等于纯色，越大越糊",
++                                    style = MaterialTheme.typography.bodySmall,
++                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                                )
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(displaySetting.copy(materialBlurRadius = 16))
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
++                    item(
++                        headlineContent = { Text("聊天气泡实时模糊") },
++                        supportingContent = {
++                            Text(
++                                if (displaySetting.bubbleRealtimeBlur) {
++                                    "气泡会跟着背后的内容实时模糊（性能敏感，长列表里可能掉帧）"
++                                } else {
++                                    "关闭时气泡一律不做实时模糊，磨砂 / 液态只保留半透明底色（默认关闭）"
++                                }
++                            )
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.bubbleRealtimeBlur,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(bubbleRealtimeBlur = it))
++                                },
++                            )
++                        },
++                    )
++                }
++            }
++
++            item {
++                Text(
++                    text = "纯色 = 原样；半透明 = 只把底色压淡；磨砂 / 液态玻璃 = 背景实时模糊。没有背景图或纯色壁纸时，模糊效果几乎看不出来。",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    modifier = Modifier.padding(horizontal = 16.dp),
++                )
++            }
++        }
++    }
++}
++
++/** 四档材质和显示名，顺序就是分段按钮的顺序 */
++private val materialChoices: List<Pair<SurfaceMaterial, String>> = listOf(
++    SurfaceMaterial.SOLID to "纯色",
++    SurfaceMaterial.TRANSLUCENT to "半透明",
++    SurfaceMaterial.FROSTED to "磨砂",
++    SurfaceMaterial.LIQUID to "液态玻璃",
++)
++
++/** 一行四选一的分段按钮（Material3 SingleChoiceSegmentedButtonRow） */
++@Composable
++private fun MaterialSegmentedRow(
++    selected: SurfaceMaterial,
++    onSelect: (SurfaceMaterial) -> Unit,
++) {
++    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
++        materialChoices.forEachIndexed { index, choice ->
++            SegmentedButton(
++                selected = selected == choice.first,
++                onClick = { onSelect(choice.first) },
++                shape = SegmentedButtonDefaults.itemShape(
++                    index = index,
++                    count = materialChoices.size,
++                ),
++            ) {
++                Text(choice.second)
++            }
++        }
++    }
++}
++
++/** 当前材质的说明文字：输入框和气泡共用一套文案，气泡多考虑实时模糊开关 */
++private fun materialDescription(material: SurfaceMaterial, realtimeBlur: Boolean): String =
++    when (material) {
++        SurfaceMaterial.SOLID -> "纯色：与原来完全一致，不额外绘制任何东西"
++        SurfaceMaterial.TRANSLUCENT -> "半透明：底色压到 55%，不模糊、不额外开销"
++        SurfaceMaterial.FROSTED -> if (realtimeBlur) {
++            "磨砂玻璃：背景实时模糊 + 半透明底色"
++        } else {
++            "磨砂玻璃：目前只保留半透明底色，等模糊开关打开才会真的模糊"
++        }
++
++        SurfaceMaterial.LIQUID -> if (realtimeBlur) {
++            "液态玻璃：更强的模糊 + 玻璃边缘高光和渐变"
++        } else {
++            "液态玻璃：目前只保留半透明底色，等模糊开关打开才会真的模糊"
++        }
++    }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-index c296a24..f747ad6 100644
+index c296a24..1f7b8ff 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-@@ -18,9 +18,14 @@ import androidx.compose.ui.unit.dp
+@@ -18,9 +18,15 @@ import androidx.compose.ui.unit.dp
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Notification01
  import me.rerere.hugeicons.stroke.Internet
@@ -6974,13 +5937,14 @@ index c296a24..f747ad6 100644
 +import me.rerere.hugeicons.stroke.Image02
  import me.rerere.hugeicons.stroke.PaintBoard
  import me.rerere.hugeicons.stroke.Settings03
++import me.rerere.hugeicons.stroke.Sparkles
  import me.rerere.hugeicons.stroke.Sun01
 +import me.rerere.hugeicons.stroke.TextSelection
 +import me.rerere.hugeicons.stroke.WebDesign01
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
  import me.rerere.rikkahub.ui.components.nav.BackButton
-@@ -65,6 +70,30 @@ fun SettingPreferencesPage() {
+@@ -65,6 +71,36 @@ fun SettingPreferencesPage() {
                          headlineContent = { Text(stringResource(R.string.setting_page_preferences_theme)) },
                          supportingContent = { Text(stringResource(R.string.setting_page_preferences_theme_desc)) },
                      )
@@ -7001,6 +5965,12 @@ index c296a24..f747ad6 100644
 +                        leadingContent = { Icon(HugeIcons.Image02, null) },
 +                        headlineContent = { Text("插图素材") },
 +                        supportingContent = { Text("输入框背景、侧边栏背景、气泡背景") },
++                    )
++                    item(
++                        onClick = { navController.navigate(Screen.SettingPreferencesMaterial) },
++                        leadingContent = { Icon(HugeIcons.Sparkles, null) },
++                        headlineContent = { Text("界面材质") },
++                        supportingContent = { Text("纯色 / 半透明 / 磨砂 / 液态玻璃") },
 +                    )
 +                    item(
 +                        onClick = { navController.navigate(Screen.SettingPreferencesQuote) },
@@ -9008,10 +7978,10 @@ index 0000000..a46bbb5
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
 new file mode 100644
-index 0000000..d383e87
+index 0000000..7cb9671
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/theme/SurfaceMaterialStyle.kt
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,196 @@
 +package me.rerere.rikkahub.ui.theme
 +
 +import androidx.compose.foundation.BorderStroke
@@ -9041,11 +8011,17 @@ index 0000000..d383e87
 +import me.rerere.rikkahub.data.datastore.SurfaceMaterial
 +
 +/**
-+ * 界面材质（纯色 / 磨砂玻璃 / 液态玻璃）在非输入框界面上的复用实现。
++ * 界面材质（纯色 / 半透明 / 磨砂玻璃 / 液态玻璃）在非输入框界面上的复用实现。
 + *
 + * 只使用项目里 haze 2.0.0-rc02 已经在 ChatInput 用过的那些 API：
 + * HazeInput.Sources / HazeBlurStyle.Material3 / GlassStyle.Material3 / hazeBlur / hazeGlass。
 + * 一律不用 `Modifier.blur`，半径直接取设置里的 materialBlurRadius。
++ *
++ * 四档材质：
++ * - SOLID：一点额外绘制都不加，原版纯色外观；
++ * - TRANSLUCENT：不模糊，只把底色 alpha 降下来（半透明）；
++ * - FROSTED：hazeBlur + 半透明底色；
++ * - LIQUID：hazeGlass（更强模糊 + 玻璃光学高光），底色交给 glass 自己上。
 + */
 +
 +/** 模糊强度统一收敛到 0..40，和设置页滑块的取值范围一致 */
@@ -9054,11 +8030,15 @@ index 0000000..d383e87
 +/** 是否真的需要走 haze：纯色就是原版外观，一点额外绘制都不加 */
 +fun DisplaySetting.usesHazeSurfaceMaterial(): Boolean = surfaceMaterial != SurfaceMaterial.SOLID
 +
++/** 某一档材质是否需要 haze 实时模糊：只有磨砂 / 液态需要，纯色和半透明都不要 */
++fun SurfaceMaterial.needsHaze(): Boolean =
++    this == SurfaceMaterial.FROSTED || this == SurfaceMaterial.LIQUID
++
 +/**
-+ * 给一个作用面加上材质效果。
++ * 给一个作用面加上材质效果（按 [display] 里的 surfaceMaterial 走，老调用方用这个）。
 + *
-+ * SOLID 原样返回（不做任何额外绘制）；FROSTED 用 haze 模糊；LIQUID 用 haze-glass
-+ * （更强模糊 + glass 自带的光学高光），形状用传入的 [shape]。
++ * SOLID / TRANSLUCENT 原样返回（不做任何额外绘制，半透明只改底色不改绘制）；
++ * FROSTED 用 haze 模糊；LIQUID 用 haze-glass（更强模糊 + glass 自带的光学高光），形状用传入的 [shape]。
 + */
 +@Composable
 +fun Modifier.surfaceMaterialEffect(
@@ -9066,10 +8046,32 @@ index 0000000..d383e87
 +    display: DisplaySetting,
 +    shape: Shape,
 +    tint: Color,
++): Modifier = surfaceMaterialEffect(
++    state = state,
++    material = display.surfaceMaterial,
++    blurDp = display.materialBlurDp(),
++    shape = shape,
++    tint = tint,
++)
++
++/**
++ * 给一个作用面加上材质效果（显式指定材质，输入框 / 气泡各自选档时用这个）。
++ *
++ * 只有 FROSTED / LIQUID 会真的挂 haze；SOLID 和 TRANSLUCENT 都原样返回。
++ */
++@Composable
++fun Modifier.surfaceMaterialEffect(
++    state: HazeState,
++    material: SurfaceMaterial,
++    blurDp: Int,
++    shape: Shape,
++    tint: Color,
 +): Modifier {
-+    val radius = display.materialBlurDp()
-+    return when (display.surfaceMaterial) {
++    val radius = blurDp.coerceIn(0, 40)
++    return when (material) {
 +        SurfaceMaterial.SOLID -> this
++        // 半透明：只是底色淡一点 + 透出背后的内容，不做任何模糊
++        SurfaceMaterial.TRANSLUCENT -> this
 +        SurfaceMaterial.FROSTED -> this.hazeBlur(
 +            input = HazeInput.Sources(state),
 +            style = HazeBlurStyle.Material3 {
@@ -9096,22 +8098,59 @@ index 0000000..d383e87
 +}
 +
 +/**
-+ * 材质作用面自己的底色。
-+ *
-+ * 磨砂玻璃留一点半透明让背后模糊透出来；液态玻璃交给 haze-glass 自己上色，所以是透明。
++ * 「聊天气泡实时模糊」的老路径：纯色气泡在开关打开时仍然走这一条平地 hazeBlur，
++ * 这样默认配置（全 SOLID + 开关打开）与改动前逐像素一致。
++ */
++@Composable
++fun Modifier.surfaceMaterialBlur(state: HazeState, blurDp: Int): Modifier {
++    val radius = blurDp.coerceIn(0, 40)
++    return this.hazeBlur(
++        input = HazeInput.Sources(state),
++        style = HazeBlurStyle.Material3 {
++            blurRadius(radius.dp)
++        },
++    )
++}
++
++/**
++ * 材质作用面自己的底色（按 [display] 里的 surfaceMaterial 走，老调用方用这个）。
 + */
 +fun surfaceMaterialContainerColor(display: DisplaySetting, solid: Color, frosted: Color): Color =
-+    when (display.surfaceMaterial) {
-+        SurfaceMaterial.SOLID -> solid
-+        SurfaceMaterial.FROSTED -> frosted.copy(alpha = 0.55f)
-+        SurfaceMaterial.LIQUID -> Color.Transparent
-+    }
++    surfaceMaterialContainerColor(display.surfaceMaterial, solid, frosted)
++
++/**
++ * 材质作用面自己的底色。
++ *
++ * - SOLID：原样 [solid]；
++ * - TRANSLUCENT：底色 alpha 降到 0.55，不模糊、只透出一点背后的内容；
++ * - FROSTED：留一点半透明让背后模糊透出来；
++ * - LIQUID：交给 haze-glass 自己上色，所以是透明。
++ */
++fun surfaceMaterialContainerColor(
++    material: SurfaceMaterial,
++    solid: Color,
++    frosted: Color,
++): Color = when (material) {
++    SurfaceMaterial.SOLID -> solid
++    SurfaceMaterial.TRANSLUCENT -> solid.copy(alpha = TRANSLUCENT_CONTAINER_ALPHA)
++    SurfaceMaterial.FROSTED -> frosted.copy(alpha = 0.55f)
++    SurfaceMaterial.LIQUID -> Color.Transparent
++}
++
++/** 半透明材质的底色 alpha：0.55 既能透出背景，又还读得清字 */
++const val TRANSLUCENT_CONTAINER_ALPHA: Float = 0.55f
 +
 +/**
 + * 液态玻璃的边缘高光：1dp 半透明白描边。其它材质沿用调用方原来的 [fallback] 描边。
 + */
 +fun surfaceMaterialBorder(display: DisplaySetting, fallback: BorderStroke?): BorderStroke? =
-+    when (display.surfaceMaterial) {
++    surfaceMaterialBorder(display.surfaceMaterial, fallback)
++
++/**
++ * 液态玻璃的边缘高光：1dp 半透明白描边。其它材质（含半透明）沿用调用方原来的 [fallback] 描边。
++ */
++fun surfaceMaterialBorder(material: SurfaceMaterial, fallback: BorderStroke?): BorderStroke? =
++    when (material) {
 +        SurfaceMaterial.LIQUID -> BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
 +        else -> fallback
 +    }
