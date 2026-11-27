@@ -72,7 +72,7 @@ index bef7871..5088a03 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..5efbe2e 100644
+index 205e822..33c8fa8 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -206,7 +206,7 @@ index 205e822..5efbe2e 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,158 @@ data class DisplaySetting(
+@@ -642,8 +748,161 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -225,6 +225,9 @@ index 205e822..5efbe2e 100644
 +    val chatTextColor: Long? = null,
 +    // 消息时间颜色：null 表示跟随正文文字色（chatTextColor），正文也是默认时再退回主题 onSurface
 +    val messageTimeColor: Long? = null,
++    // 对话回顾（搜索/历史那个列表）里两种消息的底色：null = 跟随气泡色，再没有就用主题默认
++    val recallUserColor: Long? = null,
++    val recallAssistantColor: Long? = null,
 +    // 引号内文字高亮：开启后 AI 回复里被 “…” / "..." 包住的文字用 quoteHighlightColor 显示
 +    val enableQuoteHighlight: Boolean = false,
 +    // 引号高亮色，null 表示跟随主题（tertiary）
@@ -4563,7 +4566,7 @@ index 86fcdcf..150eff6 100644
              .clip(CircleShape)
              .combinedClickable(
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
-index 6f7f137..c135cf4 100644
+index 6f7f137..2dfc8a1 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt
 @@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
@@ -4574,7 +4577,14 @@ index 6f7f137..c135cf4 100644
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateListOf
-@@ -95,6 +96,7 @@ import me.rerere.rikkahub.data.model.Conversation
+@@ -89,12 +90,14 @@ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.launch
+ import me.rerere.ai.ui.UIMessage
+ import me.rerere.rikkahub.R
++import me.rerere.rikkahub.ui.context.LocalSettings
+ import me.rerere.rikkahub.data.datastore.Settings
+ import me.rerere.rikkahub.data.datastore.getAssistantById
+ import me.rerere.rikkahub.data.model.Conversation
  import me.rerere.rikkahub.data.model.MessageNode
  import me.rerere.rikkahub.service.ChatError
  import me.rerere.rikkahub.ui.components.message.ChatMessage
@@ -4582,7 +4592,7 @@ index 6f7f137..c135cf4 100644
  import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
  import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
  import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
-@@ -329,42 +331,45 @@ private fun ChatListNormal(
+@@ -329,42 +332,45 @@ private fun ChatListNormal(
                          selectedKeys = selectedItems,
                          enabled = selecting,
                      ) {
@@ -4664,6 +4674,28 @@ index 6f7f137..c135cf4 100644
                      }
                  }
              }
+@@ -673,9 +679,20 @@ private fun ChatListPreview(
+                         ),
+                     horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+                 ) {
++                    // 回顾列表的底色：专用色 > 气泡色 > 主题默认，三级回退
++                    val settingsForRecall = LocalSettings.current.displaySetting
++                    val recallColor = if (isUser) {
++                        settingsForRecall.recallUserColor?.let { Color(it) }
++                            ?: settingsForRecall.userBubbleColor?.let { Color(it) }
++                            ?: MaterialTheme.colorScheme.primaryContainer
++                    } else {
++                        settingsForRecall.recallAssistantColor?.let { Color(it) }
++                            ?: settingsForRecall.assistantBubbleColor?.let { Color(it) }
++                            ?: MaterialTheme.colorScheme.secondaryContainer
++                    }
+                     Surface(
+                         shape = MaterialTheme.shapes.medium,
+-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
++                        color = recallColor,
+                     ) {
+                         Row(
+                             modifier = Modifier
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 index 5460f45..957a562 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
@@ -5052,10 +5084,10 @@ index 0000000..a96c05b
 +)
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
 new file mode 100644
-index 0000000..4f17f67
+index 0000000..0e59adf
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesColorsPage.kt
-@@ -0,0 +1,373 @@
+@@ -0,0 +1,389 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -5162,6 +5194,22 @@ index 0000000..4f17f67
 +            preview = MaterialTheme.colorScheme.surfaceContainerHigh,
 +            supporting = { it?.toHexArgb() ?: "跟随主题" },
 +            apply = { setting, value -> setting.copy(assistantBubbleColor = value) },
++        ),
++        ColorField(
++            key = "recallUser",
++            title = "对话回顾·我发的",
++            value = displaySetting.recallUserColor,
++            preview = MaterialTheme.colorScheme.primaryContainer,
++            supporting = { it?.toHexArgb() ?: "跟随用户气泡色" },
++            apply = { setting, value -> setting.copy(recallUserColor = value) },
++        ),
++        ColorField(
++            key = "recallAssistant",
++            title = "对话回顾·AI 发的",
++            value = displaySetting.recallAssistantColor,
++            preview = MaterialTheme.colorScheme.secondaryContainer,
++            supporting = { it?.toHexArgb() ?: "跟随 AI 气泡色" },
++            apply = { setting, value -> setting.copy(recallAssistantColor = value) },
 +        ),
 +        ColorField(
 +            key = "chatBackground",
