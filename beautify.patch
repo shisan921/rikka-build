@@ -64,7 +64,7 @@ index bef7871..b391e1c 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..da2df1f 100644
+index 205e822..f446843 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -198,7 +198,7 @@ index 205e822..da2df1f 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,138 @@ data class DisplaySetting(
+@@ -642,8 +748,140 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -331,6 +331,8 @@ index 205e822..da2df1f 100644
 +    val chatInputTextColor: Long? = null,
 +    // 输入框文字不透明度：0f..1f，1f = 不额外乘 alpha（默认值下 textStyle 完全不插手）
 +    val chatInputTextAlpha: Float = 1f,
++    // 提示语（没打字时显示的灰字）的不透明度：1 = 原样，0 = 完全看不见
++    val chatInputHintAlpha: Float = 1f,
 +    // 界面字号倍数（0.85f..1.15f，步进 0.05）：1f = 与原来逐像素一致。
 +    // 只缩放送到 MaterialTheme 的那份 Typography，消息正文有自己的字号链路（fontSizeRatio / chatFontSizePercent）
 +    val uiFontScale: Float = 1f,
@@ -338,7 +340,7 @@ index 205e822..da2df1f 100644
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..4f91629 100644
+index 45c3d83..2266427 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -391,7 +393,7 @@ index 45c3d83..4f91629 100644
  import me.rerere.rikkahub.utils.SoundEffectPlayer
  import org.koin.compose.koinInject
  import kotlin.time.Duration.Companion.seconds
-@@ -153,9 +164,34 @@ fun ChatInput(
+@@ -153,9 +164,35 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -412,6 +414,7 @@ index 45c3d83..4f91629 100644
 +    val materialBlurRadius = displaySetting.materialBlurRadius.coerceIn(0, 40)
 +    // 输入框提示语：空 = 仍然用资源里的 chat_input_placeholder（见 TextInputRow）
 +    val chatInputHint = displaySetting.chatInputHint
++    val chatInputHintAlpha = displaySetting.chatInputHintAlpha.coerceIn(0f, 1f)
 +    val chatInputHeightDp = displaySetting.chatInputHeightDp.coerceIn(0, 72)
 +    // 输入框最小高度：0 = 不改，值域 40..72
 +    val inputMinHeightDp = if (chatInputHeightDp > 0) chatInputHeightDp else 0
@@ -428,7 +431,7 @@ index 45c3d83..4f91629 100644
      }
  
      val keyboardController = LocalSoftwareKeyboardController.current
-@@ -217,6 +253,18 @@ fun ChatInput(
+@@ -217,6 +254,18 @@ fun ChatInput(
          }
      }
  
@@ -447,7 +450,7 @@ index 45c3d83..4f91629 100644
      Surface(
          color = Color.Transparent,
      ) {
-@@ -240,167 +288,233 @@ fun ChatInput(
+@@ -240,167 +289,234 @@ fun ChatInput(
                      .fillMaxWidth()
                      .clip(containerShape)
                      .then(
@@ -604,6 +607,7 @@ index 45c3d83..4f91629 100644
 +                            completionProviders = completionProviders,
 +                            onSendMessage = { sendMessage() },
 +                            hint = chatInputHint,
++                            hintAlpha = chatInputHintAlpha,
 +                            minHeightDp = inputMinHeightDp,
 +                        )
  
@@ -816,7 +820,7 @@ index 45c3d83..4f91629 100644
                  }
              }
  
-@@ -484,6 +598,10 @@ private fun TextInputRow(
+@@ -484,6 +600,12 @@ private fun TextInputRow(
      state: ChatInputState,
      completionProviders: List<ChatCompletionProvider>,
      onSendMessage: () -> Unit,
@@ -824,31 +828,21 @@ index 45c3d83..4f91629 100644
 +    hint: String = "",
 +    // 输入框最小高度（dp）：0 = 不改
 +    minHeightDp: Int = 0,
++    // 提示语不透明度：1 = 原样（沿用主题的次要文字色）
++    hintAlpha: Float = 1f,
  ) {
      val settings = LocalSettings.current
      val filesManager: FilesManager = koinInject()
-@@ -607,10 +725,41 @@ private fun TextInputRow(
+@@ -607,10 +729,29 @@ private fun TextInputRow(
              )
          }
  
-+        // 输入框文字颜色 / 不透明度：两个设置都是默认值时直接用 LocalTextStyle（也就是 TextField
-+        // 自己的默认 textStyle），一个字都不改，保证逐像素与改动前一致；否则只覆盖 color
++        // 输入框文字颜色：没设颜色时直接用 LocalTextStyle（TextField 自己的默认），逐像素与改动前一致
 +        val inputTextColorSetting = settings.displaySetting.chatInputTextColor
-+        val inputTextAlphaSetting = settings.displaySetting.chatInputTextAlpha.coerceIn(0f, 1f)
-+        val inputTextStyle = if (inputTextColorSetting == null && inputTextAlphaSetting >= 1f) {
++        val inputTextStyle = if (inputTextColorSetting == null) {
 +            LocalTextStyle.current
 +        } else {
-+            // 没设颜色 -> 跟主题的 LocalContentColor 走；设了就用设置里的 ARGB
-+            val baseTextColor = inputTextColorSetting?.let { Color(it) } ?: LocalContentColor.current
-+            LocalTextStyle.current.copy(
-+                color = if (inputTextAlphaSetting >= 1f) {
-+                    // 1f 时不额外乘 alpha（自定义颜色自带的 alpha 原样保留）
-+                    baseTextColor
-+                } else {
-+                    // 自定义颜色的 alpha 与滑块相乘，避免把已有半透明颜色「抬」回不透明
-+                    baseTextColor.copy(alpha = baseTextColor.alpha * inputTextAlphaSetting)
-+                },
-+            )
++            LocalTextStyle.current.copy(color = Color(inputTextColorSetting))
 +        }
 +
          TextField(
@@ -869,13 +863,21 @@ index 45c3d83..4f91629 100644
                  .testTag("chat_input")
                  .contentReceiver(receiveContentListener)
                  .onFocusChanged {
-@@ -618,7 +767,8 @@ private fun TextInputRow(
+@@ -618,7 +759,16 @@ private fun TextInputRow(
                  },
              shape = MaterialTheme.shapes.largeIncreased,
              placeholder = {
 -                Text(stringResource(R.string.chat_input_placeholder))
-+                // 设置页里填了提示语就用它，留空仍然回落到资源字符串
-+                Text(hint.ifBlank { stringResource(R.string.chat_input_placeholder) })
++                // 设置页里填了提示语就用它，留空仍然回落到资源字符串；
++                // 颜色跟着「提示语不透明度」走，1 时与主题默认完全一致
++                Text(
++                    text = hint.ifBlank { stringResource(R.string.chat_input_placeholder) },
++                    color = if (hintAlpha >= 1f) {
++                        MaterialTheme.colorScheme.onSurfaceVariant
++                    } else {
++                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = hintAlpha.coerceIn(0f, 1f))
++                    },
++                )
              },
              lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
              keyboardOptions = KeyboardOptions(
@@ -6948,7 +6950,7 @@ index 0000000..a0bf1d4
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..9fc3083 100644
+index 2ee9d11..609846e 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -5,21 +5,29 @@ import android.graphics.Typeface
@@ -7034,8 +7036,8 @@ index 2ee9d11..9fc3083 100644
 +    val chatInputHeight = displaySetting.chatInputHeightDp.coerceIn(0, 72)
 +    // 输入框透明度（0..100）：0 = 完全不透明（默认），100 = 完全透明
 +    val chatInputTransparency = displaySetting.chatInputTransparency.coerceIn(0, 100)
-+    // 输入框文字不透明度（0..1）：1f = 不额外乘 alpha，和改动前一致
-+    val chatInputTextAlpha = displaySetting.chatInputTextAlpha.coerceIn(0f, 1f)
++    // 提示语（没打字时显示的那句灰字）的不透明度
++    val chatInputHintAlpha = displaySetting.chatInputHintAlpha.coerceIn(0f, 1f)
 +    // 输入框提示语的编辑弹窗
 +    var showInputHintDialog by remember { mutableStateOf(false) }
 +    var inputHintDraft by remember { mutableStateOf("") }
@@ -7274,23 +7276,23 @@ index 2ee9d11..9fc3083 100644
 +                            )
 +                        },
 +                    )
-+                    // 输入框文字不透明度：0..1，100% 就是原样
++                    // 提示语不透明度：只影响「还没打字时显示的那句灰字」
 +                    item(
-+                        headlineContent = { Text("输入框文字不透明度") },
++                        headlineContent = { Text("提示语不透明度") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("只改输入框里的文字，100% 时和原样一致")
++                                Text("只改输入框里那句提示语（没打字时的灰字），100% 时和原样一致")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
 +                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
 +                                ) {
 +                                    Slider(
-+                                        value = chatInputTextAlpha,
++                                        value = chatInputHintAlpha,
 +                                        onValueChange = { value ->
 +                                            updateDisplaySetting(
 +                                                displaySetting.copy(
-+                                                    chatInputTextAlpha = value.coerceIn(0f, 1f)
++                                                    chatInputHintAlpha = value.coerceIn(0f, 1f)
 +                                                )
 +                                            )
 +                                        },
@@ -7299,16 +7301,16 @@ index 2ee9d11..9fc3083 100644
 +                                        modifier = Modifier.weight(1f)
 +                                    )
 +                                    Text(
-+                                        text = "${(chatInputTextAlpha * 100).roundToInt()}%",
++                                        text = "${(chatInputHintAlpha * 100).roundToInt()}%",
 +                                        style = MaterialTheme.typography.labelMedium,
 +                                    )
 +                                }
 +                                TextButton(
 +                                    onClick = {
-+                                        updateDisplaySetting(displaySetting.copy(chatInputTextAlpha = 1f))
++                                        updateDisplaySetting(displaySetting.copy(chatInputHintAlpha = 1f))
 +                                    },
 +                                    modifier = Modifier.align(Alignment.End),
-+                                    enabled = chatInputTextAlpha < 1f,
++                                    enabled = chatInputHintAlpha < 1f,
 +                                ) {
 +                                    Text("恢复默认")
 +                                }
