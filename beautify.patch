@@ -1812,7 +1812,7 @@ index 0000000..8080ef6
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..6d23007 100644
+index 205e822..acf633b 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -144,6 +144,8 @@ class SettingsStore(
@@ -2014,7 +2014,7 @@ index 205e822..6d23007 100644
 +    val recallAssistantColor: Long? = null,
 +    // 引号内文字高亮：开启后 AI 回复里被 “…” / "..." 包住的文字用 quoteHighlightColor 显示
 +    val enableQuoteHighlight: Boolean = false,
-+    // 引号高亮色，null 表示跟随主题（tertiary）
++    // 引号高亮色，null 表示跟随正文色（onSurface，老版本跟的是 tertiary）
 +    val quoteHighlightColor: Long? = null,
 +    // 对白样式·背景色：null 表示不加底色，取值是 ARGB（0xAARRGGBB），透明度由下面那项控制
 +    val quoteHighlightBackground: Long? = null,
@@ -4824,10 +4824,10 @@ index a316327..35a40f9 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..4870d9a
+index 0000000..6e28372
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1070 @@
+@@ -0,0 +1,1073 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -5345,7 +5345,7 @@ index 0000000..4870d9a
 +
 +/**
 + * 当前这条消息该用的对白样式：开关关掉就是 null（渲染路径完全不变）；
-+ * 开了但没自己选色就跟随主题的 tertiary 色（tertiary 取不到时退回 primary）。
++ * 开了但没自己选色就跟随主题的正文色（onSurface 取不到时退回 primary）。
 + *
 + * 底色要过三道关：「启用对白底色」开关打开、选了颜色、透明度大于 0；任意一条不满足就不画底色
 + * （不再需要让用户点进取色盘「恢复默认」来关掉底色）。底色的最终 alpha 直接取「背景透明度」滑块
@@ -5366,9 +5366,12 @@ index 0000000..4870d9a
 +    val colorScheme = MaterialTheme.colorScheme
 +    // 正文字号：「符号大小」倍率的基准（倍率 1.0x 时不使用，见 resolveOuterFontSize()）
 +    val baseFontSize = LocalTextStyle.current.fontSize
-+    // tertiary 是 Material3 的必有槽位，真拿不到（Unspecified）时退回 primary 兜底
++    // 默认跟随「正文色」：老版本这里是 tertiary（第三强调色），在浅色主题下会推出一个
++    // 偏紫的灰，对白、下划线、行首竖线一起变紫，跟正文完全脱节。
++    // 改成 onSurface 后，没自己选色时对白和正文同色，看齐的是平时阅读的观感；
++    // 想区分就自己去挑颜色，底色 / 下划线 / 竖线都还照旧能拉开层次。
 +    val themeQuoteColor =
-+        if (colorScheme.tertiary == Color.Unspecified) colorScheme.primary else colorScheme.tertiary
++        if (colorScheme.onSurface == Color.Unspecified) colorScheme.primary else colorScheme.onSurface
 +    val textColor = displaySetting.quoteHighlightColor?.let { Color(it) } ?: themeQuoteColor
 +    val backgroundAlpha = displaySetting.quoteHighlightBackgroundAlpha.coerceIn(0f, 1f)
 +    // 底色要三道关：底色总开关打开 + 选了颜色 + 透明度大于 0，否则一律当作「不加底色」
@@ -10601,7 +10604,7 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..188bfec
+index 0000000..365c746
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 @@ -0,0 +1,963 @@
@@ -10765,8 +10768,8 @@ index 0000000..188bfec
 +        key = "quoteText",
 +        title = "文字颜色",
 +        value = displaySetting.quoteHighlightColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
-+        supporting = { it?.toHexArgb() ?: "跟随主题（tertiary 色）" },
++        preview = MaterialTheme.colorScheme.onSurface,
++        supporting = { it?.toHexArgb() ?: "跟随正文色" },
 +        apply = { setting, value -> setting.copy(quoteHighlightColor = value) },
 +    )
 +    val backgroundColorField = ColorField(
@@ -10788,7 +10791,7 @@ index 0000000..188bfec
 +        key = "quoteUnderlineSolid",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineSolidColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
++        preview = MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineSolidColor = value) },
 +    )
@@ -10797,7 +10800,7 @@ index 0000000..188bfec
 +        key = "quoteUnderlineDashed",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineDashedColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
++        preview = MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineDashedColor = value) },
 +    )
@@ -10806,7 +10809,7 @@ index 0000000..188bfec
 +        key = "quoteUnderlineDotted",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineDottedColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
++        preview = MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineDottedColor = value) },
 +    )
@@ -10815,7 +10818,7 @@ index 0000000..188bfec
 +        key = "quoteLeadingBar",
 +        title = "竖线颜色",
 +        value = displaySetting.quoteLeadingBarColor,
-+        preview = MaterialTheme.colorScheme.tertiary,
++        preview = MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteLeadingBarColor = value) },
 +    )
