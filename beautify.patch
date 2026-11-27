@@ -10604,10 +10604,10 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..365c746
+index 0000000..bf62739
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,963 @@
+@@ -0,0 +1,968 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -10768,7 +10768,8 @@ index 0000000..365c746
 +        key = "quoteText",
 +        title = "文字颜色",
 +        value = displaySetting.quoteHighlightColor,
-+        preview = MaterialTheme.colorScheme.onSurface,
++        preview = displaySetting.quoteHighlightColor?.let { Color(it) }
++            ?: MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随正文色" },
 +        apply = { setting, value -> setting.copy(quoteHighlightColor = value) },
 +    )
@@ -10791,7 +10792,8 @@ index 0000000..365c746
 +        key = "quoteUnderlineSolid",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineSolidColor,
-+        preview = MaterialTheme.colorScheme.onSurface,
++        preview = displaySetting.quoteHighlightColor?.let { Color(it) }
++            ?: MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineSolidColor = value) },
 +    )
@@ -10800,7 +10802,8 @@ index 0000000..365c746
 +        key = "quoteUnderlineDashed",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineDashedColor,
-+        preview = MaterialTheme.colorScheme.onSurface,
++        preview = displaySetting.quoteHighlightColor?.let { Color(it) }
++            ?: MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineDashedColor = value) },
 +    )
@@ -10809,7 +10812,8 @@ index 0000000..365c746
 +        key = "quoteUnderlineDotted",
 +        title = "颜色",
 +        value = displaySetting.quoteUnderlineDottedColor,
-+        preview = MaterialTheme.colorScheme.onSurface,
++        preview = displaySetting.quoteHighlightColor?.let { Color(it) }
++            ?: MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteUnderlineDottedColor = value) },
 +    )
@@ -10818,7 +10822,8 @@ index 0000000..365c746
 +        key = "quoteLeadingBar",
 +        title = "竖线颜色",
 +        value = displaySetting.quoteLeadingBarColor,
-+        preview = MaterialTheme.colorScheme.onSurface,
++        preview = displaySetting.quoteHighlightColor?.let { Color(it) }
++            ?: MaterialTheme.colorScheme.onSurface,
 +        supporting = { it?.toHexArgb() ?: "跟随文字颜色" },
 +        apply = { setting, value -> setting.copy(quoteLeadingBarColor = value) },
 +    )
