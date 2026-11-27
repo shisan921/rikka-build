@@ -1,24 +1,827 @@
 diff --git a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-index bef7871..5088a03 100644
+index bef7871..c53466b 100644
 --- a/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt
-@@ -109,6 +109,12 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
+@@ -1,220 +1,227 @@
+-package me.rerere.rikkahub
+-
+-import android.annotation.SuppressLint
+-import android.content.Intent
+-import android.os.Build
+-import android.os.Bundle
+-import android.view.KeyEvent
+-import androidx.activity.ComponentActivity
+-import androidx.activity.compose.setContent
+-import androidx.activity.enableEdgeToEdge
+-import androidx.compose.animation.AnimatedVisibility
+-import androidx.compose.animation.SharedTransitionLayout
+-import androidx.compose.animation.fadeIn
+-import androidx.compose.animation.fadeOut
+-import androidx.compose.animation.scaleIn
+-import androidx.compose.animation.scaleOut
+-import androidx.compose.animation.slideInHorizontally
+-import androidx.compose.animation.slideOutHorizontally
+-import androidx.compose.animation.togetherWith
+-import androidx.compose.foundation.background
+-import androidx.compose.foundation.layout.Arrangement
+-import androidx.compose.foundation.layout.Box
+-import androidx.compose.foundation.layout.Column
+-import androidx.compose.foundation.layout.fillMaxSize
+-import androidx.compose.foundation.layout.padding
+-import androidx.compose.material3.CircularProgressIndicator
+-import androidx.compose.material3.MaterialTheme
+-import androidx.compose.material3.Text
+-import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.CompositionLocalProvider
+-import androidx.compose.runtime.LaunchedEffect
+-import androidx.compose.runtime.SideEffect
+-import androidx.compose.runtime.getValue
+-import androidx.compose.ui.Alignment
+-import androidx.compose.ui.Modifier
+-import androidx.compose.ui.semantics.semantics
+-import androidx.compose.ui.ExperimentalComposeUiApi
+-import androidx.compose.ui.res.stringResource
+-import androidx.compose.ui.semantics.testTagsAsResourceId
+-import androidx.compose.ui.unit.dp
+-import androidx.core.net.toUri
+-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+-import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+-import androidx.navigation3.runtime.NavKey
+-import androidx.navigation3.runtime.entryProvider
+-import androidx.navigation3.runtime.rememberNavBackStack
+-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+-import androidx.navigation3.ui.NavDisplay
+-import coil3.ImageLoader
+-import coil3.compose.setSingletonImageLoaderFactory
+-import coil3.gif.AnimatedImageDecoder
+-import coil3.gif.GifDecoder
+-import coil3.network.cachecontrol.CacheControlCacheStrategy
+-import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+-import coil3.request.crossfade
+-import coil3.svg.SvgDecoder
+-import com.dokar.sonner.Toaster
+-import com.dokar.sonner.rememberToasterState
+-import kotlinx.serialization.Serializable
+-import me.rerere.rikkahub.data.datastore.SettingsStore
+-import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
+-import me.rerere.rikkahub.data.db.MigrationState
+-import me.rerere.rikkahub.data.event.AppEvent
+-import me.rerere.rikkahub.data.event.AppEventBus
+-import me.rerere.rikkahub.ui.activity.SafeModeActivity
+-import me.rerere.rikkahub.ui.components.ui.TTSController
+-import me.rerere.rikkahub.ui.context.LocalASRState
+-import me.rerere.rikkahub.ui.context.LocalNavController
+-import me.rerere.rikkahub.ui.context.LocalSettings
+-import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
+-import me.rerere.rikkahub.ui.context.LocalTTSState
+-import me.rerere.rikkahub.ui.context.LocalToaster
+-import me.rerere.rikkahub.ui.context.Navigator
+-import me.rerere.rikkahub.ui.hooks.readBooleanPreference
+-import me.rerere.rikkahub.ui.hooks.readStringPreference
+-import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
+-import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
+-import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
+-import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
+-import me.rerere.rikkahub.ui.pages.backup.BackupPage
+-import me.rerere.rikkahub.ui.pages.chat.ChatPage
+-import me.rerere.rikkahub.ui.pages.debug.DebugPage
+-import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+-import me.rerere.rikkahub.ui.pages.extensions.PromptPage
+-import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
+-import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
+-import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
+-import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
+-import me.rerere.workspace.WorkspaceStorageArea
+-import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
+-import me.rerere.rikkahub.ui.pages.history.HistoryPage
+-import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
+-import me.rerere.rikkahub.ui.pages.log.LogPage
+-import me.rerere.rikkahub.ui.pages.search.SearchPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
++package me.rerere.rikkahub
++
++import android.annotation.SuppressLint
++import android.content.Intent
++import android.os.Build
++import android.os.Bundle
++import android.view.KeyEvent
++import androidx.activity.ComponentActivity
++import androidx.activity.compose.setContent
++import androidx.activity.enableEdgeToEdge
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.SharedTransitionLayout
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.scaleIn
++import androidx.compose.animation.scaleOut
++import androidx.compose.animation.slideInHorizontally
++import androidx.compose.animation.slideOutHorizontally
++import androidx.compose.animation.togetherWith
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.SideEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.ExperimentalComposeUiApi
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.semantics.testTagsAsResourceId
++import androidx.compose.ui.unit.dp
++import androidx.core.net.toUri
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
++import androidx.navigation3.runtime.NavKey
++import androidx.navigation3.runtime.entryProvider
++import androidx.navigation3.runtime.rememberNavBackStack
++import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
++import androidx.navigation3.ui.NavDisplay
++import coil3.ImageLoader
++import coil3.compose.setSingletonImageLoaderFactory
++import coil3.gif.AnimatedImageDecoder
++import coil3.gif.GifDecoder
++import coil3.network.cachecontrol.CacheControlCacheStrategy
++import coil3.network.okhttp.OkHttpNetworkFetcherFactory
++import coil3.request.crossfade
++import coil3.svg.SvgDecoder
++import com.dokar.sonner.Toaster
++import com.dokar.sonner.rememberToasterState
++import kotlinx.serialization.Serializable
++import me.rerere.rikkahub.data.datastore.SettingsStore
++import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
++import me.rerere.rikkahub.data.db.MigrationState
++import me.rerere.rikkahub.data.event.AppEvent
++import me.rerere.rikkahub.data.event.AppEventBus
++import me.rerere.rikkahub.ui.activity.SafeModeActivity
++import me.rerere.rikkahub.ui.components.ui.TTSController
++import me.rerere.rikkahub.ui.context.LocalASRState
++import me.rerere.rikkahub.ui.context.LocalNavController
++import me.rerere.rikkahub.ui.context.LocalSettings
++import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
++import me.rerere.rikkahub.ui.context.LocalTTSState
++import me.rerere.rikkahub.ui.context.LocalToaster
++import me.rerere.rikkahub.ui.context.Navigator
++import me.rerere.rikkahub.ui.hooks.readBooleanPreference
++import me.rerere.rikkahub.ui.hooks.readStringPreference
++import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
++import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
++import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExtensionsPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantLocalToolPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMcpPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantMemoryPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
++import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
++import me.rerere.rikkahub.ui.pages.backup.BackupPage
++import me.rerere.rikkahub.ui.pages.chat.ChatPage
++import me.rerere.rikkahub.ui.pages.debug.DebugPage
++import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
++import me.rerere.rikkahub.ui.pages.extensions.PromptPage
++import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
++import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
++import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceFileEditorPage
++import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
++import me.rerere.workspace.WorkspaceStorageArea
++import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
++import me.rerere.rikkahub.ui.pages.history.HistoryPage
++import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
++import me.rerere.rikkahub.ui.pages.log.LogPage
++import me.rerere.rikkahub.ui.pages.search.SearchPage
++import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
++import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
  import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
+-import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
+-import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
+-import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
+-import me.rerere.rikkahub.ui.pages.stats.StatsPage
+-import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
+-import me.rerere.rikkahub.ui.pages.webview.WebViewPage
+-import me.rerere.rikkahub.ui.theme.LocalDarkMode
+-import me.rerere.rikkahub.ui.theme.RikkahubTheme
+-import me.rerere.rikkahub.utils.CrashHandler
+-import me.rerere.rikkahub.utils.openUsageAccessSettings
+-import okhttp3.OkHttpClient
+-import org.koin.android.ext.android.inject
+-import org.koin.compose.koinInject
+-import kotlin.uuid.Uuid
+-
+-private const val TAG = "RouteActivity"
+-private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
+-
+-class RouteActivity : ComponentActivity() {
+-    private val okHttpClient by inject<OkHttpClient>()
+-    private val settingsStore by inject<SettingsStore>()
+-    private var navStack: MutableList<NavKey>? = null
++import me.rerere.rikkahub.ui.pages.setting.SettingDecorPresetsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesColorsPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesAlphaPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesImagesPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesMaterialPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesFontPage
 +import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesQuotePage
- import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
- import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
- import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
-@@ -424,6 +430,30 @@ class RouteActivity : ComponentActivity() {
++import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
++import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
++import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
++import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
++import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
++import me.rerere.rikkahub.ui.pages.setting.SettingPage
++import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
++import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
++import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
++import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
++import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
++import me.rerere.rikkahub.ui.pages.stats.StatsPage
++import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
++import me.rerere.rikkahub.ui.pages.webview.WebViewPage
++import me.rerere.rikkahub.ui.theme.LocalDarkMode
++import me.rerere.rikkahub.ui.theme.RikkahubTheme
++import me.rerere.rikkahub.utils.CrashHandler
++import me.rerere.rikkahub.utils.openUsageAccessSettings
++import okhttp3.OkHttpClient
++import org.koin.android.ext.android.inject
++import org.koin.compose.koinInject
++import kotlin.uuid.Uuid
++
++private const val TAG = "RouteActivity"
++private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
++
++class RouteActivity : ComponentActivity() {
++    private val okHttpClient by inject<OkHttpClient>()
++    private val settingsStore by inject<SettingsStore>()
++    private var navStack: MutableList<NavKey>? = null
+     private val pendingIntents = ArrayDeque<Intent>()
+-
+-    // Volume key listener registry — last registered handler wins
+-    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
+-
+-    @SuppressLint("RestrictedApi")
+-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+-        if (event.action == KeyEvent.ACTION_DOWN) {
+-            val isVolumeUp = when (event.keyCode) {
+-                KeyEvent.KEYCODE_VOLUME_UP -> true
+-                KeyEvent.KEYCODE_VOLUME_DOWN -> false
+-                else -> return super.dispatchKeyEvent(event)
+-            }
+-            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
+-        }
+-        return super.dispatchKeyEvent(event)
+-    }
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        enableEdgeToEdge()
+-        disableNavigationBarContrast()
+-        super.onCreate(savedInstanceState)
+-        if (CrashHandler.hasCrashed(this)) {
+-            startActivity(Intent(this, SafeModeActivity::class.java))
+-            finish()
+-            return
++
++    // Volume key listener registry — last registered handler wins
++    internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
++
++    @SuppressLint("RestrictedApi")
++    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
++        if (event.action == KeyEvent.ACTION_DOWN) {
++            val isVolumeUp = when (event.keyCode) {
++                KeyEvent.KEYCODE_VOLUME_UP -> true
++                KeyEvent.KEYCODE_VOLUME_DOWN -> false
++                else -> return super.dispatchKeyEvent(event)
++            }
++            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
++        }
++        return super.dispatchKeyEvent(event)
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        enableEdgeToEdge()
++        disableNavigationBarContrast()
++        super.onCreate(savedInstanceState)
++        if (CrashHandler.hasCrashed(this)) {
++            startActivity(Intent(this, SafeModeActivity::class.java))
++            finish()
++            return
+         }
+         if (savedInstanceState == null) {
+             handleIntent(intent)
+-        }
+-        setContent {
+-            RikkahubTheme {
+-                setSingletonImageLoaderFactory { context ->
+-                    ImageLoader.Builder(context)
+-                        .crossfade(true)
+-                        .components {
+-                            add(
+-                                OkHttpNetworkFetcherFactory(
+-                                    callFactory = { okHttpClient },
+-                                    cacheStrategy = { CacheControlCacheStrategy() },
+-                                )
+-                            )
+-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+-                                add(AnimatedImageDecoder.Factory())
+-                            } else {
+-                                add(GifDecoder.Factory())
+-                            }
+-                            add(SvgDecoder.Factory(scaleToDensity = true))
+-                        }
+-                        .build()
+-                }
+-                AppRoutes()
+-            }
+-        }
+-    }
+-
+-    private fun disableNavigationBarContrast() {
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+-            window.isNavigationBarContrastEnforced = false
+-        }
+-    }
+-
++        }
++        setContent {
++            RikkahubTheme {
++                setSingletonImageLoaderFactory { context ->
++                    ImageLoader.Builder(context)
++                        .crossfade(true)
++                        .components {
++                            add(
++                                OkHttpNetworkFetcherFactory(
++                                    callFactory = { okHttpClient },
++                                    cacheStrategy = { CacheControlCacheStrategy() },
++                                )
++                            )
++                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++                                add(AnimatedImageDecoder.Factory())
++                            } else {
++                                add(GifDecoder.Factory())
++                            }
++                            add(SvgDecoder.Factory(scaleToDensity = true))
++                        }
++                        .build()
++                }
++                AppRoutes()
++            }
++        }
++    }
++
++    private fun disableNavigationBarContrast() {
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++            window.isNavigationBarContrastEnforced = false
++        }
++    }
++
+     override fun onNewIntent(intent: Intent) {
+         super.onNewIntent(intent)
+         setIntent(intent)
+         handleIntent(intent)
+-    }
+-
++    }
++
+     private fun handleIntent(intent: Intent) {
+         val backStack = navStack ?: run {
+             // Compose 尚未创建导航栈，待就绪后处理。
+             pendingIntents.addLast(intent)
+-            return
+-        }
++            return
++        }
+         val destination = when (intent.action) {
+             ACTION_TRANSLATE -> Screen.Translator
+             Intent.ACTION_SEND -> Screen.ShareHandler(
+@@ -228,507 +235,556 @@ class RouteActivity : ComponentActivity() {
+         }
+         if (destination != null && backStack.lastOrNull() != destination) {
+             backStack.add(destination)
+-        }
+-    }
+-
+-    @OptIn(ExperimentalComposeUiApi::class)
+-    @Composable
+-    fun AppRoutes() {
+-        val toastState = rememberToasterState()
+-        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+-        val tts = rememberCustomTtsState()
+-        val asr = rememberCustomAsrState()
+-        val eventBus = koinInject<AppEventBus>()
+-        LaunchedEffect(tts) {
+-            eventBus.events.collect { event ->
+-                when (event) {
+-                    is AppEvent.Speak -> tts.speak(event.text)
+-                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
+-                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
+-                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
+-                }
+-            }
+-        }
+-        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
+-
+-        val startScreen = Screen.Chat(
+-            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
+-                Uuid.random().toString()
+-            } else {
+-                readStringPreference(
+-                    "lastConversationId",
+-                    Uuid.random().toString()
+-                ) ?: Uuid.random().toString()
+-            }
+-        )
+-
++        }
++    }
++
++    @OptIn(ExperimentalComposeUiApi::class)
++    @Composable
++    fun AppRoutes() {
++        val toastState = rememberToasterState()
++        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
++        val tts = rememberCustomTtsState()
++        val asr = rememberCustomAsrState()
++        val eventBus = koinInject<AppEventBus>()
++        LaunchedEffect(tts) {
++            eventBus.events.collect { event ->
++                when (event) {
++                    is AppEvent.Speak -> tts.speak(event.text)
++                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
++                    is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
++                    is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
++                }
++            }
++        }
++        val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
++
++        val startScreen = Screen.Chat(
++            id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
++                Uuid.random().toString()
++            } else {
++                readStringPreference(
++                    "lastConversationId",
++                    Uuid.random().toString()
++                ) ?: Uuid.random().toString()
++            }
++        )
++
+         val backStack = rememberNavBackStack(startScreen)
+         SideEffect {
+             navStack = backStack
+             while (pendingIntents.isNotEmpty()) {
+                 handleIntent(pendingIntents.removeFirst())
+             }
+-        }
+-
+-        SharedTransitionLayout {
+-            CompositionLocalProvider(
+-                LocalNavController provides Navigator(backStack),
+-                LocalSharedTransitionScope provides this,
+-                LocalSettings provides settings,
+-                LocalToaster provides toastState,
+-                LocalTTSState provides tts,
+-                LocalASRState provides asr,
+-            ) {
+-                Toaster(
+-                    state = toastState,
+-                    darkTheme = LocalDarkMode.current,
+-                    richColors = true,
+-                    alignment = Alignment.TopCenter,
+-                    showCloseButton = true,
+-                )
+-                TTSController()
+-                Box(
+-                    modifier = Modifier
+-                        .fillMaxSize()
+-                        .semantics { testTagsAsResourceId = true }
+-                        .background(MaterialTheme.colorScheme.background)
+-                ) {
+-                    NavDisplay(
+-                        backStack = backStack,
+-                        entryDecorators = listOf(
+-                            rememberSaveableStateHolderNavEntryDecorator(),
+-                            rememberViewModelStoreNavEntryDecorator(),
+-                        ),
+-                        modifier = Modifier.fillMaxSize(),
+-                        onBack = { backStack.removeLastOrNull() },
+-                        transitionSpec = {
+-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+-                            else {
+-                                slideInHorizontally { it } togetherWith
+-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+-                            }
+-                        },
+-                        popTransitionSpec = {
+-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+-                                slideOutHorizontally { it }
+-                        },
+-                        predictivePopTransitionSpec = {
+-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
+-                                slideOutHorizontally { it }
+-                        },
+-                        entryProvider = entryProvider {
+-                            entry<Screen.Chat>(
+-                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+-                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+-                            ) { key ->
+-                                ChatPage(
+-                                    id = Uuid.parse(key.id),
+-                                    text = key.text,
+-                                    files = key.files.map { it.toUri() },
+-                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
+-                                )
+-                            }
+-
+-                            entry<Screen.ShareHandler> { key ->
+-                                ShareHandlerPage(
+-                                    text = key.text,
+-                                    image = key.streamUri
+-                                )
+-                            }
+-
+-                            entry<Screen.History> {
+-                                HistoryPage()
+-                            }
+-
+-                            entry<Screen.Favorite> {
+-                                FavoritePage()
+-                            }
+-
+-                            entry<Screen.Assistant> {
+-                                AssistantPage()
+-                            }
+-
+-                            entry<Screen.AssistantDetail> { key ->
+-                                AssistantDetailPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantBasic> { key ->
+-                                AssistantBasicPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantPrompt> { key ->
+-                                AssistantPromptPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantMemory> { key ->
+-                                AssistantMemoryPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantRequest> { key ->
+-                                AssistantRequestPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantMcp> { key ->
+-                                AssistantMcpPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantLocalTool> { key ->
+-                                AssistantLocalToolPage(key.id)
+-                            }
+-
+-                            entry<Screen.AssistantInjections> { key ->
+-                                AssistantExtensionsPage(key.id)
+-                            }
+-
+-                            entry<Screen.Translator> {
+-                                TranslatorPage()
+-                            }
+-
+-                            entry<Screen.Setting> {
+-                                SettingPage()
+-                            }
+-
+-                            entry<Screen.Backup> {
+-                                BackupPage()
+-                            }
+-
+-                            entry<Screen.ImageGen> {
+-                                ImageGenPage()
+-                            }
+-
+-                            entry<Screen.WebView> { key ->
+-                                WebViewPage(key.url, key.contentId)
+-                            }
+-
+-                            entry<Screen.SettingTheme> {
+-                                SettingThemePage()
+-                            }
+-
+-                            entry<Screen.SettingPreferences> {
+-                                SettingPreferencesPage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesTheme> {
+-                                SettingPreferencesThemePage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesNotification> {
+-                                SettingPreferencesNotificationPage()
+-                            }
+-
+-                            entry<Screen.SettingPreferencesGeneral> {
+-                                SettingPreferencesGeneralPage()
+-                            }
+-
++        }
++
++        SharedTransitionLayout {
++            CompositionLocalProvider(
++                LocalNavController provides Navigator(backStack),
++                LocalSharedTransitionScope provides this,
++                LocalSettings provides settings,
++                LocalToaster provides toastState,
++                LocalTTSState provides tts,
++                LocalASRState provides asr,
++            ) {
++                Toaster(
++                    state = toastState,
++                    darkTheme = LocalDarkMode.current,
++                    richColors = true,
++                    alignment = Alignment.TopCenter,
++                    showCloseButton = true,
++                )
++                TTSController()
++                Box(
++                    modifier = Modifier
++                        .fillMaxSize()
++                        .semantics { testTagsAsResourceId = true }
++                        .background(MaterialTheme.colorScheme.background)
++                ) {
++                    NavDisplay(
++                        backStack = backStack,
++                        entryDecorators = listOf(
++                            rememberSaveableStateHolderNavEntryDecorator(),
++                            rememberViewModelStoreNavEntryDecorator(),
++                        ),
++                        modifier = Modifier.fillMaxSize(),
++                        onBack = { backStack.removeLastOrNull() },
++                        transitionSpec = {
++                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
++                            else {
++                                slideInHorizontally { it } togetherWith
++                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
++                            }
++                        },
++                        popTransitionSpec = {
++                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
++                                slideOutHorizontally { it }
++                        },
++                        predictivePopTransitionSpec = {
++                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
++                                slideOutHorizontally { it }
++                        },
++                        entryProvider = entryProvider {
++                            entry<Screen.Chat>(
++                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
++                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
++                            ) { key ->
++                                ChatPage(
++                                    id = Uuid.parse(key.id),
++                                    text = key.text,
++                                    files = key.files.map { it.toUri() },
++                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
++                                )
++                            }
++
++                            entry<Screen.ShareHandler> { key ->
++                                ShareHandlerPage(
++                                    text = key.text,
++                                    image = key.streamUri
++                                )
++                            }
++
++                            entry<Screen.History> {
++                                HistoryPage()
++                            }
++
++                            entry<Screen.Favorite> {
++                                FavoritePage()
++                            }
++
++                            entry<Screen.Assistant> {
++                                AssistantPage()
++                            }
++
++                            entry<Screen.AssistantDetail> { key ->
++                                AssistantDetailPage(key.id)
++                            }
++
++                            entry<Screen.AssistantBasic> { key ->
++                                AssistantBasicPage(key.id)
++                            }
++
++                            entry<Screen.AssistantPrompt> { key ->
++                                AssistantPromptPage(key.id)
++                            }
++
++                            entry<Screen.AssistantMemory> { key ->
++                                AssistantMemoryPage(key.id)
++                            }
++
++                            entry<Screen.AssistantRequest> { key ->
++                                AssistantRequestPage(key.id)
++                            }
++
++                            entry<Screen.AssistantMcp> { key ->
++                                AssistantMcpPage(key.id)
++                            }
++
++                            entry<Screen.AssistantLocalTool> { key ->
++                                AssistantLocalToolPage(key.id)
++                            }
++
++                            entry<Screen.AssistantInjections> { key ->
++                                AssistantExtensionsPage(key.id)
++                            }
++
++                            entry<Screen.Translator> {
++                                TranslatorPage()
++                            }
++
++                            entry<Screen.Setting> {
++                                SettingPage()
++                            }
++
++                            entry<Screen.Backup> {
++                                BackupPage()
++                            }
++
++                            entry<Screen.ImageGen> {
++                                ImageGenPage()
++                            }
++
++                            entry<Screen.WebView> { key ->
++                                WebViewPage(key.url, key.contentId)
++                            }
++
++                            entry<Screen.SettingTheme> {
++                                SettingThemePage()
++                            }
++
++                            entry<Screen.SettingPreferences> {
++                                SettingPreferencesPage()
++                            }
++
++                            entry<Screen.SettingPreferencesTheme> {
++                                SettingPreferencesThemePage()
++                            }
++
++                            entry<Screen.SettingPreferencesNotification> {
++                                SettingPreferencesNotificationPage()
++                            }
++
++                            entry<Screen.SettingPreferencesGeneral> {
++                                SettingPreferencesGeneralPage()
++                            }
++
+                             entry<Screen.SettingPreferencesUI> {
                                  SettingPreferencesUIPage()
                              }
  
++                            entry<Screen.SettingDecorPresets> {
++                                SettingDecorPresetsPage()
++                            }
++
 +                            entry<Screen.SettingPreferencesColors> {
 +                                SettingPreferencesColorsPage()
 +                            }
@@ -46,10 +849,467 @@ index bef7871..5088a03 100644
                              entry<Screen.SettingPreferencesNetwork> {
                                  SettingPreferencesNetworkPage()
                              }
-@@ -657,6 +687,24 @@ sealed interface Screen : NavKey {
-     @Serializable
+-
+-                            entry<Screen.SettingProvider> {
+-                                SettingProviderPage()
+-                            }
+-
+-                            entry<Screen.SettingProviderDetail> { key ->
+-                                val id = Uuid.parse(key.providerId)
+-                                SettingProviderDetailPage(id = id)
+-                            }
+-
+-                            entry<Screen.SettingModels> {
+-                                SettingModelPage()
+-                            }
+-
+-                            entry<Screen.SettingAbout> {
+-                                SettingAboutPage()
+-                            }
+-
+-                            entry<Screen.SettingSearch> {
+-                                SettingSearchPage()
+-                            }
+-
+-                            entry<Screen.SettingSearchDetail> { key ->
+-                                val id = Uuid.parse(key.serviceId)
+-                                SettingSearchDetailPage(id)
+-                            }
+-
+-                            entry<Screen.SettingSpeech> {
+-                                SettingSpeechPage()
+-                            }
+-
+-                            entry<Screen.SettingMcp> {
+-                                SettingMcpPage()
+-                            }
+-
+-                            entry<Screen.SettingDonate> {
+-                                SettingDonatePage()
+-                            }
+-
+-                            entry<Screen.SettingFiles> {
+-                                SettingFilesPage()
+-                            }
+-
+-                            entry<Screen.SettingWeb> {
+-                                SettingWebPage()
+-                            }
+-
+-                            entry<Screen.Debug> {
+-                                DebugPage()
+-                            }
+-
+-                            entry<Screen.Log> {
+-                                LogPage()
+-                            }
+-
+-                            entry<Screen.Extensions> {
+-                                ExtensionsPage()
+-                            }
+-
+-                            entry<Screen.QuickMessages> {
+-                                QuickMessagesPage()
+-                            }
+-
+-                            entry<Screen.Prompts> {
+-                                PromptPage()
+-                            }
+-
+-                            entry<Screen.Skills> {
+-                                SkillsPage()
+-                            }
+-
+-                            entry<Screen.Workspaces> {
+-                                WorkspacePage()
+-                            }
+-
+-                            entry<Screen.WorkspaceDetail> { key ->
+-                                WorkspaceDetailPage(key.id)
+-                            }
+-
+-                            entry<Screen.WorkspaceTerminal> { key ->
+-                                WorkspaceTerminalPage(key.id)
+-                            }
+-
+-                            entry<Screen.WorkspaceFileEditor> { key ->
+-                                WorkspaceFileEditorPage(
+-                                    id = key.id,
+-                                    area = WorkspaceStorageArea.valueOf(key.area),
+-                                    path = key.path,
+-                                )
+-                            }
+-
+-                            entry<Screen.SkillDetail> { key ->
+-                                SkillDetailPage(skillName = key.skillName)
+-                            }
+-
+-                            entry<Screen.MessageSearch> {
+-                                SearchPage()
+-                            }
+-
+-                            entry<Screen.Stats> {
+-                                StatsPage()
+-                            }
+-                        }
+-                    )
+-                    if (BuildConfig.DEBUG) {
+-                        Text(
+-                            text = "[开发模式]",
+-                            modifier = Modifier
+-                                .align(Alignment.TopCenter)
+-                                .padding(top = 4.dp),
+-                            style = MaterialTheme.typography.labelSmall,
+-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+-                        )
+-                    }
+-                    AnimatedVisibility(
+-                        visible = migrationState is MigrationState.Migrating,
+-                        enter = fadeIn(),
+-                        exit = fadeOut(),
+-                        modifier = Modifier.fillMaxSize()
+-                    ) {
+-                        val state = migrationState as? MigrationState.Migrating
+-                        Box(
+-                            modifier = Modifier
+-                                .fillMaxSize()
+-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+-                            contentAlignment = Alignment.Center
+-                        ) {
+-                            Column(
+-                                horizontalAlignment = Alignment.CenterHorizontally,
+-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+-                            ) {
+-                                CircularProgressIndicator()
+-                                Text(
+-                                    text = stringResource(R.string.db_migrating),
+-                                    style = MaterialTheme.typography.bodyLarge
+-                                )
+-                                if (state != null) {
+-                                    Text(
+-                                        text = "v${state.from} → v${state.to}",
+-                                        style = MaterialTheme.typography.bodySmall,
+-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+-                                    )
+-                                }
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-sealed interface Screen : NavKey {
+-    @Serializable
+-    data class Chat(
+-        val id: String,
+-        val text: String? = null,
+-        val files: List<String> = emptyList(),
+-        val nodeId: String? = null
+-    ) : Screen
+-
+-    @Serializable
+-    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
+-
+-    @Serializable
+-    data object History : Screen
+-
+-    @Serializable
+-    data object Favorite : Screen
+-
+-    @Serializable
+-    data object Assistant : Screen
+-
+-    @Serializable
+-    data class AssistantDetail(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantBasic(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantPrompt(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantMemory(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantRequest(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantMcp(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantLocalTool(val id: String) : Screen
+-
+-    @Serializable
+-    data class AssistantInjections(val id: String) : Screen
+-
+-    @Serializable
+-    data object Translator : Screen
+-
+-    @Serializable
+-    data object Setting : Screen
+-
+-    @Serializable
+-    data object Backup : Screen
+-
+-    @Serializable
+-    data object ImageGen : Screen
+-
+-    @Serializable
+-    data class WebView(val url: String = "", val contentId: String = "") : Screen
+-
+-    @Serializable
+-    data object SettingTheme : Screen
+-
+-    @Serializable
+-    data object SettingPreferences : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesTheme : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesNotification : Screen
+-
+-    @Serializable
+-    data object SettingPreferencesGeneral : Screen
+-
+-    @Serializable
++
++                            entry<Screen.SettingProvider> {
++                                SettingProviderPage()
++                            }
++
++                            entry<Screen.SettingProviderDetail> { key ->
++                                val id = Uuid.parse(key.providerId)
++                                SettingProviderDetailPage(id = id)
++                            }
++
++                            entry<Screen.SettingModels> {
++                                SettingModelPage()
++                            }
++
++                            entry<Screen.SettingAbout> {
++                                SettingAboutPage()
++                            }
++
++                            entry<Screen.SettingSearch> {
++                                SettingSearchPage()
++                            }
++
++                            entry<Screen.SettingSearchDetail> { key ->
++                                val id = Uuid.parse(key.serviceId)
++                                SettingSearchDetailPage(id)
++                            }
++
++                            entry<Screen.SettingSpeech> {
++                                SettingSpeechPage()
++                            }
++
++                            entry<Screen.SettingMcp> {
++                                SettingMcpPage()
++                            }
++
++                            entry<Screen.SettingDonate> {
++                                SettingDonatePage()
++                            }
++
++                            entry<Screen.SettingFiles> {
++                                SettingFilesPage()
++                            }
++
++                            entry<Screen.SettingWeb> {
++                                SettingWebPage()
++                            }
++
++                            entry<Screen.Debug> {
++                                DebugPage()
++                            }
++
++                            entry<Screen.Log> {
++                                LogPage()
++                            }
++
++                            entry<Screen.Extensions> {
++                                ExtensionsPage()
++                            }
++
++                            entry<Screen.QuickMessages> {
++                                QuickMessagesPage()
++                            }
++
++                            entry<Screen.Prompts> {
++                                PromptPage()
++                            }
++
++                            entry<Screen.Skills> {
++                                SkillsPage()
++                            }
++
++                            entry<Screen.Workspaces> {
++                                WorkspacePage()
++                            }
++
++                            entry<Screen.WorkspaceDetail> { key ->
++                                WorkspaceDetailPage(key.id)
++                            }
++
++                            entry<Screen.WorkspaceTerminal> { key ->
++                                WorkspaceTerminalPage(key.id)
++                            }
++
++                            entry<Screen.WorkspaceFileEditor> { key ->
++                                WorkspaceFileEditorPage(
++                                    id = key.id,
++                                    area = WorkspaceStorageArea.valueOf(key.area),
++                                    path = key.path,
++                                )
++                            }
++
++                            entry<Screen.SkillDetail> { key ->
++                                SkillDetailPage(skillName = key.skillName)
++                            }
++
++                            entry<Screen.MessageSearch> {
++                                SearchPage()
++                            }
++
++                            entry<Screen.Stats> {
++                                StatsPage()
++                            }
++                        }
++                    )
++                    if (BuildConfig.DEBUG) {
++                        Text(
++                            text = "[开发模式]",
++                            modifier = Modifier
++                                .align(Alignment.TopCenter)
++                                .padding(top = 4.dp),
++                            style = MaterialTheme.typography.labelSmall,
++                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
++                        )
++                    }
++                    AnimatedVisibility(
++                        visible = migrationState is MigrationState.Migrating,
++                        enter = fadeIn(),
++                        exit = fadeOut(),
++                        modifier = Modifier.fillMaxSize()
++                    ) {
++                        val state = migrationState as? MigrationState.Migrating
++                        Box(
++                            modifier = Modifier
++                                .fillMaxSize()
++                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
++                            contentAlignment = Alignment.Center
++                        ) {
++                            Column(
++                                horizontalAlignment = Alignment.CenterHorizontally,
++                                verticalArrangement = Arrangement.spacedBy(16.dp)
++                            ) {
++                                CircularProgressIndicator()
++                                Text(
++                                    text = stringResource(R.string.db_migrating),
++                                    style = MaterialTheme.typography.bodyLarge
++                                )
++                                if (state != null) {
++                                    Text(
++                                        text = "v${state.from} → v${state.to}",
++                                        style = MaterialTheme.typography.bodySmall,
++                                        color = MaterialTheme.colorScheme.onSurfaceVariant
++                                    )
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++    }
++}
++
++sealed interface Screen : NavKey {
++    @Serializable
++    data class Chat(
++        val id: String,
++        val text: String? = null,
++        val files: List<String> = emptyList(),
++        val nodeId: String? = null
++    ) : Screen
++
++    @Serializable
++    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
++
++    @Serializable
++    data object History : Screen
++
++    @Serializable
++    data object Favorite : Screen
++
++    @Serializable
++    data object Assistant : Screen
++
++    @Serializable
++    data class AssistantDetail(val id: String) : Screen
++
++    @Serializable
++    data class AssistantBasic(val id: String) : Screen
++
++    @Serializable
++    data class AssistantPrompt(val id: String) : Screen
++
++    @Serializable
++    data class AssistantMemory(val id: String) : Screen
++
++    @Serializable
++    data class AssistantRequest(val id: String) : Screen
++
++    @Serializable
++    data class AssistantMcp(val id: String) : Screen
++
++    @Serializable
++    data class AssistantLocalTool(val id: String) : Screen
++
++    @Serializable
++    data class AssistantInjections(val id: String) : Screen
++
++    @Serializable
++    data object Translator : Screen
++
++    @Serializable
++    data object Setting : Screen
++
++    @Serializable
++    data object Backup : Screen
++
++    @Serializable
++    data object ImageGen : Screen
++
++    @Serializable
++    data class WebView(val url: String = "", val contentId: String = "") : Screen
++
++    @Serializable
++    data object SettingTheme : Screen
++
++    @Serializable
++    data object SettingPreferences : Screen
++
++    @Serializable
++    data object SettingPreferencesTheme : Screen
++
++    @Serializable
++    data object SettingPreferencesNotification : Screen
++
++    @Serializable
++    data object SettingPreferencesGeneral : Screen
++
++    @Serializable
      data object SettingPreferencesUI : Screen
  
++    @Serializable
++    data object SettingDecorPresets : Screen
++
 +    @Serializable
 +    data object SettingPreferencesColors : Screen
 +
@@ -70,12 +1330,536 @@ index bef7871..5088a03 100644
 +
      @Serializable
      data object SettingPreferencesNetwork : Screen
- 
+-
+-    @Serializable
+-    data object SettingProvider : Screen
+-
+-    @Serializable
+-    data class SettingProviderDetail(val providerId: String) : Screen
+-
+-    @Serializable
+-    data object SettingModels : Screen
+-
+-    @Serializable
+-    data object SettingAbout : Screen
+-
+-    @Serializable
+-    data object SettingSearch : Screen
+-
+-    @Serializable
+-    data class SettingSearchDetail(val serviceId: String) : Screen
+-
+-    @Serializable
+-    data object SettingSpeech : Screen
+-
+-    @Serializable
+-    data object SettingMcp : Screen
+-
+-    @Serializable
+-    data object SettingDonate : Screen
+-
+-    @Serializable
+-    data object SettingFiles : Screen
+-
+-    @Serializable
+-    data object SettingWeb : Screen
+-
+-    @Serializable
+-    data object Debug : Screen
+-
+-    @Serializable
+-    data object Log : Screen
+-
+-    @Serializable
+-    data object Extensions : Screen
+-
+-    @Serializable
+-    data object QuickMessages : Screen
+-
+-    @Serializable
+-    data object Prompts : Screen
+-
+-    @Serializable
+-    data object Skills : Screen
+-
+-    @Serializable
+-    data object Workspaces : Screen
+-
+-    @Serializable
+-    data class WorkspaceDetail(val id: String) : Screen
+-
+-    @Serializable
+-    data class WorkspaceTerminal(val id: String) : Screen
+-
+-    @Serializable
+-    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
+-
+-    @Serializable
+-    data class SkillDetail(val skillName: String) : Screen
+-
+-    @Serializable
+-    data object MessageSearch : Screen
+-
+-    @Serializable
+-    data object Stats : Screen
+-}
++
++    @Serializable
++    data object SettingProvider : Screen
++
++    @Serializable
++    data class SettingProviderDetail(val providerId: String) : Screen
++
++    @Serializable
++    data object SettingModels : Screen
++
++    @Serializable
++    data object SettingAbout : Screen
++
++    @Serializable
++    data object SettingSearch : Screen
++
++    @Serializable
++    data class SettingSearchDetail(val serviceId: String) : Screen
++
++    @Serializable
++    data object SettingSpeech : Screen
++
++    @Serializable
++    data object SettingMcp : Screen
++
++    @Serializable
++    data object SettingDonate : Screen
++
++    @Serializable
++    data object SettingFiles : Screen
++
++    @Serializable
++    data object SettingWeb : Screen
++
++    @Serializable
++    data object Debug : Screen
++
++    @Serializable
++    data object Log : Screen
++
++    @Serializable
++    data object Extensions : Screen
++
++    @Serializable
++    data object QuickMessages : Screen
++
++    @Serializable
++    data object Prompts : Screen
++
++    @Serializable
++    data object Skills : Screen
++
++    @Serializable
++    data object Workspaces : Screen
++
++    @Serializable
++    data class WorkspaceDetail(val id: String) : Screen
++
++    @Serializable
++    data class WorkspaceTerminal(val id: String) : Screen
++
++    @Serializable
++    data class WorkspaceFileEditor(val id: String, val area: String, val path: String) : Screen
++
++    @Serializable
++    data class SkillDetail(val skillName: String) : Screen
++
++    @Serializable
++    data object MessageSearch : Screen
++
++    @Serializable
++    data object Stats : Screen
++}
+diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
+new file mode 100644
+index 0000000..24b07db
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
+@@ -0,0 +1,329 @@
++package me.rerere.rikkahub.data.datastore
++
++import kotlinx.serialization.Serializable
++import java.util.UUID
++
++/**
++ * 一套「装扮」：把 [DisplaySetting] 里所有**视觉相关**的字段打成一份快照。
++ *
++ * 设计取舍：
++ * - 只装眼睛能看见的字段。头像、昵称、Token 用量、思考内容折叠、输入法行为、
++ *   通知、TTS、音量键滚动这些「功能开关」都不装，切装扮不会顺手改掉你的使用习惯。
++ * - 所有字段都带默认值，配合 JsonInstant 的 ignoreUnknownKeys，
++ *   以后 [DisplaySetting] 增删字段时老装扮照样能读，缺的那项就用默认值兜底。
++ * - 应用方式是把这些字段整包 `copy` 回 [DisplaySetting]，不碰任何渲染代码，
++ *   所以不存在「换装扮导致界面炸掉」这种玄学风险。
++ */
++@Serializable
++data class DecorPreset(
++    // 装扮自身的元信息
++    val id: String = "",
++    val name: String = "",
++    val createdAt: Long = 0L,
++    // 主题预设 id 与动态取色：这两项挂在 Settings 上而不是 DisplaySetting 上，
++    // 但在用户眼里它们就是「这套装扮的一部分」，所以一起收进来。
++    // null = 这套没记录（老数据），应用时保持当前值不动。
++    val themeId: String? = null,
++    val dynamicColor: Boolean? = null,
++
++    val showAssistantBubble: Boolean = false,
++    val bubbleOpacity: Float = 1.0f,
++    val showModelIcon: Boolean = true,
++    val showModelName: Boolean = true,
++    val showDateTimeInMessage: Boolean = false,
++    val messageTimeFullFormat: Boolean = false,
++    val messageTimeUnderName: Boolean = false,
++    val fontSizeRatio: Float = 1.0f,
++    val codeBlockAutoWrap: Boolean = false,
++    val codeBlockAutoCollapse: Boolean = false,
++    val showLineNumbers: Boolean = false,
++    val enableBlurEffect: Boolean = false,
++    val backgroundEffectType: BackgroundEffectType = BackgroundEffectType.BLUR,
++    val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
++    val chatCustomFontPath: String = "",
++    val chatCustomFontName: String = "",
++    val customFonts: List<CustomFontEntry> = emptyList(),
++    val userBubbleColor: Long? = null,
++    val assistantBubbleColor: Long? = null,
++    val chatBackgroundColor: Long? = null,
++    val inputBackgroundColor: Long? = null,
++    val primaryColor: Long? = null,
++    val themeSeedColor: Long? = null,
++    val chatTextColor: Long? = null,
++    val messageTimeColor: Long? = null,
++    val recallUserColor: Long? = null,
++    val recallAssistantColor: Long? = null,
++    val enableQuoteHighlight: Boolean = false,
++    val quoteHighlightColor: Long? = null,
++    val quoteHighlightBackground: Long? = null,
++    val quoteBackgroundEnabled: Boolean = false,
++    val quoteHighlightBackgroundAlpha: Float = 0.18f,
++    val quoteUnderline: QuoteUnderline = QuoteUnderline.NONE,
++    val quoteUnderlineColor: Long? = null,
++    val quoteUnderlineSolid: Boolean = false,
++    val quoteUnderlineSolidColor: Long? = null,
++    val quoteUnderlineDashed: Boolean = false,
++    val quoteUnderlineDashedColor: Long? = null,
++    val quoteUnderlineDotted: Boolean = false,
++    val quoteUnderlineDottedColor: Long? = null,
++    val quoteLeadingBar: Boolean = false,
++    val quoteLeadingBarColor: Long? = null,
++    val quoteBackgroundCorner: Int = 4,
++    val quoteBackgroundGap: Int = 2,
++    val quoteUnderlineOffset: Int = 2,
++    val quoteDashScale: Float = 1f,
++    val quoteBarHeightScale: Float = 0.7f,
++    val quoteBarOffsetDp: Int = 1,
++    val quoteBarWidthDp: Int = 2,
++    val quoteUnderlineInsetDp: Int = 2,
++    val quoteOuterDecor: QuoteOuterDecor = QuoteOuterDecor.NONE,
++    val quoteOuterDecorSpace: Int = 0,
++    val quoteOuterDecorFollowHighlight: Boolean = true,
++    val quoteOuterDecorScale: Float = 1f,
++    val chatLineHeightScale: Float = 1f,
++    val chatParagraphSpacingDp: Int = 0,
++    val chatLetterSpacingEm: Float = 0f,
++    val paragraphIndentChars: Int = 0,
++    val chatFontSizePercent: Int = 0,
++    val bubbleCornerRadius: Int = -1,
++    val reasoningAlpha: Float = 1f,
++    val drawerElementAlpha: Float = 1f,
++    val inputBackgroundImage: String = "",
++    val drawerBackgroundImage: String = "",
++    val userBubbleImage: String = "",
++    val assistantBubbleImage: String = "",
++    val inputBackgroundImageAlpha: Float = 1f,
++    val drawerBackgroundImageAlpha: Float = 1f,
++    val backgroundImageTint: Boolean = true,
++    val surfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    val inputSurfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    val bubbleSurfaceMaterial: SurfaceMaterial = SurfaceMaterial.SOLID,
++    val materialBlurRadius: Int = 16,
++    val bubbleRealtimeBlur: Boolean = false,
++    val themeSchemeStyle: ThemeSchemeStyle = ThemeSchemeStyle.SOFT,
++    val chatInputHint: String = "",
++    val chatInputHeightDp: Int = 0,
++    val chatInputTransparency: Int = 0,
++    val chatInputTextColor: Long? = null,
++    val chatInputTextAlpha: Float = 1f,
++    val chatInputHintAlpha: Float = 1f,
++    val uiFontScale: Float = 1f,
++    val uiFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
++    val uiCustomFontPath: String = "",
++    val fullScreenEditorFollowChatBg: Boolean = true,
++    val fullScreenEditorBgColor: Long? = null,
++    val fullScreenEditorBgImage: String = "",
++    val fullScreenEditorBgImageAlpha: Float = 1f,
++    val fullScreenEditorBgTint: Boolean = true,
++) {
++    /** 把这套装扮整包写回 [base]，返回新的 DisplaySetting。 */
++    fun applyTo(base: DisplaySetting): DisplaySetting = base.copy(
++        showAssistantBubble = showAssistantBubble,
++        bubbleOpacity = bubbleOpacity,
++        showModelIcon = showModelIcon,
++        showModelName = showModelName,
++        showDateTimeInMessage = showDateTimeInMessage,
++        messageTimeFullFormat = messageTimeFullFormat,
++        messageTimeUnderName = messageTimeUnderName,
++        fontSizeRatio = fontSizeRatio,
++        codeBlockAutoWrap = codeBlockAutoWrap,
++        codeBlockAutoCollapse = codeBlockAutoCollapse,
++        showLineNumbers = showLineNumbers,
++        enableBlurEffect = enableBlurEffect,
++        backgroundEffectType = backgroundEffectType,
++        chatFontFamily = chatFontFamily,
++        chatCustomFontPath = chatCustomFontPath,
++        chatCustomFontName = chatCustomFontName,
++        // 字体库是「只增」的集合，不能被装扮回滚：合并去重，base 里的条目一律保留
++        customFonts = (base.customFonts + customFonts).distinctBy { it.relativePath },
++        userBubbleColor = userBubbleColor,
++        assistantBubbleColor = assistantBubbleColor,
++        chatBackgroundColor = chatBackgroundColor,
++        inputBackgroundColor = inputBackgroundColor,
++        primaryColor = primaryColor,
++        themeSeedColor = themeSeedColor,
++        chatTextColor = chatTextColor,
++        messageTimeColor = messageTimeColor,
++        recallUserColor = recallUserColor,
++        recallAssistantColor = recallAssistantColor,
++        enableQuoteHighlight = enableQuoteHighlight,
++        quoteHighlightColor = quoteHighlightColor,
++        quoteHighlightBackground = quoteHighlightBackground,
++        quoteBackgroundEnabled = quoteBackgroundEnabled,
++        quoteHighlightBackgroundAlpha = quoteHighlightBackgroundAlpha,
++        quoteUnderline = quoteUnderline,
++        quoteUnderlineColor = quoteUnderlineColor,
++        quoteUnderlineSolid = quoteUnderlineSolid,
++        quoteUnderlineSolidColor = quoteUnderlineSolidColor,
++        quoteUnderlineDashed = quoteUnderlineDashed,
++        quoteUnderlineDashedColor = quoteUnderlineDashedColor,
++        quoteUnderlineDotted = quoteUnderlineDotted,
++        quoteUnderlineDottedColor = quoteUnderlineDottedColor,
++        quoteLeadingBar = quoteLeadingBar,
++        quoteLeadingBarColor = quoteLeadingBarColor,
++        quoteBackgroundCorner = quoteBackgroundCorner,
++        quoteBackgroundGap = quoteBackgroundGap,
++        quoteUnderlineOffset = quoteUnderlineOffset,
++        quoteDashScale = quoteDashScale,
++        quoteBarHeightScale = quoteBarHeightScale,
++        quoteBarOffsetDp = quoteBarOffsetDp,
++        quoteBarWidthDp = quoteBarWidthDp,
++        quoteUnderlineInsetDp = quoteUnderlineInsetDp,
++        quoteOuterDecor = quoteOuterDecor,
++        quoteOuterDecorSpace = quoteOuterDecorSpace,
++        quoteOuterDecorFollowHighlight = quoteOuterDecorFollowHighlight,
++        quoteOuterDecorScale = quoteOuterDecorScale,
++        chatLineHeightScale = chatLineHeightScale,
++        chatParagraphSpacingDp = chatParagraphSpacingDp,
++        chatLetterSpacingEm = chatLetterSpacingEm,
++        paragraphIndentChars = paragraphIndentChars,
++        chatFontSizePercent = chatFontSizePercent,
++        bubbleCornerRadius = bubbleCornerRadius,
++        reasoningAlpha = reasoningAlpha,
++        drawerElementAlpha = drawerElementAlpha,
++        inputBackgroundImage = inputBackgroundImage,
++        drawerBackgroundImage = drawerBackgroundImage,
++        userBubbleImage = userBubbleImage,
++        assistantBubbleImage = assistantBubbleImage,
++        inputBackgroundImageAlpha = inputBackgroundImageAlpha,
++        drawerBackgroundImageAlpha = drawerBackgroundImageAlpha,
++        backgroundImageTint = backgroundImageTint,
++        surfaceMaterial = surfaceMaterial,
++        inputSurfaceMaterial = inputSurfaceMaterial,
++        bubbleSurfaceMaterial = bubbleSurfaceMaterial,
++        materialBlurRadius = materialBlurRadius,
++        bubbleRealtimeBlur = bubbleRealtimeBlur,
++        themeSchemeStyle = themeSchemeStyle,
++        chatInputHint = chatInputHint,
++        chatInputHeightDp = chatInputHeightDp,
++        chatInputTransparency = chatInputTransparency,
++        chatInputTextColor = chatInputTextColor,
++        chatInputTextAlpha = chatInputTextAlpha,
++        chatInputHintAlpha = chatInputHintAlpha,
++        uiFontScale = uiFontScale,
++        uiFontFamily = uiFontFamily,
++        uiCustomFontPath = uiCustomFontPath,
++        fullScreenEditorFollowChatBg = fullScreenEditorFollowChatBg,
++        fullScreenEditorBgColor = fullScreenEditorBgColor,
++        fullScreenEditorBgImage = fullScreenEditorBgImage,
++        fullScreenEditorBgImageAlpha = fullScreenEditorBgImageAlpha,
++        fullScreenEditorBgTint = fullScreenEditorBgTint,
++    )
++
++    /**
++     * 连主题一起应用，返回新的 [Settings]。
++     *
++     * 界面上的颜色、字体、材质、输入框这些挂在 [DisplaySetting] 上，
++     * 但「主题预设 / 动态取色」挂在 [Settings] 上，两处都要写才算是真换了一套。
++     */
++    fun applyToSettings(base: Settings): Settings = base.copy(
++        displaySetting = applyTo(base.displaySetting),
++        themeId = themeId ?: base.themeId,
++        dynamicColor = dynamicColor ?: base.dynamicColor,
++    )
++
++    companion object {
++        /** 从当前 [DisplaySetting] 抓一份快照。 */
++        fun capture(
++            from: DisplaySetting,
++            name: String,
++            themeId: String? = null,
++            dynamicColor: Boolean? = null,
++        ): DecorPreset = DecorPreset(
++            id = UUID.randomUUID().toString(),
++            name = name,
++            createdAt = System.currentTimeMillis(),
++            themeId = themeId,
++            dynamicColor = dynamicColor,
++            showAssistantBubble = from.showAssistantBubble,
++            bubbleOpacity = from.bubbleOpacity,
++            showModelIcon = from.showModelIcon,
++            showModelName = from.showModelName,
++            showDateTimeInMessage = from.showDateTimeInMessage,
++            messageTimeFullFormat = from.messageTimeFullFormat,
++            messageTimeUnderName = from.messageTimeUnderName,
++            fontSizeRatio = from.fontSizeRatio,
++            codeBlockAutoWrap = from.codeBlockAutoWrap,
++            codeBlockAutoCollapse = from.codeBlockAutoCollapse,
++            showLineNumbers = from.showLineNumbers,
++            enableBlurEffect = from.enableBlurEffect,
++            backgroundEffectType = from.backgroundEffectType,
++            chatFontFamily = from.chatFontFamily,
++            chatCustomFontPath = from.chatCustomFontPath,
++            chatCustomFontName = from.chatCustomFontName,
++            customFonts = from.customFonts,
++            userBubbleColor = from.userBubbleColor,
++            assistantBubbleColor = from.assistantBubbleColor,
++            chatBackgroundColor = from.chatBackgroundColor,
++            inputBackgroundColor = from.inputBackgroundColor,
++            primaryColor = from.primaryColor,
++            themeSeedColor = from.themeSeedColor,
++            chatTextColor = from.chatTextColor,
++            messageTimeColor = from.messageTimeColor,
++            recallUserColor = from.recallUserColor,
++            recallAssistantColor = from.recallAssistantColor,
++            enableQuoteHighlight = from.enableQuoteHighlight,
++            quoteHighlightColor = from.quoteHighlightColor,
++            quoteHighlightBackground = from.quoteHighlightBackground,
++            quoteBackgroundEnabled = from.quoteBackgroundEnabled,
++            quoteHighlightBackgroundAlpha = from.quoteHighlightBackgroundAlpha,
++            quoteUnderline = from.quoteUnderline,
++            quoteUnderlineColor = from.quoteUnderlineColor,
++            quoteUnderlineSolid = from.quoteUnderlineSolid,
++            quoteUnderlineSolidColor = from.quoteUnderlineSolidColor,
++            quoteUnderlineDashed = from.quoteUnderlineDashed,
++            quoteUnderlineDashedColor = from.quoteUnderlineDashedColor,
++            quoteUnderlineDotted = from.quoteUnderlineDotted,
++            quoteUnderlineDottedColor = from.quoteUnderlineDottedColor,
++            quoteLeadingBar = from.quoteLeadingBar,
++            quoteLeadingBarColor = from.quoteLeadingBarColor,
++            quoteBackgroundCorner = from.quoteBackgroundCorner,
++            quoteBackgroundGap = from.quoteBackgroundGap,
++            quoteUnderlineOffset = from.quoteUnderlineOffset,
++            quoteDashScale = from.quoteDashScale,
++            quoteBarHeightScale = from.quoteBarHeightScale,
++            quoteBarOffsetDp = from.quoteBarOffsetDp,
++            quoteBarWidthDp = from.quoteBarWidthDp,
++            quoteUnderlineInsetDp = from.quoteUnderlineInsetDp,
++            quoteOuterDecor = from.quoteOuterDecor,
++            quoteOuterDecorSpace = from.quoteOuterDecorSpace,
++            quoteOuterDecorFollowHighlight = from.quoteOuterDecorFollowHighlight,
++            quoteOuterDecorScale = from.quoteOuterDecorScale,
++            chatLineHeightScale = from.chatLineHeightScale,
++            chatParagraphSpacingDp = from.chatParagraphSpacingDp,
++            chatLetterSpacingEm = from.chatLetterSpacingEm,
++            paragraphIndentChars = from.paragraphIndentChars,
++            chatFontSizePercent = from.chatFontSizePercent,
++            bubbleCornerRadius = from.bubbleCornerRadius,
++            reasoningAlpha = from.reasoningAlpha,
++            drawerElementAlpha = from.drawerElementAlpha,
++            inputBackgroundImage = from.inputBackgroundImage,
++            drawerBackgroundImage = from.drawerBackgroundImage,
++            userBubbleImage = from.userBubbleImage,
++            assistantBubbleImage = from.assistantBubbleImage,
++            inputBackgroundImageAlpha = from.inputBackgroundImageAlpha,
++            drawerBackgroundImageAlpha = from.drawerBackgroundImageAlpha,
++            backgroundImageTint = from.backgroundImageTint,
++            surfaceMaterial = from.surfaceMaterial,
++            inputSurfaceMaterial = from.inputSurfaceMaterial,
++            bubbleSurfaceMaterial = from.bubbleSurfaceMaterial,
++            materialBlurRadius = from.materialBlurRadius,
++            bubbleRealtimeBlur = from.bubbleRealtimeBlur,
++            themeSchemeStyle = from.themeSchemeStyle,
++            chatInputHint = from.chatInputHint,
++            chatInputHeightDp = from.chatInputHeightDp,
++            chatInputTransparency = from.chatInputTransparency,
++            chatInputTextColor = from.chatInputTextColor,
++            chatInputTextAlpha = from.chatInputTextAlpha,
++            chatInputHintAlpha = from.chatInputHintAlpha,
++            uiFontScale = from.uiFontScale,
++            uiFontFamily = from.uiFontFamily,
++            uiCustomFontPath = from.uiCustomFontPath,
++            fullScreenEditorFollowChatBg = from.fullScreenEditorFollowChatBg,
++            fullScreenEditorBgColor = from.fullScreenEditorBgColor,
++            fullScreenEditorBgImage = from.fullScreenEditorBgImage,
++            fullScreenEditorBgImageAlpha = from.fullScreenEditorBgImageAlpha,
++            fullScreenEditorBgTint = from.fullScreenEditorBgTint,
++        )
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..739000b 100644
+index 205e822..0ba6d1b 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-@@ -595,6 +595,16 @@ enum class ChatFontFamily {
+@@ -144,6 +144,8 @@ class SettingsStore(
+         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
+         val LOREBOOKS = stringPreferencesKey("lorebooks")
+         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
++        // 装扮：用户自己保存的一整套视觉快照（设置 · 装扮）
++        val DECOR_PRESETS = stringPreferencesKey("decor_presets")
+ 
+         // 备份提醒
+         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
+@@ -210,6 +212,7 @@ class SettingsStore(
+                 preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
+                 preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
+                 preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
++                preferences[DECOR_PRESETS] = JsonInstant.encodeToString(settings.decorPresets)
+                 preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
+                 preferences[WEB_SERVER_PORT] = settings.webServerPort
+                 preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
+@@ -305,6 +308,9 @@ class SettingsStore(
+                 quickMessages = preferences[QUICK_MESSAGES]?.let {
+                     JsonInstant.decodeFromString(it)
+                 } ?: emptyList(),
++                decorPresets = preferences[DECOR_PRESETS]?.let {
++                    JsonInstant.decodeFromString(it)
++                } ?: emptyList(),
+                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
+                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
+                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
+@@ -406,6 +412,7 @@ class SettingsStore(
+                 modeInjections = settings.modeInjections.distinctBy { it.id },
+                 lorebooks = settings.lorebooks.distinctBy { it.id },
+                 quickMessages = settings.quickMessages.distinctBy { it.id },
++                decorPresets = settings.decorPresets.distinctBy { it.id },
+             )
+         }
+         .onEach {
+@@ -558,6 +565,8 @@ data class Settings(
+     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
+     val lorebooks: List<Lorebook> = emptyList(),
+     val quickMessages: List<QuickMessage> = emptyList(),
++    // 装扮：用户保存的一整套视觉快照
++    val decorPresets: List<DecorPreset> = emptyList(),
+     val webServerEnabled: Boolean = false,
+     val webServerPort: Int = 8080,
+     val webServerJwtEnabled: Boolean = false,
+@@ -595,6 +604,16 @@ enum class ChatFontFamily {
      CUSTOM,
  }
  
@@ -92,7 +1876,7 @@ index 205e822..739000b 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +614,113 @@ enum class BackgroundEffectType {
+@@ -604,17 +623,113 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -206,7 +1990,7 @@ index 205e822..739000b 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,177 @@ data class DisplaySetting(
+@@ -642,8 +757,178 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -372,20 +2156,21 @@ index 205e822..739000b 100644
 +    val fullScreenEditorBgImageAlpha: Float = 1f,
 +    // 全屏编辑页背景图是否叠加主题色遮罩（保证文字可读）
 +    val fullScreenEditorBgTint: Boolean = true,
-+    // 沉浸阅读：唯一总开关，设置页的「沉浸阅读」分组和输入框 + 面板的第四块读写的是同一个字段
++    // 沉浸阅读：功能已整套停用（顶栏藏了却没把正文顶上来，观感不好），
++    // 这四个字段只作为占位保留，避免老配置反序列化时丢键；代码里没有任何地方读它们。
 +    // （默认 false = 与改动前逐像素一致：顶栏 / 输入框 / 滚动行为完全不变）
 +    val immersiveReading: Boolean = false,
-+    // 沉浸阅读·隐藏顶栏（关掉就只藏输入框，顶栏照旧常驻）
++    // 已停用·隐藏顶栏
 +    val immersiveHideTopBar: Boolean = true,
-+    // 沉浸阅读·隐藏输入框（连同输入框下面那一层底部留白 / 安全区整块一起收起）
++    // 已停用·隐藏输入框
 +    val immersiveHideInput: Boolean = true,
-+    // 沉浸阅读·临时唤出后自动收起的秒数（2..10），点顶部热区唤出后按这个时间滑回去
++    // 已停用·自动收起秒数
 +    val immersiveAutoHideSeconds: Int = 4,
  )
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..1bd85a2 100644
+index 45c3d83..0e6a65d 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -450,7 +2235,7 @@ index 45c3d83..1bd85a2 100644
 +    // 输入框背景图：路径变化才重建 File，避免每帧新对象
 +    val inputImagePath = settings.displaySetting.inputBackgroundImage
 +    val inputBackgroundImage = remember(inputImagePath) {
-+        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
++        inputImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
 +    }
 +    // 界面材质：纯色时和原版完全一致，半透明只改底色，磨砂 / 液态才换 style 和底色。
 +    // 输入框用的是它自己那一档 inputSurfaceMaterial（气泡有自己的 bubbleSurfaceMaterial），
@@ -973,7 +2758,7 @@ index 45c3d83..1bd85a2 100644
 +    }
 +    val customImagePath = if (followChatBg) "" else displaySetting.fullScreenEditorBgImage
 +    val customImageModel = remember(customImagePath) {
-+        customImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
++        customImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
 +    }
 +    val bgImageModel: Any? = if (followChatBg) followImageModel else customImageModel
 +    val bgImageAlpha = if (followChatBg) {
@@ -1096,7 +2881,7 @@ index 45c3d83..1bd85a2 100644
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
-index 354c7b8..c0a000b 100644
+index 354c7b8..a8a89d2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
 @@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.Role
@@ -1111,20 +2896,22 @@ index 354c7b8..c0a000b 100644
  import me.rerere.ai.provider.ProviderSetting
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Voice
-+import me.rerere.hugeicons.stroke.BookOpen01
++import me.rerere.hugeicons.stroke.MagicWand01
  import me.rerere.hugeicons.stroke.Camera01
  import me.rerere.hugeicons.stroke.Codesandbox
  import me.rerere.hugeicons.stroke.ComputerTerminal01
-@@ -95,6 +97,8 @@ internal fun FilesPicker(
+@@ -95,6 +97,10 @@ internal fun FilesPicker(
      onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
      onUpdateAssistant: (Assistant) -> Unit,
      onUpdateConversation: (Conversation) -> Unit,
-+    // 沉浸阅读：+ 面板的第四块和设置页读写的是同一份 displaySetting
++    // 保留：其他入口（扩展 / 压缩）沿用的写设置通道
 +    onUpdateSettings: (Settings) -> Unit,
++    // 第四格「装扮」：交给外面的会话页弹选择条（这个面板自己就在 sheet 里，不能嵌套再弹）
++    onOpenDecorPicker: () -> Unit,
      showInjectionSheet: Boolean,
      onShowInjectionSheetChange: (Boolean) -> Unit,
      showCompressDialog: Boolean,
-@@ -118,29 +122,72 @@ internal fun FilesPicker(
+@@ -118,29 +124,64 @@ internal fun FilesPicker(
              .fillMaxWidth()
              .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
      ) {
@@ -1132,8 +2919,7 @@ index 354c7b8..c0a000b 100644
 -            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
 -            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
 -            verticalArrangement = Arrangement.spacedBy(4.dp),
-+        // 第一行：拍照 / 照片 / 上传文件 / 沉浸阅读，四块等宽并列（图标 + 下面文字）
-+        val immersiveReading = settings.displaySetting.immersiveReading
++        // 第一行：拍照 / 照片 / 上传文件 / 装扮，四块等宽并列（图标 + 下面文字）
 +        Row(
 +            modifier = Modifier.fillMaxWidth(),
 +            horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1165,21 +2951,14 @@ index 354c7b8..c0a000b 100644
  
 -                AudioPickButton(onClick = onPickAudio)
 -            }
-+            // 第四块：沉浸阅读开关（开着的时候底色 / 图标走 primaryContainer，一眼看出当前状态）
++            // 第四块：装扮（点开是横滑的装扮条，点一张当场换装）
 +            AttachmentPickerTile(
 +                modifier = Modifier.weight(1f),
-+                selected = immersiveReading,
-+                icon = { Icon(HugeIcons.BookOpen01, null) },
-+                label = "沉浸阅读",
++                icon = { Icon(HugeIcons.MagicWand01, null) },
++                label = "装扮",
 +                onClick = {
-+                    onUpdateSettings(
-+                        settings.copy(
-+                            displaySetting = settings.displaySetting.copy(
-+                                immersiveReading = !immersiveReading
-+                            )
-+                        )
-+                    )
 +                    onDismiss()
++                    onOpenDecorPicker()
 +                },
 +            )
 +        }
@@ -1214,13 +2993,13 @@ index 354c7b8..c0a000b 100644
              }
          }
  
-@@ -498,6 +545,60 @@ fun FilePickButton(onClick: () -> Unit = {}) {
+@@ -498,6 +539,60 @@ fun FilePickButton(onClick: () -> Unit = {}) {
      }
  }
  
 +/**
 + * + 面板第一行用的方块：等宽铺开，上图标下文字。
-+ * selected = true 时（沉浸阅读已开启）底色和图标换成 primaryContainer，一眼看出当前是开还是关。
++ * selected = true 时底色和图标换成 primaryContainer（留作高亮态，目前没有调用方使用）。
 + */
 +@Composable
 +private fun AttachmentPickerTile(
@@ -1275,8 +3054,371 @@ index 354c7b8..c0a000b 100644
  @Composable
  private fun BigIconTextButton(
      modifier: Modifier = Modifier,
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt
+new file mode 100644
+index 0000000..5e21207
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt
+@@ -0,0 +1,245 @@
++package me.rerere.rikkahub.ui.components.decor
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.border
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import me.rerere.rikkahub.data.datastore.ChatFontFamily
++import me.rerere.rikkahub.data.datastore.DecorPreset
++import me.rerere.rikkahub.data.datastore.Settings
++import me.rerere.rikkahub.data.datastore.SurfaceMaterial
++
++/**
++ * 装扮卡片上那行小字：材质 / 字体 / 字号，让人一眼分得出这套是什么味道。
++ */
++fun decorPresetSummary(preset: DecorPreset): String {
++    val material = when (preset.surfaceMaterial) {
++        SurfaceMaterial.SOLID -> "纯色"
++        SurfaceMaterial.TRANSLUCENT -> "半透明"
++        SurfaceMaterial.FROSTED -> "磨砂"
++        SurfaceMaterial.LIQUID -> "液态"
++    }
++    val font = when (preset.chatFontFamily) {
++        ChatFontFamily.DEFAULT -> "默认体"
++        ChatFontFamily.SERIF -> "衬线体"
++        ChatFontFamily.MONOSPACE -> "等宽体"
++        ChatFontFamily.CUSTOM -> preset.chatCustomFontName.ifBlank { "自定义" }
++    }
++    val size = if (preset.chatFontSizePercent in 10..200) {
++        "${preset.chatFontSizePercent}%"
++    } else {
++        "${(preset.fontSizeRatio * 100).toInt()}%"
++    }
++    return "$material · $font · $size"
++}
++
++/**
++ * 判断这套装扮是不是「当前正在用的」。
++ *
++ * 做法是把它套回当前的 DisplaySetting 再比一次：字段全一样就等于正在用。
++ * 89 个字段的 equals，开销可以忽略，比另存一个「当前 id」更不容易出错
++ * （用户手改设置后也能立刻反映出来）。
++ */
++fun DecorPreset.matchesCurrent(current: Settings): Boolean =
++    applyToSettings(current) == current
++
++/**
++ * 装扮卡片：左边一块配色样板（主色 / 气泡色 / 输入框色叠在一起），右边名字 + 摘要。
++ *
++ * 用在两个地方：设置 · 装扮 的列表，和 + 面板点开后的横滑选择条。
++ */
++@Composable
++fun DecorPresetCard(
++    preset: DecorPreset,
++    currentSetting: Settings,
++    onClick: () -> Unit,
++    modifier: Modifier = Modifier,
++    compact: Boolean = false,
++) {
++    val selected = preset.matchesCurrent(currentSetting)
++    val seed = preset.themeSeedColor ?: preset.primaryColor
++    val bubble = preset.assistantBubbleColor ?: preset.userBubbleColor
++    val input = preset.inputBackgroundColor
++    val shape = RoundedCornerShape(16.dp)
++
++    Row(
++        modifier = modifier
++            .clip(shape)
++            .background(
++                if (selected) {
++                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
++                } else {
++                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
++                }
++            )
++            .border(
++                width = if (selected) 1.5.dp else 1.dp,
++                color = if (selected) {
++                    MaterialTheme.colorScheme.primary
++                } else {
++                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
++                },
++                shape = shape,
++            )
++            .clickable(onClick = onClick)
++            .padding(horizontal = 12.dp, vertical = if (compact) 10.dp else 12.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.spacedBy(12.dp),
++    ) {
++        // 配色样板：三块小圆角色片叠着放，一眼看出主色 / 气泡色 / 输入框色
++        Box(
++            modifier = Modifier
++                .size(if (compact) 34.dp else 42.dp)
++                .clip(RoundedCornerShape(10.dp))
++                .background(seed?.let { Color(it) } ?: MaterialTheme.colorScheme.primary),
++        ) {
++            Box(
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .padding(4.dp)
++                    .size(if (compact) 12.dp else 16.dp)
++                    .clip(CircleShape)
++                    .background(bubble?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary),
++            )
++            Box(
++                modifier = Modifier
++                    .align(Alignment.BottomStart)
++                    .padding(4.dp)
++                    .size(if (compact) 8.dp else 10.dp)
++                    .clip(CircleShape)
++                    .background(input?.let { Color(it) } ?: MaterialTheme.colorScheme.surface),
++            )
++        }
++
++        Column(
++            modifier = Modifier.weight(1f, fill = false),
++            verticalArrangement = Arrangement.spacedBy(2.dp),
++        ) {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Text(
++                    text = preset.name.ifBlank { "未命名装扮" },
++                    style = MaterialTheme.typography.titleSmall,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++                if (selected) {
++                    Text(
++                        text = " · 使用中",
++                        style = MaterialTheme.typography.labelSmall,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                }
++            }
++            Text(
++                text = decorPresetSummary(preset),
++                style = MaterialTheme.typography.labelSmall,
++                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis,
++            )
++        }
++    }
++}
++
++/**
++ * + 面板里用的窄卡：竖着排，固定宽度，方便横滑。
++ */
++@Composable
++fun DecorPresetTile(
++    preset: DecorPreset,
++    currentSetting: Settings,
++    onClick: () -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    val selected = preset.matchesCurrent(currentSetting)
++    val seed = preset.themeSeedColor ?: preset.primaryColor
++    val bubble = preset.assistantBubbleColor ?: preset.userBubbleColor
++    val shape = RoundedCornerShape(16.dp)
++
++    Column(
++        modifier = modifier
++            .width(108.dp)
++            .clip(shape)
++            .background(
++                if (selected) {
++                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
++                } else {
++                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
++                }
++            )
++            .border(
++                width = if (selected) 1.5.dp else 1.dp,
++                color = if (selected) {
++                    MaterialTheme.colorScheme.primary
++                } else {
++                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
++                },
++                shape = shape,
++            )
++            .clickable(onClick = onClick)
++            .padding(8.dp),
++        verticalArrangement = Arrangement.spacedBy(6.dp),
++    ) {
++        // 上部色板：主色打底，右下角叠气泡色
++        Box(
++            modifier = Modifier
++                .fillMaxWidth()
++                .height(46.dp)
++                .clip(RoundedCornerShape(10.dp))
++                .background(seed?.let { Color(it) } ?: MaterialTheme.colorScheme.primary),
++        ) {
++            Box(
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .padding(4.dp)
++                    .size(14.dp)
++                    .clip(CircleShape)
++                    .background(bubble?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary),
++            )
++            Box(
++                modifier = Modifier
++                    .align(Alignment.BottomStart)
++                    .padding(4.dp)
++                    .size(9.dp)
++                    .clip(CircleShape)
++                    .background(Color.White.copy(alpha = 0.75f)),
++            )
++        }
++        Text(
++            text = preset.name.ifBlank { "未命名" },
++            style = MaterialTheme.typography.labelMedium,
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis,
++        )
++        Text(
++            text = if (selected) "使用中" else decorPresetSummary(preset).substringBefore(" · "),
++            style = MaterialTheme.typography.labelSmall,
++            color = if (selected) {
++                MaterialTheme.colorScheme.primary
++            } else {
++                MaterialTheme.colorScheme.onSurfaceVariant
++            },
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis,
++        )
++    }
++}
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetPicker.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetPicker.kt
+new file mode 100644
+index 0000000..ff528f6
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetPicker.kt
+@@ -0,0 +1,106 @@
++package me.rerere.rikkahub.ui.components.decor
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.ModalBottomSheet
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import me.rerere.hugeicons.HugeIcons
++import me.rerere.hugeicons.stroke.Settings02
++import me.rerere.rikkahub.data.datastore.DecorPreset
++import me.rerere.rikkahub.data.datastore.Settings
++
++/**
++ * 输入框 + 面板第四格点开后的装扮选择条。
++ *
++ * 只做「看一眼 + 点一下换」，不做增删改——那些放到 设置 · 装扮 里，
++ * 免得这个面板越堆越长。没存过装扮时给一句提示 + 一个去设置的按钮。
++ */
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++fun DecorPresetPickerSheet(
++    setting: Settings,
++    onApply: (DecorPreset) -> Unit,
++    onManage: () -> Unit,
++    onDismiss: () -> Unit,
++) {
++    val presets = setting.decorPresets
++
++    ModalBottomSheet(onDismissRequest = onDismiss) {
++        Column(
++            modifier = Modifier
++                .fillMaxWidth()
++                .padding(bottom = 16.dp),
++            verticalArrangement = Arrangement.spacedBy(12.dp),
++        ) {
++            Text(
++                text = "装扮",
++                style = MaterialTheme.typography.titleMedium,
++                modifier = Modifier.padding(horizontal = 16.dp),
++            )
++
++            if (presets.isEmpty()) {
++                Box(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .padding(horizontal = 16.dp, vertical = 24.dp),
++                    contentAlignment = Alignment.Center,
++                ) {
++                    Column(
++                        horizontalAlignment = Alignment.CenterHorizontally,
++                        verticalArrangement = Arrangement.spacedBy(8.dp),
++                    ) {
++                        Text(
++                            text = "还没保存过装扮",
++                            style = MaterialTheme.typography.bodyMedium,
++                            color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        )
++                        Text(
++                            text = "去「设置 · 装扮」把现在这套存下来，以后一键换回来",
++                            style = MaterialTheme.typography.labelSmall,
++                            color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        )
++                    }
++                }
++            } else {
++                LazyRow(
++                    modifier = Modifier.fillMaxWidth(),
++                    contentPadding = PaddingValues(horizontal = 16.dp),
++                    horizontalArrangement = Arrangement.spacedBy(10.dp),
++                ) {
++                    items(presets, key = { it.id }) { preset ->
++                        DecorPresetTile(
++                            preset = preset,
++                            currentSetting = setting,
++                            onClick = { onApply(preset) },
++                        )
++                    }
++                }
++            }
++
++            TextButton(
++                onClick = onManage,
++                modifier = Modifier.padding(horizontal = 8.dp),
++            ) {
++                Icon(HugeIcons.Settings02, null)
++                Text(
++                    text = " 管理装扮",
++                    style = MaterialTheme.typography.labelLarge,
++                )
++            }
++        }
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..a847f32 100644
+index a18dd69..716d158 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -1627,7 +3769,7 @@ index a18dd69..a847f32 100644
 + */
 +@Composable
 +private fun rememberBubbleImage(path: String): File? {
-+    return remember(path) { path.takeIf { it.isNotBlank() }?.let { File(it) } }
++    return remember(path) { path.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile } }
 +}
 +
 +/**
@@ -4265,7 +6407,7 @@ index 0000000..806957f
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
-index 86fcdcf..150eff6 100644
+index 86fcdcf..25d9d01 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 @@ -1,6 +1,7 @@
@@ -4351,7 +6493,7 @@ index 86fcdcf..150eff6 100644
 +        // 侧边栏背景图：只有路径变化才重建 File，避免每帧新对象
 +        val drawerImagePath = settings.displaySetting.drawerBackgroundImage
 +        val drawerBackgroundImage = remember(drawerImagePath) {
-+            drawerImagePath.takeIf { it.isNotBlank() }?.let { File(it) }
++            drawerImagePath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
 +        }
 +        Box(
 +            modifier = Modifier
@@ -5089,7 +7231,7 @@ index 6f7f137..2dfc8a1 100644
                          Row(
                              modifier = Modifier
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-index 5460f45..eceeeb8 100644
+index 5460f45..1b4c34f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 @@ -2,9 +2,26 @@ package me.rerere.rikkahub.ui.pages.chat
@@ -5146,7 +7288,7 @@ index 5460f45..eceeeb8 100644
  import dev.chrisbanes.haze.hazeSource
  import dev.chrisbanes.haze.rememberHazeState
  import kotlinx.coroutines.Job
-@@ -55,6 +78,7 @@ import me.rerere.ai.provider.BuiltInTools
+@@ -55,12 +78,14 @@ import me.rerere.ai.provider.BuiltInTools
  import me.rerere.ai.provider.Model
  import me.rerere.ai.provider.ProviderSetting
  import me.rerere.ai.ui.UIMessagePart
@@ -5154,7 +7296,22 @@ index 5460f45..eceeeb8 100644
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Cancel01
  import me.rerere.hugeicons.stroke.LeftToRightListBullet
-@@ -188,6 +212,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+ import me.rerere.hugeicons.stroke.Menu03
+ import me.rerere.hugeicons.stroke.MessageAdd01
+ import me.rerere.rikkahub.R
++import me.rerere.rikkahub.Screen
+ import me.rerere.rikkahub.data.datastore.Settings
+ import me.rerere.rikkahub.data.datastore.findProvider
+ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+@@ -72,6 +97,7 @@ import me.rerere.rikkahub.data.model.Conversation
+ import me.rerere.rikkahub.data.repository.WorkspaceRepository
+ import me.rerere.rikkahub.service.ChatError
+ import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
++import me.rerere.rikkahub.ui.components.decor.DecorPresetPickerSheet
+ import me.rerere.rikkahub.ui.components.ai.ChatInput
+ import me.rerere.rikkahub.ui.components.ai.FilesPicker
+ import me.rerere.rikkahub.ui.components.ai.SearchMode
+@@ -188,6 +214,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
          }
      }
  
@@ -5164,7 +7321,7 @@ index 5460f45..eceeeb8 100644
      when {
          isBigScreen -> {
              PermanentNavigationDrawer(
-@@ -196,11 +223,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -196,11 +225,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                          navController = navController,
                          current = conversation,
                          vm = vm,
@@ -5179,7 +7336,7 @@ index 5460f45..eceeeb8 100644
                      onStartVoiceMode = startVoiceMode,
                      inputState = inputState,
                      loadingJob = loadingJob,
-@@ -229,11 +258,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -229,11 +260,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                          navController = navController,
                          current = conversation,
                          vm = vm,
@@ -5194,7 +7351,7 @@ index 5460f45..eceeeb8 100644
                      onStartVoiceMode = startVoiceMode,
                      inputState = inputState,
                      loadingJob = loadingJob,
-@@ -261,6 +292,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -261,6 +294,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
  
  @Composable
  private fun ChatPageContent(
@@ -5202,76 +7359,24 @@ index 5460f45..eceeeb8 100644
      onStartVoiceMode: () -> Unit,
      inputState: ChatInputState,
      loadingJob: Job?,
-@@ -282,7 +314,6 @@ private fun ChatPageContent(
+@@ -282,9 +316,10 @@ private fun ChatPageContent(
      val toaster = LocalToaster.current
      val workspaceRepository: WorkspaceRepository = koinInject()
      var previewMode by rememberSaveable { mutableStateOf(false) }
 -    val hazeState = rememberHazeState()
      val assistant = setting.getCurrentAssistant()
      var showFilesSheet by remember { mutableStateOf(false) }
++    // 装扮选择条：+ 面板先关掉自己，再让会话页弹这个（避免 sheet 嵌套）
++    var showDecorSheet by remember { mutableStateOf(false) }
      val attachmentPickerActions = rememberChatAttachmentPickerActions(
-@@ -307,219 +338,347 @@ private fun ChatPageContent(
+         inputState = inputState,
+         setting = setting,
+@@ -307,218 +342,252 @@ private fun ChatPageContent(
  
      TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
  
-+    // ---------------- 沉浸阅读 ----------------
-+    // 唯一开关存在 settings.displaySetting 里（设置页和 + 面板读写同一份），这里只负责渲染。
-+    // immersiveReading = false 时下面所有分支都走「原样」，顶栏 / 输入框 / 滚动行为完全不变。
-+    val displaySetting = setting.displaySetting
-+    val immersiveReading = displaySetting.immersiveReading
-+    val immersiveHideTopBar = displaySetting.immersiveHideTopBar
-+    val immersiveHideInput = displaySetting.immersiveHideInput
-+    val immersiveAutoHideSeconds = displaySetting.immersiveAutoHideSeconds.coerceIn(2, 10)
-+    // 临时唤出：点屏幕顶部热区把顶栏 / 输入框滑回来，过 immersiveAutoHideSeconds 秒再自动收回
-+    var immersiveRevealed by rememberSaveable { mutableStateOf(false) }
-+    // 每次「按一下」都自增一次，用来把自动收起的计时从头开始（不需要立刻收起）
-+    val immersiveTouchTick = remember { mutableIntStateOf(0) }
-+    // 顶栏 / 输入框各自独当一面的显隐：不沉浸 / 没开对应开关 / 已临时唤出 时都显示
-+    val showTopBar = !immersiveReading || !immersiveHideTopBar || immersiveRevealed
-+    val showInputBar = !immersiveReading || !immersiveHideInput || immersiveRevealed
-+    // 只有沉浸 + 至少藏了一块时才有顶部热区，否则热区会白占 56dp 挡住列表滑动
-+    val showImmersiveHotSpot = immersiveReading && (immersiveHideTopBar || immersiveHideInput)
-+    // 顶栏 / 输入框藏起来时 Scaffold 的内边距会归零，这里补上系统栏高度，别让正文贴到状态栏 / 导航条下面
-+    val immersiveStatusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-+    val immersiveNavBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-+    val immersiveExtraTop = if (showTopBar) 0.dp else immersiveStatusBarTop
-+    val immersiveExtraBottom = if (showInputBar) 0.dp else immersiveNavBarBottom
 +
-+    // 退出沉浸时把「临时唤出」一起复位，下次进来先看到干净的全屏
-+    LaunchedEffect(immersiveReading) {
-+        if (!immersiveReading) {
-+            immersiveRevealed = false
-+        }
-+    }
-+    // 到点自动收起：任何一次按下（tick 变化）都会重启这个计时；
-+    // 键盘弹出（正在打字）时**不**收起，否则打到一半输入框会自己滑走
-+    val imeVisible = WindowInsets.isImeVisible
-+    LaunchedEffect(immersiveRevealed, immersiveTouchTick.intValue, immersiveAutoHideSeconds, imeVisible) {
-+        if (immersiveRevealed && !imeVisible) {
-+            delay(immersiveAutoHideSeconds * 1000L)
-+            immersiveRevealed = false
-+        }
-+    }
-+
-+    // 非消费式的「按下」监听：挂在顶栏 / 输入框外层，按一下就重置自动收起计时，不抢子组件的点击
-+    val immersivePressResetModifier: () -> Modifier = {
-+        if (immersiveReading) {
-+            Modifier.pointerInput(Unit) {
-+                awaitPointerEventScope {
-+                    while (true) {
-+                        val event = awaitPointerEvent(PointerEventPass.Initial)
-+                        if (event.type == PointerEventType.Press) {
-+                            immersiveTouchTick.intValue++
-+                        }
-+                    }
-+                }
-+            }
-+        } else {
-+            Modifier
-+        }
-+    }
-+
-+    // 顶栏 / 输入框两块内容提出来，沉浸时外面套 AnimatedVisibility，非沉浸时直接原样渲染
++    // 顶栏 / 输入框两块内容提出来，渲染方式与原版一致
 +    val topBarContent: @Composable () -> Unit = {
 +        TopBar(
 +            settings = setting,
@@ -5316,21 +7421,9 @@ index 5460f45..eceeeb8 100644
 -                    },
 -                    onUpdateTitle = {
 -                        vm.updateTitle(it)
-+                // 沉浸阅读：顶栏整块用 AnimatedVisibility 收起 / 滑回（200ms），非沉浸时直接原样渲染
-+                if (immersiveReading) {
-+                    AnimatedVisibility(
-+                        visible = showTopBar,
-+                        modifier = immersivePressResetModifier(),
-+                        enter = slideInVertically(animationSpec = tween(200)) { -it } + fadeIn(tween(200)),
-+                        exit = slideOutVertically(animationSpec = tween(200)) { -it } + fadeOut(tween(200)),
-+                        label = "immersiveTopBar",
-+                    ) {
-+                        topBarContent()
-                     }
+-                    }
 -                )
-+                } else {
-+                    topBarContent()
-+                }
++                topBarContent()
              },
              bottomBar = {
                  val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
@@ -5361,7 +7454,7 @@ index 5460f45..eceeeb8 100644
 -                                assistants = setting.assistants.map { assistant ->
 -                                    if (assistant.id == current.id) {
 -                                        assistant.copy(enableWebSearch = mode == SearchMode.LOCAL)
-+                // 沉浸阅读：输入框连同它下面那层底部留白 / 安全区整块一起收起，非沉浸时原样渲染
++                // 输入框（含底部留白 / 安全区）
 +                val inputBarContent: @Composable () -> Unit = {
 +                    ChatInput(
 +                        onStartVoiceMode = onStartVoiceMode,
@@ -5505,23 +7598,11 @@ index 5460f45..eceeeb8 100644
 +                        },
 +                    )
 +                }
-+                if (immersiveReading) {
-+                    AnimatedVisibility(
-+                        visible = showInputBar,
-+                        modifier = immersivePressResetModifier(),
-+                        enter = slideInVertically(animationSpec = tween(200)) { it } + fadeIn(tween(200)),
-+                        exit = slideOutVertically(animationSpec = tween(200)) { it } + fadeOut(tween(200)),
-+                        label = "immersiveInputBar",
-+                    ) {
-+                        inputBarContent()
-+                    }
-+                } else {
-+                    inputBarContent()
-+                }
++                inputBarContent()
 +            },
 +            containerColor = Color.Transparent,
 +        ) { innerPadding ->
-+            // 沉浸阅读：列表内容提出来，沉浸时额外叠一层顶部透明热区
++            // 列表内容
 +            val chatListContent: @Composable () -> Unit = {
 +                ChatList(
 +                    innerPadding = innerPadding,
@@ -5616,15 +7697,15 @@ index 5460f45..eceeeb8 100644
 +                    },
 +                    onToolApproval = { toolCallId, approved, reason ->
 +                        vm.handleToolApproval(toolCallId, approved, reason)
-+                    },
+                     },
+-                    onMoreClick = {
+-                        showFilesSheet = true
 +                    onToolAnswer = { toolCallId, answer ->
 +                        vm.handleToolAnswer(toolCallId, answer)
 +                    },
 +                    onToggleFavorite = { node ->
 +                        vm.toggleMessageFavorite(node)
-                     },
--                    onMoreClick = {
--                        showFilesSheet = true
++                    },
 +                    onConversationSystemPromptChange = { newPrompt ->
 +                        vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
 +                        vm.saveConversationAsync()
@@ -5663,17 +7744,7 @@ index 5460f45..eceeeb8 100644
 -                        vm.showDeleteBlockedWhileGeneratingError()
 -                    } else {
 -                        vm.deleteMessage(it)
-+            }
-+            if (immersiveReading) {
-+                Box(modifier = Modifier.fillMaxSize()) {
-+                    // 顶栏 / 输入框藏起来时补上系统栏高度，别让正文贴到状态栏、导航条下面
-+                    Box(
-+                        modifier = Modifier
-+                            .fillMaxSize()
-+                            .padding(top = immersiveExtraTop, bottom = immersiveExtraBottom)
-+                    ) {
-+                        chatListContent()
-                     }
+-                    }
 -                },
 -                onUpdateMessage = { newNode ->
 -                    vm.updateConversation(
@@ -5683,21 +7754,7 @@ index 5460f45..eceeeb8 100644
 -                                    newNode
 -                                } else {
 -                                    node
-+                    if (showImmersiveHotSpot) {
-+                        // 顶部透明热区（56dp 满宽，无背景）：点一下把顶栏 / 输入框临时唤出；
-+                        // 已经唤出时再点只重置自动收起计时（位置落在顶栏下面，不会挡住返回 / 菜单按钮）
-+                        Box(
-+                            modifier = Modifier
-+                                .fillMaxWidth()
-+                                .height(56.dp)
-+                                .offset(y = innerPadding.calculateTopPadding() + immersiveExtraTop)
-+                                .clickable(
-+                                    interactionSource = remember { MutableInteractionSource() },
-+                                    indication = null,
-+                                ) {
-+                                    immersiveTouchTick.intValue++
-+                                    immersiveRevealed = true
-                                 }
+-                                }
 -                            }
 -                        ))
 -                    vm.saveConversationAsync()
@@ -5716,8 +7773,7 @@ index 5460f45..eceeeb8 100644
 -                    previewMode = false
 -                    scope.launch {
 -                        chatListState.requestScrollToItem(index)
-+                        )
-                     }
+-                    }
 -                },
 -                onToolApproval = { toolCallId, approved, reason ->
 -                    vm.handleToolApproval(toolCallId, approved, reason)
@@ -5727,45 +7783,59 @@ index 5460f45..eceeeb8 100644
 -                },
 -                onToggleFavorite = { node ->
 -                    vm.toggleMessageFavorite(node)
--                },
++            }
++            chatListContent()
++        }
++
++        if (showDecorSheet) {
++            DecorPresetPickerSheet(
++                setting = setting,
++                onApply = { preset ->
++                    vm.updateSettings(
++                        preset.applyToSettings(setting)
++                    )
++                    showDecorSheet = false
+                 },
 -                onConversationSystemPromptChange = { newPrompt ->
 -                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
 -                    vm.saveConversationAsync()
--                },
--            )
-+                }
-+            } else {
-+                chatListContent()
-+            }
++                onManage = {
++                    showDecorSheet = false
++                    navController.navigate(Screen.SettingDecorPresets)
+                 },
++                onDismiss = { showDecorSheet = false },
+             )
          }
  
-         if (showFilesSheet) {
-@@ -531,6 +690,7 @@ private fun ChatPageContent(
+@@ -531,6 +600,8 @@ private fun ChatPageContent(
                  vm = vm,
                  attachmentPickerActions = attachmentPickerActions,
                  onStartVoiceMode = onStartVoiceMode,
 +                onUpdateSettings = { vm.updateSettings(it) },
++                onOpenDecorPicker = { showDecorSheet = true },
                  onDismiss = { showFilesSheet = false },
              )
          }
-@@ -546,6 +706,8 @@ private fun ChatFilesPickerSheet(
+@@ -546,6 +617,9 @@ private fun ChatFilesPickerSheet(
      vm: ChatVM,
      attachmentPickerActions: ChatAttachmentPickerActions,
      onStartVoiceMode: () -> Unit,
-+    // 沉浸阅读开关也要能从 + 面板改，所以把「写设置」的入口一路传下去
 +    onUpdateSettings: (Settings) -> Unit,
++    // 第四格「装扮」：让会话页去弹选择条
++    onOpenDecorPicker: () -> Unit,
      onDismiss: () -> Unit,
  ) {
      val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
-@@ -593,6 +755,7 @@ private fun ChatFilesPickerSheet(
+@@ -593,6 +667,8 @@ private fun ChatFilesPickerSheet(
                  vm.updateConversation(it)
                  vm.saveConversationAsync()
              },
 +            onUpdateSettings = onUpdateSettings,
++            onOpenDecorPicker = onOpenDecorPicker,
              showInjectionSheet = showInjectionSheet,
              onShowInjectionSheetChange = { showInjectionSheet = it },
              showCompressDialog = showCompressDialog,
-@@ -622,6 +785,7 @@ private fun ChatFilesPickerSheet(
+@@ -622,6 +698,7 @@ private fun ChatFilesPickerSheet(
  private fun TopBar(
      settings: Settings,
      conversation: Conversation,
@@ -5773,7 +7843,7 @@ index 5460f45..eceeeb8 100644
      drawerState: DrawerState,
      bigScreen: Boolean,
      previewMode: Boolean,
-@@ -636,6 +800,13 @@ private fun TopBar(
+@@ -636,6 +713,13 @@ private fun TopBar(
      }
  
      TopAppBar(
@@ -5902,6 +7972,315 @@ index 370fcc5..2901a13 100644
      } else {
          Color.Transparent
      }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
+new file mode 100644
+index 0000000..eeedffe
+--- /dev/null
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
+@@ -0,0 +1,303 @@
++package me.rerere.rikkahub.ui.pages.setting
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.DropdownMenu
++import androidx.compose.material3.DropdownMenuItem
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.LargeFlexibleTopAppBar
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import me.rerere.hugeicons.HugeIcons
++import me.rerere.hugeicons.stroke.Delete02
++import me.rerere.hugeicons.stroke.MoreVertical
++import me.rerere.hugeicons.stroke.PlusSign
++import me.rerere.hugeicons.stroke.Refresh01
++import me.rerere.hugeicons.stroke.PencilEdit01
++import me.rerere.rikkahub.data.datastore.DecorPreset
++import me.rerere.rikkahub.ui.components.decor.decorPresetSummary
++import me.rerere.rikkahub.ui.components.nav.BackButton
++import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.theme.CustomColors
++import me.rerere.rikkahub.utils.plus
++import org.koin.androidx.compose.koinViewModel
++
++/**
++ * 设置 · 装扮：把自己调好的一整套视觉存起来，随时一键换回去。
++ *
++ * 这里只管「存 / 改名 / 覆盖 / 删 / 应用」，具体的字段清单在 DecorPreset 里。
++ * 刻意不做缩略图预览整屏渲染——那要把整套界面在卡片里再画一遍，得不偿失，
++ * 所以卡片上只留三块色片 + 材质字体字号，够分辨就行。
++ */
++@Composable
++fun SettingDecorPresetsPage(vm: SettingVM = koinViewModel()) {
++    val settings by vm.settings.collectAsStateWithLifecycle()
++    val presets = settings.decorPresets
++    val current = settings.displaySetting
++
++    // 新建 / 改名共用一个输入弹窗
++    var nameDialogFor by remember { mutableStateOf<DecorPreset?>(null) }
++    var showNameDialog by remember { mutableStateOf(false) }
++    var nameDraft by remember { mutableStateOf("") }
++    // 待删除确认
++    var deleteTarget by remember { mutableStateOf<DecorPreset?>(null) }
++
++    fun savePresets(list: List<DecorPreset>) {
++        vm.updateSettings(settings.copy(decorPresets = list))
++    }
++
++    fun applyPreset(preset: DecorPreset) {
++        vm.updateSettings(preset.applyToSettings(settings))
++    }
++
++    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
++
++    Scaffold(
++        topBar = {
++            LargeFlexibleTopAppBar(
++                title = { Text("装扮") },
++                navigationIcon = { BackButton() },
++                scrollBehavior = scrollBehavior,
++                colors = CustomColors.topBarColors,
++            )
++        },
++        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++        containerColor = CustomColors.topBarColors.containerColor,
++    ) { contentPadding ->
++        LazyColumn(
++            modifier = Modifier.fillMaxSize(),
++            contentPadding = contentPadding + PaddingValues(8.dp),
++            verticalArrangement = Arrangement.spacedBy(16.dp),
++        ) {
++            item {
++                CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
++                    item(
++                        onClick = {
++                            nameDialogFor = null
++                            nameDraft = "装扮 ${presets.size + 1}"
++                            showNameDialog = true
++                        },
++                        leadingContent = { Icon(HugeIcons.PlusSign, null) },
++                        headlineContent = { Text("把当前样式存成装扮") },
++                        supportingContent = {
++                            Text("颜色、对白样式、字体排版、材质、插图素材、输入框都会一起存下来；头像和功能开关不受影响")
++                        },
++                    )
++                }
++            }
++
++            if (presets.isEmpty()) {
++                item {
++                    Box(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(horizontal = 16.dp, vertical = 32.dp),
++                        contentAlignment = Alignment.Center,
++                    ) {
++                        Column(
++                            horizontalAlignment = Alignment.CenterHorizontally,
++                            verticalArrangement = Arrangement.spacedBy(6.dp),
++                        ) {
++                            Text(
++                                text = "还没有保存过装扮",
++                                style = MaterialTheme.typography.bodyMedium,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                            Text(
++                                text = "把现在这套调到满意，然后点上面存一份",
++                                style = MaterialTheme.typography.labelSmall,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                        }
++                    }
++                }
++            } else {
++                item {
++                    CardGroup(
++                        modifier = Modifier.padding(horizontal = 8.dp),
++                        title = { Text("已保存 ${presets.size} 套") },
++                    ) {
++                        presets.forEach { preset ->
++                            item(
++                                onClick = { applyPreset(preset) },
++                                leadingContent = {
++                                    // 三块色片：主色 / 气泡色 / 输入框色
++                                    Box(
++                                        modifier = Modifier
++                                            .size(38.dp)
++                                            .clip(RoundedCornerShape(10.dp))
++                                            .background(
++                                                preset.themeSeedColor?.let { Color(it) }
++                                                    ?: preset.primaryColor?.let { Color(it) }
++                                                    ?: MaterialTheme.colorScheme.primary
++                                            ),
++                                    ) {
++                                        Box(
++                                            modifier = Modifier
++                                                .align(Alignment.BottomEnd)
++                                                .padding(3.dp)
++                                                .size(13.dp)
++                                                .clip(CircleShape)
++                                                .background(
++                                                    (preset.assistantBubbleColor ?: preset.userBubbleColor)
++                                                        ?.let { Color(it) }
++                                                        ?: MaterialTheme.colorScheme.secondary
++                                                ),
++                                        )
++                                    }
++                                },
++                                headlineContent = { Text(preset.name.ifBlank { "未命名装扮" }) },
++                                supportingContent = { Text(decorPresetSummary(preset)) },
++                                trailingContent = {
++                                    var expanded by remember { mutableStateOf(false) }
++                                    Box {
++                                        IconButton(onClick = { expanded = true }) {
++                                            Icon(HugeIcons.MoreVertical, "更多")
++                                        }
++                                        DropdownMenu(
++                                            expanded = expanded,
++                                            onDismissRequest = { expanded = false },
++                                        ) {
++                                            DropdownMenuItem(
++                                                text = { Text("重命名") },
++                                                leadingIcon = { Icon(HugeIcons.PencilEdit01, null) },
++                                                onClick = {
++                                                    expanded = false
++                                                    nameDialogFor = preset
++                                                    nameDraft = preset.name
++                                                    showNameDialog = true
++                                                },
++                                            )
++                                            DropdownMenuItem(
++                                                text = { Text("用当前样式覆盖这套") },
++                                                leadingIcon = { Icon(HugeIcons.Refresh01, null) },
++                                                onClick = {
++                                                    expanded = false
++                                                    val updated = DecorPreset.capture(
++                                                        from = current,
++                                                        name = preset.name,
++                                                        themeId = settings.themeId,
++                                                        dynamicColor = settings.dynamicColor,
++                                                    ).copy(id = preset.id, createdAt = preset.createdAt)
++                                                    savePresets(presets.map {
++                                                        if (it.id == preset.id) updated else it
++                                                    })
++                                                },
++                                            )
++                                            DropdownMenuItem(
++                                                text = { Text("删除") },
++                                                leadingIcon = { Icon(HugeIcons.Delete02, null) },
++                                                onClick = {
++                                                    expanded = false
++                                                    deleteTarget = preset
++                                                },
++                                            )
++                                        }
++                                    }
++                                },
++                            )
++                        }
++                    }
++                }
++            }
++
++            item {
++                Text(
++                    text = "在输入框的 + 面板里点第四格「装扮」，可以直接横滑切换。",
++                    style = MaterialTheme.typography.labelSmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    modifier = Modifier.padding(horizontal = 16.dp),
++                )
++            }
++        }
++    }
++
++    if (showNameDialog) {
++        AlertDialog(
++            onDismissRequest = { showNameDialog = false },
++            title = { Text(if (nameDialogFor == null) "保存装扮" else "重命名装扮") },
++            text = {
++                OutlinedTextField(
++                    value = nameDraft,
++                    onValueChange = { nameDraft = it },
++                    singleLine = true,
++                    label = { Text("名字") },
++                )
++            },
++            confirmButton = {
++                TextButton(
++                    onClick = {
++                        val name = nameDraft.trim().ifBlank { "未命名装扮" }
++                        val target = nameDialogFor
++                        if (target == null) {
++                            savePresets(
++                                presets + DecorPreset.capture(
++                                    from = current,
++                                    name = name,
++                                    themeId = settings.themeId,
++                                    dynamicColor = settings.dynamicColor,
++                                )
++                            )
++                        } else {
++                            savePresets(presets.map {
++                                if (it.id == target.id) it.copy(name = name) else it
++                            })
++                        }
++                        showNameDialog = false
++                    }
++                ) { Text("确定") }
++            },
++            dismissButton = {
++                TextButton(onClick = { showNameDialog = false }) { Text("取消") }
++            },
++        )
++    }
++
++    deleteTarget?.let { target ->
++        AlertDialog(
++            onDismissRequest = { deleteTarget = null },
++            title = { Text("删除这套装扮？") },
++            text = { Text("「${target.name.ifBlank { "未命名装扮" }}」会被删掉，当前界面不会变。") },
++            confirmButton = {
++                TextButton(
++                    onClick = {
++                        savePresets(presets.filterNot { it.id == target.id })
++                        deleteTarget = null
++                    }
++                ) { Text("删除") }
++            },
++            dismissButton = {
++                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
++            },
++        )
++    }
++}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesAlphaPage.kt
 new file mode 100644
 index 0000000..a96c05b
@@ -8153,13 +10532,14 @@ index 0000000..f375e8c
 +        }
 +    }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-index c296a24..73d62c1 100644
+index c296a24..7c5b3b4 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesPage.kt
-@@ -18,9 +18,16 @@ import androidx.compose.ui.unit.dp
+@@ -18,9 +18,17 @@ import androidx.compose.ui.unit.dp
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Notification01
  import me.rerere.hugeicons.stroke.Internet
++import me.rerere.hugeicons.stroke.MagicWand01
 +import me.rerere.hugeicons.stroke.Colors
 +import me.rerere.hugeicons.stroke.Eye
 +import me.rerere.hugeicons.stroke.Image02
@@ -8173,7 +10553,19 @@ index c296a24..73d62c1 100644
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.Screen
  import me.rerere.rikkahub.ui.components.nav.BackButton
-@@ -65,6 +72,42 @@ fun SettingPreferencesPage() {
+@@ -59,12 +67,54 @@ fun SettingPreferencesPage() {
+                 CardGroup(
+                     modifier = Modifier.padding(horizontal = 8.dp),
+                 ) {
++                    item(
++                        onClick = { navController.navigate(Screen.SettingDecorPresets) },
++                        leadingContent = { Icon(HugeIcons.MagicWand01, null) },
++                        headlineContent = { Text("装扮") },
++                        supportingContent = { Text("把调好的一整套外观存起来，随时一键换回") },
++                    )
+                     item(
+                         onClick = { navController.navigate(Screen.SettingPreferencesTheme) },
+                         leadingContent = { Icon(HugeIcons.Sun01, null) },
                          headlineContent = { Text(stringResource(R.string.setting_page_preferences_theme)) },
                          supportingContent = { Text(stringResource(R.string.setting_page_preferences_theme_desc)) },
                      )
@@ -9183,7 +11575,7 @@ index 0000000..a0bf1d4
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..e837c0f 100644
+index 2ee9d11..dcd4680 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -1,104 +1,71 @@
@@ -9313,7 +11705,7 @@ index 2ee9d11..e837c0f 100644
  
      val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
  
-@@ -123,6 +90,273 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -123,6 +90,192 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              contentPadding = contentPadding + PaddingValues(8.dp),
              verticalArrangement = Arrangement.spacedBy(16.dp)
          ) {
@@ -9502,92 +11894,11 @@ index 2ee9d11..e837c0f 100644
 +                }
 +            }
 +
-+            // 沉浸阅读：总开关和 + 面板共用同一个值，下面三项只在总开关打开时展开
-+            item {
-+                CardGroup(
-+                    modifier = Modifier.padding(horizontal = 8.dp),
-+                    title = { Text("沉浸阅读") },
-+                ) {
-+                    item(
-+                        headlineContent = { Text("沉浸阅读") },
-+                        supportingContent = {
-+                            Text("打开后进入会话页就直接沉浸，不用下滑也不用做手势；点屏幕顶部能临时唤出顶栏 / 输入框。这一项和输入框 + 面板里的「沉浸阅读」是同一个开关")
-+                        },
-+                        trailingContent = {
-+                            Switch(
-+                                checked = displaySetting.immersiveReading,
-+                                onCheckedChange = {
-+                                    updateDisplaySetting(displaySetting.copy(immersiveReading = it))
-+                                }
-+                            )
-+                        },
-+                    )
-+                    if (displaySetting.immersiveReading) {
-+                        item(
-+                            headlineContent = { Text("隐藏顶栏") },
-+                            supportingContent = { Text("沉浸时把会话页的顶栏一起收起来") },
-+                            trailingContent = {
-+                                Switch(
-+                                    checked = displaySetting.immersiveHideTopBar,
-+                                    onCheckedChange = {
-+                                        updateDisplaySetting(displaySetting.copy(immersiveHideTopBar = it))
-+                                    }
-+                                )
-+                            },
-+                        )
-+                        item(
-+                            headlineContent = { Text("隐藏输入框") },
-+                            supportingContent = { Text("沉浸时把输入框和它下面那层底部留白一起收起来") },
-+                            trailingContent = {
-+                                Switch(
-+                                    checked = displaySetting.immersiveHideInput,
-+                                    onCheckedChange = {
-+                                        updateDisplaySetting(displaySetting.copy(immersiveHideInput = it))
-+                                    }
-+                                )
-+                            },
-+                        )
-+                        item(
-+                            headlineContent = { Text("自动收起时间") },
-+                            supportingContent = {
-+                                Column {
-+                                    Text("点顶部唤出顶栏 / 输入框后，过这么多秒自动再收回去")
-+                                    Row(
-+                                        modifier = Modifier.fillMaxWidth(),
-+                                        verticalAlignment = Alignment.CenterVertically,
-+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-+                                    ) {
-+                                        val autoHideSeconds =
-+                                            displaySetting.immersiveAutoHideSeconds.coerceIn(2, 10)
-+                                        Slider(
-+                                            value = autoHideSeconds.toFloat(),
-+                                            onValueChange = { value ->
-+                                                updateDisplaySetting(
-+                                                    displaySetting.copy(
-+                                                        immersiveAutoHideSeconds = value.roundToInt().coerceIn(2, 10)
-+                                                    )
-+                                                )
-+                                            },
-+                                            valueRange = 2f..10f,
-+                                            steps = 7,
-+                                            modifier = Modifier.weight(1f),
-+                                        )
-+                                        Text(
-+                                            text = "${autoHideSeconds} 秒",
-+                                            style = MaterialTheme.typography.labelMedium,
-+                                        )
-+                                    }
-+                                }
-+                            },
-+                        )
-+                    }
-+                }
-+            }
 +
              item {
                  CardGroup(
                      modifier = Modifier.padding(horizontal = 8.dp),
-@@ -140,6 +374,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -140,6 +293,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -9628,7 +11939,7 @@ index 2ee9d11..e837c0f 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
-@@ -209,6 +477,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -209,6 +396,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -9659,7 +11970,7 @@ index 2ee9d11..e837c0f 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
-@@ -257,110 +549,6 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -257,110 +468,6 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -9770,7 +12081,7 @@ index 2ee9d11..e837c0f 100644
                  }
              }
  
-@@ -409,103 +597,65 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -409,103 +516,65 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              }
          }
      }
@@ -9786,7 +12097,7 @@ index 2ee9d11..e837c0f 100644
 -)
 -
 -private val CustomFontExtensionsUI = setOf("ttf", "otf", "ttc")
--
+ 
 -private data class ImportedChatFontUI(
 -    val relativePath: String,
 -    val displayName: String,
@@ -9836,7 +12147,7 @@ index 2ee9d11..e837c0f 100644
 -        tempFile.delete()
 -        throw error
 -    }
- 
+-
 -    val relativePath = FileUtils.getRelativePathInFilesDir(context.filesDir, targetFile)
 -        ?: "${FileFolders.FONTS}/${targetFile.name}"
 -    return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
