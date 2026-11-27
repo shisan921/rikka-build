@@ -1453,7 +1453,7 @@ index bef7871..d036b40 100644
 +    data object Stats : Screen
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..f6c1a49 100644
+index 205e822..b3ec699 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -1582,7 +1582,7 @@ index 205e822..f6c1a49 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +743,126 @@ data class DisplaySetting(
+@@ -642,8 +743,130 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -1703,6 +1703,10 @@ index 205e822..f6c1a49 100644
 +    val compactChatInput: Boolean = false,
 +    // 输入框最小高度（dp）：0 = 默认高度（紧凑模式下用 44dp），非 0 时按 40..72 覆盖
 +    val chatInputHeightDp: Int = 0,
++    // 输入框文字颜色：null = 跟随主题的 LocalContentColor（与改动前逐像素一致），非 null 时是 0xAARRGGBB
++    val chatInputTextColor: Long? = null,
++    // 输入框文字不透明度：0f..1f，1f = 不额外乘 alpha（默认值下 textStyle 完全不插手）
++    val chatInputTextAlpha: Float = 1f,
 +    // 界面字号倍数（0.85f..1.15f，步进 0.05）：1f = 与原来逐像素一致。
 +    // 只缩放送到 MaterialTheme 的那份 Typography，消息正文有自己的字号链路（fontSizeRatio / chatFontSizePercent）
 +    val uiFontScale: Float = 1f,
@@ -1710,7 +1714,7 @@ index 205e822..f6c1a49 100644
  
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
-index 45c3d83..8ef2377 100644
+index 45c3d83..47d3351 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 @@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
@@ -1721,7 +1725,16 @@ index 45c3d83..8ef2377 100644
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.combinedClickable
  import androidx.compose.foundation.content.MediaType
-@@ -56,9 +57,11 @@ import androidx.compose.runtime.setValue
+@@ -40,6 +41,8 @@ import androidx.compose.material3.BasicAlertDialog
+ import androidx.compose.material3.DropdownMenu
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
++import androidx.compose.material3.LocalContentColor
++import androidx.compose.material3.LocalTextStyle
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Surface
+ import androidx.compose.material3.Text
+@@ -56,9 +59,11 @@ import androidx.compose.runtime.setValue
  import androidx.compose.runtime.snapshotFlow
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
@@ -1733,7 +1746,7 @@ index 45c3d83..8ef2377 100644
  import androidx.compose.ui.hapticfeedback.HapticFeedbackType
  import androidx.compose.ui.platform.LocalFocusManager
  import androidx.compose.ui.platform.LocalHapticFeedback
-@@ -69,6 +72,7 @@ import androidx.compose.ui.text.TextRange
+@@ -69,6 +74,7 @@ import androidx.compose.ui.text.TextRange
  import androidx.compose.ui.text.input.ImeAction
  import androidx.compose.ui.text.input.KeyboardCapitalization
  import androidx.compose.ui.text.style.TextOverflow
@@ -1741,7 +1754,11 @@ index 45c3d83..8ef2377 100644
  import androidx.compose.ui.unit.dp
  import androidx.compose.ui.window.DialogProperties
  import com.dokar.sonner.ToastType
-@@ -97,7 +101,10 @@ import me.rerere.hugeicons.stroke.Fullscreen
+@@ -94,10 +100,14 @@ import me.rerere.hugeicons.stroke.Add01
+ import me.rerere.hugeicons.stroke.ArrowUp02
+ import me.rerere.hugeicons.stroke.Cancel01
+ import me.rerere.hugeicons.stroke.Fullscreen
++import me.rerere.hugeicons.stroke.Settings03
  import me.rerere.hugeicons.stroke.Zap
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.datastore.BackgroundEffectType
@@ -1752,7 +1769,7 @@ index 45c3d83..8ef2377 100644
  import me.rerere.rikkahub.data.datastore.getCurrentAssistant
  import me.rerere.rikkahub.data.datastore.getCurrentChatModel
  import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
-@@ -118,6 +125,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
+@@ -118,6 +128,9 @@ import me.rerere.rikkahub.ui.context.LocalASRState
  import me.rerere.rikkahub.ui.context.LocalSettings
  import me.rerere.rikkahub.ui.context.LocalToaster
  import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -1762,7 +1779,7 @@ index 45c3d83..8ef2377 100644
  import me.rerere.rikkahub.utils.SoundEffectPlayer
  import org.koin.compose.koinInject
  import kotlin.time.Duration.Companion.seconds
-@@ -153,21 +163,49 @@ fun ChatInput(
+@@ -153,26 +166,76 @@ fun ChatInput(
  ) {
      val toaster = LocalToaster.current
      val assistant = settings.getCurrentAssistant()
@@ -1783,6 +1800,12 @@ index 45c3d83..8ef2377 100644
 +    val chatInputHint = displaySetting.chatInputHint
 +    // 紧凑输入框（细长圆角框 + 右侧小圆按钮）：默认关闭，关闭时下面所有分支都走原来的代码
 +    val compactInput = displaySetting.compactChatInput
++    // 输入框是否处于聚焦状态（由 TextInputRow 的 onFocusChanged 回传）：
++    // 只用来控制紧凑模式下发送键的显隐，非紧凑模式这个值完全不参与渲染
++    var inputFocused by remember { mutableStateOf(false) }
++    // 发送键显隐：非紧凑模式恒显示（原版手感）；紧凑模式在「未聚焦且空着」时先藏起来，
++    // loading 时不要藏（那是停止按钮，藏了就没法中断生成）
++    val showSendButton = !compactInput || inputFocused || !state.isEmpty() || loading
 +    val chatInputHeightDp = displaySetting.chatInputHeightDp.coerceIn(0, 72)
 +    // 输入框最小高度：0 = 不改（紧凑模式用 44dp 这个紧凑默认），值域 40..72
 +    val inputMinHeightDp = when {
@@ -1820,7 +1843,28 @@ index 45c3d83..8ef2377 100644
      val modelListState = rememberModelListState(
          modelId = assistant.chatModelId ?: settings.chatModelId,
          providers = settings.providers,
-@@ -224,9 +262,10 @@ fun ChatInput(
+         type = ModelType.CHAT,
+     )
++    // 紧凑模式右上角小圆钮的内容；非紧凑模式为 null（底部那一行保持原样）
++    val compactToolsAction: (@Composable () -> Unit)? = if (compactInput) {
++        {
++            CompactInputToolsButton(
++                modelListState = modelListState,
++                settings = settings,
++                enableSearch = enableSearch,
++                assistant = assistant,
++                onUpdateSearchMode = onUpdateSearchMode,
++                onUpdateSearchService = onUpdateSearchService,
++                onUpdateAssistant = onUpdateAssistant,
++            )
++        }
++    } else {
++        null
++    }
+ 
+     fun sendMessage() {
+         focusManager.clearFocus(force = true)
+@@ -224,9 +287,10 @@ fun ChatInput(
              modifier = modifier
                  .imePadding()
                  .navigationBarsPadding()
@@ -1834,7 +1878,7 @@ index 45c3d83..8ef2377 100644
          ) {
              MessageQueuePanel(
                  state = messageQueue,
-@@ -240,167 +279,247 @@ fun ChatInput(
+@@ -240,167 +304,253 @@ fun ChatInput(
                      .fillMaxWidth()
                      .clip(containerShape)
                      .then(
@@ -1993,6 +2037,10 @@ index 45c3d83..8ef2377 100644
 +                            hint = chatInputHint,
 +                            compact = compactInput,
 +                            minHeightDp = inputMinHeightDp,
++                            onFocusedChange = { inputFocused = it },
++                            // 紧凑模式：输入框右上角的小圆钮（齿轮），点开是「模型 / 联网 / 思考」三件套；
++                            // 非紧凑模式是 null，这些按钮照旧在底部那一行
++                            compactActions = compactToolsAction,
 +                        )
  
 -                    Row(
@@ -2195,9 +2243,11 @@ index 45c3d83..8ef2377 100644
 -                                onLongClick = { sendMessageWithoutAnswer() },
 -                            )
 +                            AnimatedVisibility(
-+                                visible = !asrState.isRecording,
-+                                enter = fadeIn() + scaleIn(),
-+                                exit = fadeOut() + scaleOut(),
++                                // 紧凑模式：未聚焦且空着时连位置都不占（见了 showSendButton）；
++                                // 非紧凑模式 showSendButton 恒为 true，等价于原来的 !asrState.isRecording
++                                visible = !asrState.isRecording && showSendButton,
++                                enter = if (compactInput) fadeIn() else fadeIn() + scaleIn(),
++                                exit = if (compactInput) fadeOut() else fadeOut() + scaleOut(),
 +                            ) {
 +                                SendButton(
 +                                    loading = loading,
@@ -2217,7 +2267,7 @@ index 45c3d83..8ef2377 100644
                  }
              }
  
-@@ -420,6 +539,9 @@ private fun SendButton(
+@@ -420,6 +570,9 @@ private fun SendButton(
      onClick: () -> Unit,
      onLongClick: () -> Unit,
      modifier: Modifier = Modifier,
@@ -2227,7 +2277,7 @@ index 45c3d83..8ef2377 100644
  ) {
      val showStop = loading && empty
      val containerColor = when {
-@@ -435,7 +557,7 @@ private fun SendButton(
+@@ -435,7 +588,7 @@ private fun SendButton(
      Box(
          contentAlignment = Alignment.Center,
          modifier = modifier
@@ -2236,7 +2286,7 @@ index 45c3d83..8ef2377 100644
              .testTag("chat_send_button")
              .clip(CircleShape)
              .combinedClickable(
-@@ -454,7 +576,7 @@ private fun SendButton(
+@@ -454,7 +607,7 @@ private fun SendButton(
              imageVector = if (showStop) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
              contentDescription = stringResource(if (showStop) R.string.stop else R.string.send),
              tint = contentColor,
@@ -2245,7 +2295,7 @@ index 45c3d83..8ef2377 100644
          )
      }
  }
-@@ -462,11 +584,13 @@ private fun SendButton(
+@@ -462,11 +615,13 @@ private fun SendButton(
  @Composable
  private fun ActionIconButton(
      onClick: () -> Unit,
@@ -2260,7 +2310,113 @@ index 45c3d83..8ef2377 100644
          shape = CircleShape,
          tonalElevation = 0.dp,
          color = Color.Transparent,
-@@ -484,6 +608,12 @@ private fun TextInputRow(
+@@ -479,11 +634,122 @@ private fun ActionIconButton(
+     }
+ }
+ 
++/**
++ * 紧凑输入框右上角的小圆钮：点开一个轻量的 DropdownMenu（Popup），里面纵向排三行
++ * 「模型 / 联网搜索 / 思考强度」。
++ *
++ * 这三行不是自己重写的 UI，而是把原来底部那一行的 [ModelSelectorButton] / [SearchPickerButton] /
++ * [ReasoningButton] 原样搬进 Column：它们的签名不依赖 RowScope，内部各自弹自己的
++ * ModalBottomSheet（ModelListSheet 仍然挂在 ChatInput 顶层，不是这个 Popup 的子树），
++ * 所以选完模型 / 关掉搜索面板后这个面板还在，可以接着调下一项，点外面才收起来。
++ */
++@Composable
++private fun CompactInputToolsButton(
++    modelListState: ModelListState,
++    settings: Settings,
++    enableSearch: Boolean,
++    assistant: Assistant,
++    onUpdateSearchMode: (SearchMode) -> Unit,
++    onUpdateSearchService: (Int) -> Unit,
++    onUpdateAssistant: (Assistant) -> Unit,
++) {
++    var expanded by remember { mutableStateOf(false) }
++    val chatModel = settings.getCurrentChatModel()
++
++    Box {
++        IconButton(
++            onClick = { expanded = true },
++            modifier = Modifier.size(32.dp),
++        ) {
++            Icon(
++                imageVector = HugeIcons.Settings03,
++                contentDescription = "输入框快捷设置",
++                modifier = Modifier.size(18.dp),
++            )
++        }
++        DropdownMenu(
++            expanded = expanded,
++            onDismissRequest = { expanded = false },
++            modifier = Modifier.widthIn(min = 224.dp, max = 320.dp),
++        ) {
++            Column(
++                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
++                verticalArrangement = Arrangement.spacedBy(2.dp),
++            ) {
++                Text(
++                    text = "模型 · 联网 · 思考",
++                    style = MaterialTheme.typography.labelMedium,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
++                )
++                CompactToolRow(label = "模型") {
++                    ModelSelectorButton(
++                        state = modelListState,
++                        onlyIcon = true,
++                    )
++                }
++                CompactToolRow(label = "联网搜索") {
++                    SearchPickerButton(
++                        enableSearch = enableSearch,
++                        settings = settings,
++                        onUpdateSearchMode = onUpdateSearchMode,
++                        onUpdateSearchService = onUpdateSearchService,
++                        model = chatModel,
++                    )
++                }
++                // 只有支持推理的模型才给「思考强度」，和底部那一行的判断完全一致
++                if (chatModel?.abilities?.contains(ModelAbility.REASONING) == true) {
++                    CompactToolRow(label = "思考强度") {
++                        ReasoningButton(
++                            reasoningLevel = assistant.reasoningLevel,
++                            onUpdateReasoningLevel = {
++                                onUpdateAssistant(assistant.copy(reasoningLevel = it))
++                            },
++                            onlyIcon = true,
++                        )
++                    }
++                }
++            }
++        }
++    }
++}
++
++/** 紧凑面板里的一行：左边文字标签，右边是原来那个按钮本体（点击行为完全复用） */
++@Composable
++private fun CompactToolRow(
++    label: String,
++    content: @Composable () -> Unit,
++) {
++    Row(
++        modifier = Modifier
++            .fillMaxWidth()
++            .padding(horizontal = 4.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.SpaceBetween,
++    ) {
++        Text(
++            text = label,
++            style = MaterialTheme.typography.bodyMedium,
++        )
++        content()
++    }
++}
++
+ @Composable
+ private fun TextInputRow(
      state: ChatInputState,
      completionProviders: List<ChatCompletionProvider>,
      onSendMessage: () -> Unit,
@@ -2270,11 +2426,40 @@ index 45c3d83..8ef2377 100644
 +    compact: Boolean = false,
 +    // 输入框最小高度（dp）：0 = 不改
 +    minHeightDp: Int = 0,
++    // 聚焦状态回调：只给紧凑模式判断发送键显隐用，默认不做任何事
++    onFocusedChange: (Boolean) -> Unit = {},
++    // 紧凑模式塞在 TextField trailingIcon 里的额外按钮（右上角小圆钮），null = 不渲染
++    compactActions: (@Composable () -> Unit)? = null,
  ) {
      val settings = LocalSettings.current
      val filesManager: FilesManager = koinInject()
-@@ -611,14 +741,25 @@ private fun TextInputRow(
+@@ -607,18 +873,51 @@ private fun TextInputRow(
+             )
+         }
+ 
++        // 输入框文字颜色 / 不透明度：两个设置都是默认值时直接用 LocalTextStyle（也就是 TextField
++        // 自己的默认 textStyle），一个字都不改，保证逐像素与改动前一致；否则只覆盖 color
++        val inputTextColorSetting = settings.displaySetting.chatInputTextColor
++        val inputTextAlphaSetting = settings.displaySetting.chatInputTextAlpha.coerceIn(0f, 1f)
++        val inputTextStyle = if (inputTextColorSetting == null && inputTextAlphaSetting >= 1f) {
++            LocalTextStyle.current
++        } else {
++            // 没设颜色 -> 跟主题的 LocalContentColor 走；设了就用设置里的 ARGB
++            val baseTextColor = inputTextColorSetting?.let { Color(it) } ?: LocalContentColor.current
++            LocalTextStyle.current.copy(
++                color = if (inputTextAlphaSetting >= 1f) {
++                    // 1f 时不额外乘 alpha（自定义颜色自带的 alpha 原样保留）
++                    baseTextColor
++                } else {
++                    // 自定义颜色的 alpha 与滑块相乘，避免把已有半透明颜色「抬」回不透明
++                    baseTextColor.copy(alpha = baseTextColor.alpha * inputTextAlphaSetting)
++                },
++            )
++        }
++
+         TextField(
              state = state.textContent,
++            textStyle = inputTextStyle,
              modifier = Modifier
                  .fillMaxWidth()
 +                // 输入框最小高度：0（默认）时完全不插手，保持原来 M3 TextField 的高度。
@@ -2291,6 +2476,7 @@ index 45c3d83..8ef2377 100644
                  .contentReceiver(receiveContentListener)
                  .onFocusChanged {
                      isFocused = it.isFocused
++                    onFocusedChange(it.isFocused)
                  },
 -            shape = MaterialTheme.shapes.largeIncreased,
 +            shape = if (compact) RoundedCornerShape(18.dp) else MaterialTheme.shapes.largeIncreased,
@@ -2301,7 +2487,17 @@ index 45c3d83..8ef2377 100644
              },
              lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
              keyboardOptions = KeyboardOptions(
-@@ -658,7 +799,7 @@ private fun TextInputRow(
+@@ -649,6 +948,9 @@ private fun TextInputRow(
+                             Icon(HugeIcons.Fullscreen, null)
+                         }
+                     }
++                    // 紧凑模式：右上角小圆钮（模型 / 联网 / 思考），放在 trailingIcon 最外侧；
++                    // 非紧凑模式这里是 null，和改动前完全一致
++                    compactActions?.invoke()
+                 }
+             },
+             leadingIcon = if (quickMessages.isNotEmpty()) {
+@@ -658,7 +960,7 @@ private fun TextInputRow(
              } else null,
          )
          if (isFullScreen) {
@@ -2310,7 +2506,7 @@ index 45c3d83..8ef2377 100644
                  isFullScreen = false
              }
          }
-@@ -796,7 +937,7 @@ private fun QuickMessageButton(
+@@ -796,7 +1098,7 @@ private fun QuickMessageButton(
  
  @Composable
  private fun FullScreenEditor(
@@ -2319,7 +2515,7 @@ index 45c3d83..8ef2377 100644
  ) {
      BasicAlertDialog(
          onDismissRequest = {
-@@ -841,7 +982,8 @@ private fun FullScreenEditor(
+@@ -841,7 +1143,8 @@ private fun FullScreenEditor(
                              .fillMaxSize(),
                          shape = RoundedCornerShape(32.dp),
                          placeholder = {
@@ -8027,15 +8223,25 @@ index 0000000..a0bf1d4
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..54e0060 100644
+index 2ee9d11..8f77e42 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-@@ -12,14 +12,19 @@ import androidx.compose.foundation.layout.Row
+@@ -5,21 +5,29 @@ import android.graphics.Typeface
+ import android.net.Uri
+ import androidx.activity.compose.rememberLauncherForActivityResult
+ import androidx.activity.result.contract.ActivityResultContracts
++import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.PaddingValues
+ import androidx.compose.foundation.layout.Row
  import androidx.compose.foundation.layout.fillMaxSize
  import androidx.compose.foundation.layout.fillMaxWidth
  import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.layout.size
  import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.shape.CircleShape
 +import androidx.compose.material3.AlertDialog
  import androidx.compose.material3.Icon
  import androidx.compose.material3.IconButton
@@ -8050,7 +8256,13 @@ index 2ee9d11..54e0060 100644
  import androidx.compose.material3.Text
  import androidx.compose.material3.TopAppBarDefaults
  import androidx.compose.runtime.Composable
-@@ -34,6 +39,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
+@@ -30,10 +38,13 @@ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.input.nestedscroll.nestedScroll
  import androidx.compose.ui.platform.LocalContext
  import androidx.compose.ui.res.stringResource
  import androidx.compose.ui.text.font.FontFamily
@@ -8058,7 +8270,7 @@ index 2ee9d11..54e0060 100644
  import androidx.compose.ui.unit.dp
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import com.dokar.sonner.ToastType
-@@ -43,8 +49,10 @@ import kotlinx.coroutines.withContext
+@@ -43,18 +54,23 @@ import kotlinx.coroutines.withContext
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Delete02
  import me.rerere.hugeicons.stroke.FileImport
@@ -8069,7 +8281,12 @@ index 2ee9d11..54e0060 100644
  import me.rerere.rikkahub.data.datastore.DisplaySetting
  import me.rerere.rikkahub.data.files.FileFolders
  import me.rerere.rikkahub.data.files.FileUtils
-@@ -55,6 +63,7 @@ import me.rerere.rikkahub.ui.components.ui.Select
+ import me.rerere.rikkahub.ui.components.nav.BackButton
+ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+ import me.rerere.rikkahub.ui.components.ui.CardGroup
++import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
++import me.rerere.rikkahub.ui.components.ui.pushRecentColor
+ import me.rerere.rikkahub.ui.components.ui.Select
  import me.rerere.rikkahub.ui.context.LocalToaster
  import me.rerere.rikkahub.ui.theme.CustomColors
  import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
@@ -8077,7 +8294,7 @@ index 2ee9d11..54e0060 100644
  import me.rerere.rikkahub.utils.plus
  import org.koin.androidx.compose.koinViewModel
  import java.io.File
-@@ -68,6 +77,18 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -68,6 +84,22 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
      val toaster = LocalToaster.current
      val scope = rememberCoroutineScope()
      val chatFontFamily = rememberChatFontFamily(displaySetting)
@@ -8090,13 +8307,17 @@ index 2ee9d11..54e0060 100644
 +    // 界面字号（0.85–1.15，步进 0.05）与输入框高度（0–72dp，0 = 默认）
 +    val uiFontScale = displaySetting.uiFontScale.coerceIn(0.85f, 1.15f)
 +    val chatInputHeight = displaySetting.chatInputHeightDp.coerceIn(0, 72)
++    // 输入框文字不透明度（0..1）：1f = 不额外乘 alpha，和改动前一致
++    val chatInputTextAlpha = displaySetting.chatInputTextAlpha.coerceIn(0f, 1f)
 +    // 输入框提示语的编辑弹窗
 +    var showInputHintDialog by remember { mutableStateOf(false) }
 +    var inputHintDraft by remember { mutableStateOf("") }
++    // 输入框文字颜色的取色盘
++    var showInputTextColorDialog by remember { mutableStateOf(false) }
  
      fun updateDisplaySetting(setting: DisplaySetting) {
          displaySetting = setting
-@@ -86,11 +107,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -86,11 +118,37 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                      importCustomChatFontInternal(context, uri)
                  }
              }.onSuccess { importedFont ->
@@ -8136,7 +8357,7 @@ index 2ee9d11..54e0060 100644
                      )
                  )
                  toaster.show(importSuccessMsg, type = ToastType.Success)
-@@ -123,6 +170,146 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -123,6 +181,209 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              contentPadding = contentPadding + PaddingValues(8.dp),
              verticalArrangement = Arrangement.spacedBy(16.dp)
          ) {
@@ -8277,13 +8498,76 @@ index 2ee9d11..54e0060 100644
 +                            }
 +                        },
 +                    )
++                    // 输入框文字颜色：null = 跟随主题正文色（默认，和改动前一样）
++                    item(
++                        onClick = { showInputTextColorDialog = true },
++                        headlineContent = { Text("输入框文字颜色") },
++                        supportingContent = {
++                            Text(
++                                displaySetting.chatInputTextColor?.toHexArgb()
++                                    ?: "跟随主题正文颜色（默认）"
++                            )
++                        },
++                        trailingContent = {
++                            Box(
++                                modifier = Modifier
++                                    .size(28.dp)
++                                    .clip(CircleShape)
++                                    .background(
++                                        displaySetting.chatInputTextColor?.let { Color(it) }
++                                            ?: MaterialTheme.colorScheme.onSurface
++                                    ),
++                            )
++                        },
++                    )
++                    // 输入框文字不透明度：0..1，100% 就是原样
++                    item(
++                        headlineContent = { Text("输入框文字不透明度") },
++                        supportingContent = {
++                            Column {
++                                Text("只改输入框里的文字，100% 时和原样一致")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = chatInputTextAlpha,
++                                        onValueChange = { value ->
++                                            updateDisplaySetting(
++                                                displaySetting.copy(
++                                                    chatInputTextAlpha = value.coerceIn(0f, 1f)
++                                                )
++                                            )
++                                        },
++                                        valueRange = 0f..1f,
++                                        steps = 19,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(
++                                        text = "${(chatInputTextAlpha * 100).roundToInt()}%",
++                                        style = MaterialTheme.typography.labelMedium,
++                                    )
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(displaySetting.copy(chatInputTextAlpha = 1f))
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                    enabled = chatInputTextAlpha < 1f,
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                    )
 +                }
 +            }
 +
              item {
                  CardGroup(
                      modifier = Modifier.padding(horizontal = 8.dp),
-@@ -140,6 +327,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -140,6 +401,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -8324,7 +8608,7 @@ index 2ee9d11..54e0060 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
-@@ -209,6 +430,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -209,6 +504,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -8355,7 +8639,7 @@ index 2ee9d11..54e0060 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
-@@ -283,40 +528,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -283,40 +602,127 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          }
                      )
@@ -8511,7 +8795,7 @@ index 2ee9d11..54e0060 100644
                                          }
                                      ) {
                                          Icon(
-@@ -326,10 +658,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -326,10 +732,23 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                              )
                                          )
                                      }
@@ -8538,7 +8822,7 @@ index 2ee9d11..54e0060 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
                          supportingContent = {
-@@ -358,9 +703,165 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -358,9 +777,165 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                          fontFamily = chatFontFamily
                                      )
                                  )
@@ -8704,10 +8988,38 @@ index 2ee9d11..54e0060 100644
                  }
              }
  
-@@ -409,6 +910,39 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -409,6 +984,67 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              }
          }
      }
++
++    // 输入框文字颜色：取色盘确认后写 chatInputTextColor，并收进记忆色
++    if (showInputTextColorDialog) {
++        ColorPickerDialog(
++            title = "输入框文字颜色",
++            initialColor = displaySetting.chatInputTextColor,
++            fallbackColor = MaterialTheme.colorScheme.onSurface,
++            recentColors = displaySetting.recentColors,
++            onRecentColorsChange = { colors ->
++                updateDisplaySetting(displaySetting.copy(recentColors = colors))
++            },
++            onDismiss = { showInputTextColorDialog = false },
++            onConfirm = { color ->
++                updateDisplaySetting(
++                    displaySetting.copy(
++                        chatInputTextColor = color,
++                        recentColors = pushRecentColor(displaySetting.recentColors, color),
++                    )
++                )
++                showInputTextColorDialog = false
++            },
++            canReset = true,
++            onReset = {
++                updateDisplaySetting(displaySetting.copy(chatInputTextColor = null))
++                showInputTextColorDialog = false
++            },
++        )
++    }
 +
 +    // 输入框提示语编辑弹窗：留空保存 = 回到资源里的默认文案
 +    if (showInputHintDialog) {
@@ -8744,7 +9056,7 @@ index 2ee9d11..54e0060 100644
  }
  
  private val CustomFontMimeTypesUI = arrayOf(
-@@ -466,7 +1000,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -466,7 +1102,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
              throw IllegalArgumentException(error.message ?: "Invalid font file", error)
          }
  
@@ -8753,7 +9065,7 @@ index 2ee9d11..54e0060 100644
      } catch (error: Throwable) {
          tempFile.delete()
          throw error
-@@ -477,27 +1011,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
+@@ -477,27 +1113,14 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
      return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
  }
  
