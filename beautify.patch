@@ -4824,10 +4824,10 @@ index a316327..35a40f9 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..8ff779b
+index 0000000..4870d9a
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1052 @@
+@@ -0,0 +1,1070 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -5710,20 +5710,39 @@ index 0000000..8ff779b
 +                // 于是「线跑到引号外面」—— 底色的宽松界用它，下划线必须用这个紧界。
 +                var glyphLeft = 0f
 +                var glyphRight = 0f
++                // 整行都落在引号里（极短的引号单独成行）时为 false，这一行下划线直接跳过
++                var hasGlyphSpan = false
 +                var hasCharSpan = false
 +                if (segEnd > segStart) {
 +                    val headX = layoutResult.getHorizontalPosition(segStart, usePrimaryDirection = false)
 +                    val tailX = layoutResult.getHorizontalPosition(
 +                        segEnd.coerceAtMost(textLength), usePrimaryDirection = false
 +                    )
-+                    val headBox = layoutResult.getBoundingBox(segStart)
 +                    val tailBox = layoutResult.getBoundingBox(segEnd - 1)
 +                    lineLeft = minOf(headX, tailBox.left)
 +                    lineRight = maxOf(tailX, tailBox.right)
-+                    // 空字形（空格 / 某些标点）的包围盒宽度是 0，这时退回光标位置，绝不画成一个点
-+                    glyphLeft = if (headBox.width > 0f) headBox.left else lineLeft
-+                    glyphRight = if (tailBox.width > 0f) tailBox.right else lineRight
 +                    hasCharSpan = lineRight > lineLeft
++
++                    // 下划线专用的紧界：取区间首尾字符的字形轮廓（比光标位置更贴身，
++                    // 光标位置带字符间距，画出来会往引号外面探出一截）
++                    val uStart = segStart
++                    val uEnd = segEnd
++                    if (uEnd > uStart) {
++                        val headBox = layoutResult.getBoundingBox(uStart)
++                        val endBox = layoutResult.getBoundingBox(uEnd - 1)
++                        // 空字形（空格 / 某些标点）宽度是 0，这时退回光标位置，绝不画成一个点
++                        glyphLeft = if (headBox.width > 0f) {
++                            headBox.left
++                        } else {
++                            layoutResult.getHorizontalPosition(uStart, usePrimaryDirection = false)
++                        }
++                        glyphRight = if (endBox.width > 0f) {
++                            endBox.right
++                        } else {
++                            layoutResult.getHorizontalPosition(uEnd, usePrimaryDirection = false)
++                        }
++                        hasGlyphSpan = glyphRight > glyphLeft
++                    }
 +                }
 +
 +                // 底色的左右界：有真字符就用这一行的字符区间；跨行延续 / 空行仍然铺满，
@@ -5752,10 +5771,6 @@ index 0000000..8ff779b
 +                    continue
 +                }
 +
-+                if (!hasCharSpan) {
-+                    glyphLeft = bgLeft
-+                    glyphRight = bgRight
-+                }
 +
 +                // 行与行之间仍然留白：每行上下各内缩 backgroundGap / 2（默认 2dp）；
 +                // 同一行里引号和正文已经合并（见 mergeTouchingRanges），所以这一行只画一块
@@ -5785,12 +5800,15 @@ index 0000000..8ff779b
 +                    // 复用会把线收得比文字还窄，用户看到「线跟文字没对齐」就是这里）。
 +                    val underlineInsetPx =
 +                        with(density) { style.underlineInsetDp.coerceIn(0, 12).dp.toPx() }
-+                    // 起点 / 终点取**字形**左右界（不含字符间距），0dp 时线正好跟文字两端对齐、
-+                    // 不会再越出引号；要更收紧再靠这个滑块往里收
-+                    val underlineLeft = glyphLeft + underlineInsetPx
-+                    val underlineRight = glyphRight - underlineInsetPx
++                    // 内缩**只作用在这一整段的两个端头**（开引号那一行 / 闭引号那一行），
++                    // 中间跨行的行首行尾一律不动 —— 这样调滑块只会把两头收进引号里，
++                    // 不会让中间每一行都跟着变窄。0 = 贴着字形不额外收。
++                    val startInsetPx = if (line == firstLine) underlineInsetPx else 0f
++                    val endInsetPx = if (line == lastLine) underlineInsetPx else 0f
++                    val underlineLeft = glyphLeft + startInsetPx
++                    val underlineRight = glyphRight - endInsetPx
 +                    run {
-+                        if (underlineRight - underlineLeft > 0f) {
++                        if (hasGlyphSpan && underlineRight - underlineLeft > 0f) {
 +                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
 +                            var slot = 0
 +                            if (solidPath != null) {
@@ -10583,7 +10601,7 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..2197ed9
+index 0000000..188bfec
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 @@ -0,0 +1,963 @@
@@ -10691,7 +10709,7 @@ index 0000000..2197ed9
 + *              颜色                红 ●     ← 只在「点线」打开时出现
 + *              下划线与文字的距离   2dp      ← 滑块 0–10dp
 + *              虚线与点线的密度     1.0x     ← 滑块 0.2–3.0，步进 0.1，越大越密
-+ *              下划线左右内缩       3dp      ← 滑块 0–12dp，两端比底色块再往里收多少
++ *              下划线左右内缩       0dp      ← 滑块 0–12dp，只收整段的两端（中间跨行行不受影响）
 + * ［行首竖线］ 行首竖线            [开关]
 + *              竖线颜色            红 ●     ← null 表示跟随文字颜色
 + *              竖线高度            0.7x     ← 滑块 0.3–1.2，按行高比例、行中心居中
@@ -11286,7 +11304,7 @@ index 0000000..2197ed9
 +                        headlineContent = { Text("下划线左右内缩") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("0 = 严格贴着文字轮廓（推荐）；觉得还想再收紧一点就往大调（0–12dp）")
++                                Text("只把这一段的两个端头往里收（开引号那一行、闭引号那一行），中间跨行的地方完全不动。线超出引号就调大（0–12dp）")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
