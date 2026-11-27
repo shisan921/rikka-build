@@ -1902,7 +1902,7 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..ff293fd 100644
+index 3d21e9f..2f49fbb 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -39,6 +39,7 @@ import androidx.compose.material3.Text
@@ -2116,13 +2116,13 @@ index 3d21e9f..ff293fd 100644
 + */
 +private fun ASTNode.allowsFirstLineIndent(): Boolean {
 +    if (type != MarkdownElementTypes.PARAGRAPH) return false
-+    var parent = this.treeParent
++    var parent = this.parent
 +    while (true) {
 +        val current = parent ?: return false
 +        when (current.type) {
 +            MarkdownElementTypes.LIST_ITEM, MarkdownElementTypes.BLOCK_QUOTE -> return false
 +            MarkdownElementTypes.MARKDOWN_FILE -> return true
-+            else -> parent = current.treeParent
++            else -> parent = current.parent
 +        }
 +    }
 +}
