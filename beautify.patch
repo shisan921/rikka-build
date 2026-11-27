@@ -72,7 +72,7 @@ index bef7871..5088a03 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..03cd0e1 100644
+index 205e822..739000b 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -206,7 +206,7 @@ index 205e822..03cd0e1 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,168 @@ data class DisplaySetting(
+@@ -642,8 +748,177 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -372,6 +372,15 @@ index 205e822..03cd0e1 100644
 +    val fullScreenEditorBgImageAlpha: Float = 1f,
 +    // 全屏编辑页背景图是否叠加主题色遮罩（保证文字可读）
 +    val fullScreenEditorBgTint: Boolean = true,
++    // 沉浸阅读：唯一总开关，设置页的「沉浸阅读」分组和输入框 + 面板的第四块读写的是同一个字段
++    // （默认 false = 与改动前逐像素一致：顶栏 / 输入框 / 滚动行为完全不变）
++    val immersiveReading: Boolean = false,
++    // 沉浸阅读·隐藏顶栏（关掉就只藏输入框，顶栏照旧常驻）
++    val immersiveHideTopBar: Boolean = true,
++    // 沉浸阅读·隐藏输入框（连同输入框下面那一层底部留白 / 安全区整块一起收起）
++    val immersiveHideInput: Boolean = true,
++    // 沉浸阅读·临时唤出后自动收起的秒数（2..10），点顶部热区唤出后按这个时间滑回去
++    val immersiveAutoHideSeconds: Int = 4,
  )
  
  @Serializable
@@ -1086,6 +1095,186 @@ index 45c3d83..1bd85a2 100644
                  }
              }
          }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
+index 354c7b8..c0a000b 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/FilesPicker.kt
+@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.Role
+ import androidx.compose.ui.semantics.role
+ import androidx.compose.ui.semantics.semantics
+ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.tooling.preview.Preview
+ import androidx.compose.ui.unit.dp
+@@ -54,6 +55,7 @@ import kotlinx.coroutines.Job
+ import me.rerere.ai.provider.ProviderSetting
+ import me.rerere.hugeicons.HugeIcons
+ import me.rerere.hugeicons.stroke.Voice
++import me.rerere.hugeicons.stroke.BookOpen01
+ import me.rerere.hugeicons.stroke.Camera01
+ import me.rerere.hugeicons.stroke.Codesandbox
+ import me.rerere.hugeicons.stroke.ComputerTerminal01
+@@ -95,6 +97,8 @@ internal fun FilesPicker(
+     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
+     onUpdateAssistant: (Assistant) -> Unit,
+     onUpdateConversation: (Conversation) -> Unit,
++    // 沉浸阅读：+ 面板的第四块和设置页读写的是同一份 displaySetting
++    onUpdateSettings: (Settings) -> Unit,
+     showInjectionSheet: Boolean,
+     onShowInjectionSheetChange: (Boolean) -> Unit,
+     showCompressDialog: Boolean,
+@@ -118,29 +122,72 @@ internal fun FilesPicker(
+             .fillMaxWidth()
+             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
+     ) {
+-        FlowRow(
+-            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
+-            verticalArrangement = Arrangement.spacedBy(4.dp),
++        // 第一行：拍照 / 照片 / 上传文件 / 沉浸阅读，四块等宽并列（图标 + 下面文字）
++        val immersiveReading = settings.displaySetting.immersiveReading
++        Row(
++            modifier = Modifier.fillMaxWidth(),
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
+         ) {
+-            TakePicButton(onLaunchCamera = onTakePic)
++            AttachmentPickerTile(
++                modifier = Modifier.weight(1f),
++                icon = { Icon(HugeIcons.Camera01, null) },
++                label = stringResource(R.string.take_picture),
++                onClick = onTakePic,
++            )
+ 
+-            ImagePickButton(onClick = onPickImage)
++            AttachmentPickerTile(
++                modifier = Modifier.weight(1f),
++                icon = { Icon(HugeIcons.Image02, null) },
++                label = stringResource(R.string.photo),
++                onClick = onPickImage,
++            )
+ 
+-            if (provider != null && provider is ProviderSetting.Google) {
+-                VideoPickButton(onClick = onPickVideo)
++            AttachmentPickerTile(
++                modifier = Modifier.weight(1f),
++                icon = { Icon(HugeIcons.Files02, null) },
++                label = stringResource(R.string.upload_file),
++                onClick = onPickFile,
++            )
+ 
+-                AudioPickButton(onClick = onPickAudio)
+-            }
++            // 第四块：沉浸阅读开关（开着的时候底色 / 图标走 primaryContainer，一眼看出当前状态）
++            AttachmentPickerTile(
++                modifier = Modifier.weight(1f),
++                selected = immersiveReading,
++                icon = { Icon(HugeIcons.BookOpen01, null) },
++                label = "沉浸阅读",
++                onClick = {
++                    onUpdateSettings(
++                        settings.copy(
++                            displaySetting = settings.displaySetting.copy(
++                                immersiveReading = !immersiveReading
++                            )
++                        )
++                    )
++                    onDismiss()
++                },
++            )
++        }
+ 
+-            FilePickButton(onClick = onPickFile)
++        // 其余入口（视频 / 音频 / 语音模式）保持原来的居中流式排布
++        if ((provider != null && provider is ProviderSetting.Google) || onStartVoiceMode != null) {
++            FlowRow(
++                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
++                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
++                verticalArrangement = Arrangement.spacedBy(4.dp),
++            ) {
++                if (provider != null && provider is ProviderSetting.Google) {
++                    VideoPickButton(onClick = onPickVideo)
+ 
+-            onStartVoiceMode?.let { start ->
+-                BigIconTextButton(
+-                    icon = { Icon(HugeIcons.Voice, contentDescription = null) },
+-                    text = { Text(stringResource(R.string.chat_page_voice_title)) },
+-                    onClick = start,
+-                )
++                    AudioPickButton(onClick = onPickAudio)
++                }
++
++                onStartVoiceMode?.let { start ->
++                    BigIconTextButton(
++                        icon = { Icon(HugeIcons.Voice, contentDescription = null) },
++                        text = { Text(stringResource(R.string.chat_page_voice_title)) },
++                        onClick = start,
++                    )
++                }
+             }
+         }
+ 
+@@ -498,6 +545,60 @@ fun FilePickButton(onClick: () -> Unit = {}) {
+     }
+ }
+ 
++/**
++ * + 面板第一行用的方块：等宽铺开，上图标下文字。
++ * selected = true 时（沉浸阅读已开启）底色和图标换成 primaryContainer，一眼看出当前是开还是关。
++ */
++@Composable
++private fun AttachmentPickerTile(
++    modifier: Modifier = Modifier,
++    selected: Boolean = false,
++    icon: @Composable () -> Unit,
++    label: String,
++    onClick: () -> Unit,
++) {
++    val interactionSource = remember { MutableInteractionSource() }
++    Column(
++        modifier = modifier
++            .clip(RoundedCornerShape(12.dp))
++            .clickable(
++                interactionSource = interactionSource,
++                indication = LocalIndication.current,
++                onClick = onClick,
++            )
++            .semantics {
++                role = Role.Button
++            },
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.spacedBy(4.dp),
++    ) {
++        Surface(
++            modifier = Modifier.fillMaxWidth(),
++            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
++            contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
++            shape = RoundedCornerShape(12.dp),
++        ) {
++            Box(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .padding(vertical = 12.dp),
++                contentAlignment = Alignment.Center,
++            ) {
++                icon()
++            }
++        }
++        ProvideTextStyle(MaterialTheme.typography.bodySmall) {
++            Text(
++                text = label,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis,
++                textAlign = TextAlign.Center,
++                modifier = Modifier.fillMaxWidth(),
++            )
++        }
++    }
++}
++
+ @Composable
+ private fun BigIconTextButton(
+     modifier: Modifier = Modifier,
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 index a18dd69..a847f32 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
@@ -4900,18 +5089,56 @@ index 6f7f137..2dfc8a1 100644
                          Row(
                              modifier = Modifier
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-index 5460f45..957a562 100644
+index 5460f45..eceeeb8 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -2,9 +2,26 @@ package me.rerere.rikkahub.ui.pages.chat
+ 
+ import android.net.Uri
+ import androidx.activity.compose.BackHandler
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.slideInVertically
++import androidx.compose.animation.slideOutVertically
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.interaction.MutableInteractionSource
++import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.isImeVisible
++import androidx.compose.foundation.layout.asPaddingValues
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.navigationBars
++import androidx.compose.foundation.layout.offset
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.statusBars
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.lazy.rememberLazyListState
+ import androidx.compose.material3.AlertDialog
+@@ -31,6 +48,7 @@ import androidx.compose.material3.rememberDrawerState
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableIntStateOf
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.rememberCoroutineScope
+@@ -38,6 +56,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
  import androidx.compose.runtime.setValue
  import androidx.compose.ui.Modifier
  import androidx.compose.ui.graphics.Color
 +import androidx.compose.ui.graphics.RectangleShape
++import androidx.compose.ui.input.pointer.PointerEventPass
++import androidx.compose.ui.input.pointer.PointerEventType
++import androidx.compose.ui.input.pointer.pointerInput
  import androidx.compose.ui.platform.LocalFocusManager
  import androidx.compose.ui.platform.LocalSoftwareKeyboardController
  import androidx.compose.ui.res.stringResource
-@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
+@@ -46,6 +68,7 @@ import androidx.compose.ui.unit.dp
  import androidx.compose.ui.unit.sp
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import com.dokar.sonner.ToastType
@@ -4919,7 +5146,7 @@ index 5460f45..957a562 100644
  import dev.chrisbanes.haze.hazeSource
  import dev.chrisbanes.haze.rememberHazeState
  import kotlinx.coroutines.Job
-@@ -55,6 +57,7 @@ import me.rerere.ai.provider.BuiltInTools
+@@ -55,6 +78,7 @@ import me.rerere.ai.provider.BuiltInTools
  import me.rerere.ai.provider.Model
  import me.rerere.ai.provider.ProviderSetting
  import me.rerere.ai.ui.UIMessagePart
@@ -4927,7 +5154,7 @@ index 5460f45..957a562 100644
  import me.rerere.hugeicons.HugeIcons
  import me.rerere.hugeicons.stroke.Cancel01
  import me.rerere.hugeicons.stroke.LeftToRightListBullet
-@@ -188,6 +191,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -188,6 +212,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
          }
      }
  
@@ -4937,7 +5164,7 @@ index 5460f45..957a562 100644
      when {
          isBigScreen -> {
              PermanentNavigationDrawer(
-@@ -196,11 +202,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -196,11 +223,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                          navController = navController,
                          current = conversation,
                          vm = vm,
@@ -4952,7 +5179,7 @@ index 5460f45..957a562 100644
                      onStartVoiceMode = startVoiceMode,
                      inputState = inputState,
                      loadingJob = loadingJob,
-@@ -229,11 +237,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -229,11 +258,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                          navController = navController,
                          current = conversation,
                          vm = vm,
@@ -4967,7 +5194,7 @@ index 5460f45..957a562 100644
                      onStartVoiceMode = startVoiceMode,
                      inputState = inputState,
                      loadingJob = loadingJob,
-@@ -261,6 +271,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+@@ -261,6 +292,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
  
  @Composable
  private fun ChatPageContent(
@@ -4975,7 +5202,7 @@ index 5460f45..957a562 100644
      onStartVoiceMode: () -> Unit,
      inputState: ChatInputState,
      loadingJob: Job?,
-@@ -282,7 +293,6 @@ private fun ChatPageContent(
+@@ -282,7 +314,6 @@ private fun ChatPageContent(
      val toaster = LocalToaster.current
      val workspaceRepository: WorkspaceRepository = koinInject()
      var previewMode by rememberSaveable { mutableStateOf(false) }
@@ -4983,9 +5210,88 @@ index 5460f45..957a562 100644
      val assistant = setting.getCurrentAssistant()
      var showFilesSheet by remember { mutableStateOf(false) }
      val attachmentPickerActions = rememberChatAttachmentPickerActions(
-@@ -308,7 +318,9 @@ private fun ChatPageContent(
+@@ -307,219 +338,347 @@ private fun ChatPageContent(
+ 
      TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
  
++    // ---------------- 沉浸阅读 ----------------
++    // 唯一开关存在 settings.displaySetting 里（设置页和 + 面板读写同一份），这里只负责渲染。
++    // immersiveReading = false 时下面所有分支都走「原样」，顶栏 / 输入框 / 滚动行为完全不变。
++    val displaySetting = setting.displaySetting
++    val immersiveReading = displaySetting.immersiveReading
++    val immersiveHideTopBar = displaySetting.immersiveHideTopBar
++    val immersiveHideInput = displaySetting.immersiveHideInput
++    val immersiveAutoHideSeconds = displaySetting.immersiveAutoHideSeconds.coerceIn(2, 10)
++    // 临时唤出：点屏幕顶部热区把顶栏 / 输入框滑回来，过 immersiveAutoHideSeconds 秒再自动收回
++    var immersiveRevealed by rememberSaveable { mutableStateOf(false) }
++    // 每次「按一下」都自增一次，用来把自动收起的计时从头开始（不需要立刻收起）
++    val immersiveTouchTick = remember { mutableIntStateOf(0) }
++    // 顶栏 / 输入框各自独当一面的显隐：不沉浸 / 没开对应开关 / 已临时唤出 时都显示
++    val showTopBar = !immersiveReading || !immersiveHideTopBar || immersiveRevealed
++    val showInputBar = !immersiveReading || !immersiveHideInput || immersiveRevealed
++    // 只有沉浸 + 至少藏了一块时才有顶部热区，否则热区会白占 56dp 挡住列表滑动
++    val showImmersiveHotSpot = immersiveReading && (immersiveHideTopBar || immersiveHideInput)
++    // 顶栏 / 输入框藏起来时 Scaffold 的内边距会归零，这里补上系统栏高度，别让正文贴到状态栏 / 导航条下面
++    val immersiveStatusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
++    val immersiveNavBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
++    val immersiveExtraTop = if (showTopBar) 0.dp else immersiveStatusBarTop
++    val immersiveExtraBottom = if (showInputBar) 0.dp else immersiveNavBarBottom
++
++    // 退出沉浸时把「临时唤出」一起复位，下次进来先看到干净的全屏
++    LaunchedEffect(immersiveReading) {
++        if (!immersiveReading) {
++            immersiveRevealed = false
++        }
++    }
++    // 到点自动收起：任何一次按下（tick 变化）都会重启这个计时；
++    // 键盘弹出（正在打字）时**不**收起，否则打到一半输入框会自己滑走
++    val imeVisible = WindowInsets.isImeVisible
++    LaunchedEffect(immersiveRevealed, immersiveTouchTick.intValue, immersiveAutoHideSeconds, imeVisible) {
++        if (immersiveRevealed && !imeVisible) {
++            delay(immersiveAutoHideSeconds * 1000L)
++            immersiveRevealed = false
++        }
++    }
++
++    // 非消费式的「按下」监听：挂在顶栏 / 输入框外层，按一下就重置自动收起计时，不抢子组件的点击
++    val immersivePressResetModifier: () -> Modifier = {
++        if (immersiveReading) {
++            Modifier.pointerInput(Unit) {
++                awaitPointerEventScope {
++                    while (true) {
++                        val event = awaitPointerEvent(PointerEventPass.Initial)
++                        if (event.type == PointerEventType.Press) {
++                            immersiveTouchTick.intValue++
++                        }
++                    }
++                }
++            }
++        } else {
++            Modifier
++        }
++    }
++
++    // 顶栏 / 输入框两块内容提出来，沉浸时外面套 AnimatedVisibility，非沉浸时直接原样渲染
++    val topBarContent: @Composable () -> Unit = {
++        TopBar(
++            settings = setting,
++            conversation = conversation,
++            hazeState = hazeState,
++            bigScreen = bigScreen,
++            drawerState = drawerState,
++            previewMode = previewMode,
++            onNewChat = {
++                navigateToChatPage(navController)
++            },
++            onClickMenu = {
++                previewMode = !previewMode
++            },
++            onUpdateTitle = {
++                vm.updateTitle(it)
++            }
++        )
++    }
++
      Surface(
 -        color = MaterialTheme.colorScheme.background,
 +        // 聊天背景色：自定义了就盖掉主题背景，没设就保持原样
@@ -4994,15 +5300,472 @@ index 5460f45..957a562 100644
          modifier = Modifier.fillMaxSize()
      ) {
          AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
-@@ -317,6 +329,7 @@ private fun ChatPageContent(
-                 TopBar(
-                     settings = setting,
-                     conversation = conversation,
+         Scaffold(
+             topBar = {
+-                TopBar(
+-                    settings = setting,
+-                    conversation = conversation,
+-                    bigScreen = bigScreen,
+-                    drawerState = drawerState,
+-                    previewMode = previewMode,
+-                    onNewChat = {
+-                        navigateToChatPage(navController)
+-                    },
+-                    onClickMenu = {
+-                        previewMode = !previewMode
+-                    },
+-                    onUpdateTitle = {
+-                        vm.updateTitle(it)
++                // 沉浸阅读：顶栏整块用 AnimatedVisibility 收起 / 滑回（200ms），非沉浸时直接原样渲染
++                if (immersiveReading) {
++                    AnimatedVisibility(
++                        visible = showTopBar,
++                        modifier = immersivePressResetModifier(),
++                        enter = slideInVertically(animationSpec = tween(200)) { -it } + fadeIn(tween(200)),
++                        exit = slideOutVertically(animationSpec = tween(200)) { -it } + fadeOut(tween(200)),
++                        label = "immersiveTopBar",
++                    ) {
++                        topBarContent()
+                     }
+-                )
++                } else {
++                    topBarContent()
++                }
+             },
+             bottomBar = {
+                 val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+                 val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+-                ChatInput(
+-                    onStartVoiceMode = onStartVoiceMode,
+-                    voiceState = voiceState,
+-                    onStopVoiceMode = vm.voiceSession::stop,
+-                    state = inputState,
+-                    messageQueue = messageQueue,
+-                    onRemoveQueuedMessage = vm::removeQueuedMessage,
+-                    onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
+-                    onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
+-                    onResumeMessageQueue = vm::resumeMessageQueue,
+-                    loading = loadingJob != null,
+-                    settings = setting,
+-                    hazeState = hazeState,
+-                    completionProviders = completionProviders,
+-                    onCancelClick = {
+-                        vm.stopGeneration()
+-                    },
+-                    enableSearch = enableWebSearch,
+-                    onUpdateSearchMode = { mode ->
+-                        val current = setting.getCurrentAssistant()
+-                        val model = setting.getCurrentChatModel()
+-                        vm.updateSettings(
+-                            setting.copy(
+-                                assistants = setting.assistants.map { assistant ->
+-                                    if (assistant.id == current.id) {
+-                                        assistant.copy(enableWebSearch = mode == SearchMode.LOCAL)
++                // 沉浸阅读：输入框连同它下面那层底部留白 / 安全区整块一起收起，非沉浸时原样渲染
++                val inputBarContent: @Composable () -> Unit = {
++                    ChatInput(
++                        onStartVoiceMode = onStartVoiceMode,
++                        voiceState = voiceState,
++                        onStopVoiceMode = vm.voiceSession::stop,
++                        state = inputState,
++                        messageQueue = messageQueue,
++                        onRemoveQueuedMessage = vm::removeQueuedMessage,
++                        onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
++                        onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
++                        onResumeMessageQueue = vm::resumeMessageQueue,
++                        loading = loadingJob != null,
++                        settings = setting,
++                        hazeState = hazeState,
++                        completionProviders = completionProviders,
++                        onCancelClick = {
++                            vm.stopGeneration()
++                        },
++                        enableSearch = enableWebSearch,
++                        onUpdateSearchMode = { mode ->
++                            val current = setting.getCurrentAssistant()
++                            val model = setting.getCurrentChatModel()
++                            vm.updateSettings(
++                                setting.copy(
++                                    assistants = setting.assistants.map { assistant ->
++                                        if (assistant.id == current.id) {
++                                            assistant.copy(enableWebSearch = mode == SearchMode.LOCAL)
++                                        } else {
++                                            assistant
++                                        }
++                                    },
++                                    providers = if (model == null) {
++                                        setting.providers
+                                     } else {
+-                                        assistant
+-                                    }
+-                                },
+-                                providers = if (model == null) {
+-                                    setting.providers
+-                                } else {
+-                                    setting.providers.map { provider ->
+-                                        provider.editModel(
+-                                            model.copy(
+-                                                tools = if (mode == SearchMode.BUILT_IN) {
+-                                                    model.tools + BuiltInTools.Search
+-                                                } else {
+-                                                    model.tools - BuiltInTools.Search
+-                                                }
++                                        setting.providers.map { provider ->
++                                            provider.editModel(
++                                                model.copy(
++                                                    tools = if (mode == SearchMode.BUILT_IN) {
++                                                        model.tools + BuiltInTools.Search
++                                                    } else {
++                                                        model.tools - BuiltInTools.Search
++                                                    }
++                                                )
+                                             )
+-                                        )
++                                        }
++                                    },
++                                )
++                            )
++                        },
++                        onSendClick = {
++                            if (currentChatModel == null) {
++                                toaster.show("请先选择模型", type = ToastType.Error)
++                                return@ChatInput
++                            }
++                            if (inputState.isEditing()) {
++                                vm.handleMessageEdit(
++                                    parts = inputState.getContents(),
++                                    messageId = inputState.editingMessage!!,
++                                )
++                            } else {
++                                vm.handleMessageSend(inputState.getContents())
++                                scope.launch {
++                                    delay(100.milliseconds)
++                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
++                                }
++                            }
++                            inputState.clearInput()
++                        },
++                        onLongSendClick = {
++                            if (inputState.isEditing()) {
++                                vm.handleMessageEdit(
++                                    parts = inputState.getContents(),
++                                    messageId = inputState.editingMessage!!,
++                                )
++                            } else {
++                                vm.handleMessageSend(content = inputState.getContents(), answer = false)
++                                scope.launch {
++                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
++                                }
++                            }
++                            inputState.clearInput()
++                        },
++                        onUpdateChatModel = {
++                            vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
++                        },
++                        onUpdateAssistant = {
++                            vm.updateSettings(
++                                setting.copy(
++                                    assistants = setting.assistants.map { assistant ->
++                                        if (assistant.id == it.id) {
++                                            it
++                                        } else {
++                                            assistant
++                                        }
+                                     }
+-                                },
++                                )
+                             )
+-                        )
+-                    },
+-                    onSendClick = {
+-                        if (currentChatModel == null) {
+-                            toaster.show("请先选择模型", type = ToastType.Error)
+-                            return@ChatInput
+-                        }
+-                        if (inputState.isEditing()) {
+-                            vm.handleMessageEdit(
+-                                parts = inputState.getContents(),
+-                                messageId = inputState.editingMessage!!,
++                        },
++                        onUpdateSearchService = { index ->
++                            vm.updateSettings(
++                                setting.copy(
++                                    searchServiceSelected = index
++                                )
+                             )
+-                        } else {
+-                            vm.handleMessageSend(inputState.getContents())
+-                            scope.launch {
+-                                delay(100.milliseconds)
+-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+-                            }
++                        },
++                        onMoreClick = {
++                            showFilesSheet = true
++                        },
++                    )
++                }
++                if (immersiveReading) {
++                    AnimatedVisibility(
++                        visible = showInputBar,
++                        modifier = immersivePressResetModifier(),
++                        enter = slideInVertically(animationSpec = tween(200)) { it } + fadeIn(tween(200)),
++                        exit = slideOutVertically(animationSpec = tween(200)) { it } + fadeOut(tween(200)),
++                        label = "immersiveInputBar",
++                    ) {
++                        inputBarContent()
++                    }
++                } else {
++                    inputBarContent()
++                }
++            },
++            containerColor = Color.Transparent,
++        ) { innerPadding ->
++            // 沉浸阅读：列表内容提出来，沉浸时额外叠一层顶部透明热区
++            val chatListContent: @Composable () -> Unit = {
++                ChatList(
++                    innerPadding = innerPadding,
++                    conversation = conversation,
++                    state = chatListState,
++                    loading = loadingJob != null,
++                    processingStatus = processingStatus,
++                    previewMode = previewMode,
++                    settings = setting,
 +                    hazeState = hazeState,
-                     bigScreen = bigScreen,
-                     drawerState = drawerState,
-                     previewMode = previewMode,
-@@ -622,6 +635,7 @@ private fun ChatFilesPickerSheet(
++                    errors = errors,
++                    onDismissError = onDismissError,
++                    onClearAllErrors = onClearAllErrors,
++                    onRegenerate = {
++                        vm.regenerateAtMessage(it)
++                    },
++                    onEdit = {
++                        inputState.editingMessage = it.id
++                        inputState.setContents(it.parts)
++                    },
++                    onForkMessage = {
++                        scope.launch {
++                            val fork = vm.forkMessage(message = it)
++                            navigateToChatPage(navController, chatId = fork.id)
+                         }
+-                        inputState.clearInput()
+                     },
+-                    onLongSendClick = {
+-                        if (inputState.isEditing()) {
+-                            vm.handleMessageEdit(
+-                                parts = inputState.getContents(),
+-                                messageId = inputState.editingMessage!!,
+-                            )
++                    onDelete = {
++                        if (loadingJob != null) {
++                            vm.showDeleteBlockedWhileGeneratingError()
+                         } else {
+-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
+-                            scope.launch {
+-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+-                            }
++                            vm.deleteMessage(it)
+                         }
+-                        inputState.clearInput()
+-                    },
+-                    onUpdateChatModel = {
+-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                     },
+-                    onUpdateAssistant = {
+-                        vm.updateSettings(
+-                            setting.copy(
+-                                assistants = setting.assistants.map { assistant ->
+-                                    if (assistant.id == it.id) {
+-                                        it
++                    onUpdateMessage = { newNode ->
++                        vm.updateConversation(
++                            conversation.copy(
++                                messageNodes = conversation.messageNodes.map { node ->
++                                    if (node.id == newNode.id) {
++                                        newNode
+                                     } else {
+-                                        assistant
++                                        node
+                                     }
+                                 }
+-                            )
+-                        )
++                            ))
++                        vm.saveConversationAsync()
+                     },
+-                    onUpdateSearchService = { index ->
+-                        vm.updateSettings(
+-                            setting.copy(
+-                                searchServiceSelected = index
+-                            )
+-                        )
++                    onClickSuggestion = { suggestion ->
++                        inputState.editingMessage = null
++                        inputState.setMessageText(suggestion)
++                    },
++                    onTranslate = { message, locale ->
++                        vm.translateMessage(message, locale)
++                    },
++                    onClearTranslation = { message ->
++                        vm.clearTranslationField(message.id)
++                    },
++                    onJumpToMessage = { index ->
++                        previewMode = false
++                        scope.launch {
++                            chatListState.requestScrollToItem(index)
++                        }
++                    },
++                    onToolApproval = { toolCallId, approved, reason ->
++                        vm.handleToolApproval(toolCallId, approved, reason)
++                    },
++                    onToolAnswer = { toolCallId, answer ->
++                        vm.handleToolAnswer(toolCallId, answer)
++                    },
++                    onToggleFavorite = { node ->
++                        vm.toggleMessageFavorite(node)
+                     },
+-                    onMoreClick = {
+-                        showFilesSheet = true
++                    onConversationSystemPromptChange = { newPrompt ->
++                        vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
++                        vm.saveConversationAsync()
+                     },
+                 )
+-            },
+-            containerColor = Color.Transparent,
+-        ) { innerPadding ->
+-            ChatList(
+-                innerPadding = innerPadding,
+-                conversation = conversation,
+-                state = chatListState,
+-                loading = loadingJob != null,
+-                processingStatus = processingStatus,
+-                previewMode = previewMode,
+-                settings = setting,
+-                hazeState = hazeState,
+-                errors = errors,
+-                onDismissError = onDismissError,
+-                onClearAllErrors = onClearAllErrors,
+-                onRegenerate = {
+-                    vm.regenerateAtMessage(it)
+-                },
+-                onEdit = {
+-                    inputState.editingMessage = it.id
+-                    inputState.setContents(it.parts)
+-                },
+-                onForkMessage = {
+-                    scope.launch {
+-                        val fork = vm.forkMessage(message = it)
+-                        navigateToChatPage(navController, chatId = fork.id)
+-                    }
+-                },
+-                onDelete = {
+-                    if (loadingJob != null) {
+-                        vm.showDeleteBlockedWhileGeneratingError()
+-                    } else {
+-                        vm.deleteMessage(it)
++            }
++            if (immersiveReading) {
++                Box(modifier = Modifier.fillMaxSize()) {
++                    // 顶栏 / 输入框藏起来时补上系统栏高度，别让正文贴到状态栏、导航条下面
++                    Box(
++                        modifier = Modifier
++                            .fillMaxSize()
++                            .padding(top = immersiveExtraTop, bottom = immersiveExtraBottom)
++                    ) {
++                        chatListContent()
+                     }
+-                },
+-                onUpdateMessage = { newNode ->
+-                    vm.updateConversation(
+-                        conversation.copy(
+-                            messageNodes = conversation.messageNodes.map { node ->
+-                                if (node.id == newNode.id) {
+-                                    newNode
+-                                } else {
+-                                    node
++                    if (showImmersiveHotSpot) {
++                        // 顶部透明热区（56dp 满宽，无背景）：点一下把顶栏 / 输入框临时唤出；
++                        // 已经唤出时再点只重置自动收起计时（位置落在顶栏下面，不会挡住返回 / 菜单按钮）
++                        Box(
++                            modifier = Modifier
++                                .fillMaxWidth()
++                                .height(56.dp)
++                                .offset(y = innerPadding.calculateTopPadding() + immersiveExtraTop)
++                                .clickable(
++                                    interactionSource = remember { MutableInteractionSource() },
++                                    indication = null,
++                                ) {
++                                    immersiveTouchTick.intValue++
++                                    immersiveRevealed = true
+                                 }
+-                            }
+-                        ))
+-                    vm.saveConversationAsync()
+-                },
+-                onClickSuggestion = { suggestion ->
+-                    inputState.editingMessage = null
+-                    inputState.setMessageText(suggestion)
+-                },
+-                onTranslate = { message, locale ->
+-                    vm.translateMessage(message, locale)
+-                },
+-                onClearTranslation = { message ->
+-                    vm.clearTranslationField(message.id)
+-                },
+-                onJumpToMessage = { index ->
+-                    previewMode = false
+-                    scope.launch {
+-                        chatListState.requestScrollToItem(index)
++                        )
+                     }
+-                },
+-                onToolApproval = { toolCallId, approved, reason ->
+-                    vm.handleToolApproval(toolCallId, approved, reason)
+-                },
+-                onToolAnswer = { toolCallId, answer ->
+-                    vm.handleToolAnswer(toolCallId, answer)
+-                },
+-                onToggleFavorite = { node ->
+-                    vm.toggleMessageFavorite(node)
+-                },
+-                onConversationSystemPromptChange = { newPrompt ->
+-                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+-                    vm.saveConversationAsync()
+-                },
+-            )
++                }
++            } else {
++                chatListContent()
++            }
+         }
+ 
+         if (showFilesSheet) {
+@@ -531,6 +690,7 @@ private fun ChatPageContent(
+                 vm = vm,
+                 attachmentPickerActions = attachmentPickerActions,
+                 onStartVoiceMode = onStartVoiceMode,
++                onUpdateSettings = { vm.updateSettings(it) },
+                 onDismiss = { showFilesSheet = false },
+             )
+         }
+@@ -546,6 +706,8 @@ private fun ChatFilesPickerSheet(
+     vm: ChatVM,
+     attachmentPickerActions: ChatAttachmentPickerActions,
+     onStartVoiceMode: () -> Unit,
++    // 沉浸阅读开关也要能从 + 面板改，所以把「写设置」的入口一路传下去
++    onUpdateSettings: (Settings) -> Unit,
+     onDismiss: () -> Unit,
+ ) {
+     val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+@@ -593,6 +755,7 @@ private fun ChatFilesPickerSheet(
+                 vm.updateConversation(it)
+                 vm.saveConversationAsync()
+             },
++            onUpdateSettings = onUpdateSettings,
+             showInjectionSheet = showInjectionSheet,
+             onShowInjectionSheetChange = { showInjectionSheet = it },
+             showCompressDialog = showCompressDialog,
+@@ -622,6 +785,7 @@ private fun ChatFilesPickerSheet(
  private fun TopBar(
      settings: Settings,
      conversation: Conversation,
@@ -5010,7 +5773,7 @@ index 5460f45..957a562 100644
      drawerState: DrawerState,
      bigScreen: Boolean,
      previewMode: Boolean,
-@@ -636,6 +650,13 @@ private fun TopBar(
+@@ -636,6 +800,13 @@ private fun TopBar(
      }
  
      TopAppBar(
@@ -8420,7 +9183,7 @@ index 0000000..a0bf1d4
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
-index 2ee9d11..75688e0 100644
+index 2ee9d11..e837c0f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesUIPage.kt
 @@ -1,104 +1,71 @@
@@ -8550,7 +9313,7 @@ index 2ee9d11..75688e0 100644
  
      val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
  
-@@ -123,6 +90,191 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -123,6 +90,273 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              contentPadding = contentPadding + PaddingValues(8.dp),
              verticalArrangement = Arrangement.spacedBy(16.dp)
          ) {
@@ -8739,10 +9502,92 @@ index 2ee9d11..75688e0 100644
 +                }
 +            }
 +
++            // 沉浸阅读：总开关和 + 面板共用同一个值，下面三项只在总开关打开时展开
++            item {
++                CardGroup(
++                    modifier = Modifier.padding(horizontal = 8.dp),
++                    title = { Text("沉浸阅读") },
++                ) {
++                    item(
++                        headlineContent = { Text("沉浸阅读") },
++                        supportingContent = {
++                            Text("打开后进入会话页就直接沉浸，不用下滑也不用做手势；点屏幕顶部能临时唤出顶栏 / 输入框。这一项和输入框 + 面板里的「沉浸阅读」是同一个开关")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.immersiveReading,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(immersiveReading = it))
++                                }
++                            )
++                        },
++                    )
++                    if (displaySetting.immersiveReading) {
++                        item(
++                            headlineContent = { Text("隐藏顶栏") },
++                            supportingContent = { Text("沉浸时把会话页的顶栏一起收起来") },
++                            trailingContent = {
++                                Switch(
++                                    checked = displaySetting.immersiveHideTopBar,
++                                    onCheckedChange = {
++                                        updateDisplaySetting(displaySetting.copy(immersiveHideTopBar = it))
++                                    }
++                                )
++                            },
++                        )
++                        item(
++                            headlineContent = { Text("隐藏输入框") },
++                            supportingContent = { Text("沉浸时把输入框和它下面那层底部留白一起收起来") },
++                            trailingContent = {
++                                Switch(
++                                    checked = displaySetting.immersiveHideInput,
++                                    onCheckedChange = {
++                                        updateDisplaySetting(displaySetting.copy(immersiveHideInput = it))
++                                    }
++                                )
++                            },
++                        )
++                        item(
++                            headlineContent = { Text("自动收起时间") },
++                            supportingContent = {
++                                Column {
++                                    Text("点顶部唤出顶栏 / 输入框后，过这么多秒自动再收回去")
++                                    Row(
++                                        modifier = Modifier.fillMaxWidth(),
++                                        verticalAlignment = Alignment.CenterVertically,
++                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                    ) {
++                                        val autoHideSeconds =
++                                            displaySetting.immersiveAutoHideSeconds.coerceIn(2, 10)
++                                        Slider(
++                                            value = autoHideSeconds.toFloat(),
++                                            onValueChange = { value ->
++                                                updateDisplaySetting(
++                                                    displaySetting.copy(
++                                                        immersiveAutoHideSeconds = value.roundToInt().coerceIn(2, 10)
++                                                    )
++                                                )
++                                            },
++                                            valueRange = 2f..10f,
++                                            steps = 7,
++                                            modifier = Modifier.weight(1f),
++                                        )
++                                        Text(
++                                            text = "${autoHideSeconds} 秒",
++                                            style = MaterialTheme.typography.labelMedium,
++                                        )
++                                    }
++                                }
++                            },
++                        )
++                    }
++                }
++            }
++
              item {
                  CardGroup(
                      modifier = Modifier.padding(horizontal = 8.dp),
-@@ -140,6 +292,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -140,6 +374,40 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -8783,7 +9628,7 @@ index 2ee9d11..75688e0 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
-@@ -209,6 +395,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -209,6 +477,30 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -8814,7 +9659,7 @@ index 2ee9d11..75688e0 100644
                      item(
                          headlineContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_title)) },
                          supportingContent = { Text(stringResource(R.string.setting_display_page_show_token_usage_desc)) },
-@@ -257,110 +467,6 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -257,110 +549,6 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                              )
                          },
                      )
@@ -8925,7 +9770,7 @@ index 2ee9d11..75688e0 100644
                  }
              }
  
-@@ -409,103 +515,65 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
+@@ -409,103 +597,65 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
              }
          }
      }
@@ -8941,7 +9786,7 @@ index 2ee9d11..75688e0 100644
 -)
 -
 -private val CustomFontExtensionsUI = setOf("ttf", "otf", "ttc")
- 
+-
 -private data class ImportedChatFontUI(
 -    val relativePath: String,
 -    val displayName: String,
@@ -8991,7 +9836,7 @@ index 2ee9d11..75688e0 100644
 -        tempFile.delete()
 -        throw error
 -    }
--
+ 
 -    val relativePath = FileUtils.getRelativePathInFilesDir(context.filesDir, targetFile)
 -        ?: "${FileFolders.FONTS}/${targetFile.name}"
 -    return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
