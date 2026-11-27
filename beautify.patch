@@ -1478,7 +1478,7 @@ index bef7871..c53466b 100644
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 new file mode 100644
-index 0000000..4710e1d
+index 0000000..8080ef6
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 @@ -0,0 +1,329 @@
@@ -1559,7 +1559,7 @@ index 0000000..4710e1d
 +    val quoteBarHeightScale: Float = 0.7f,
 +    val quoteBarOffsetDp: Int = 0,
 +    val quoteBarWidthDp: Float = 2f,
-+    val quoteUnderlineInsetDp: Int = 2,
++    val quoteUnderlineInsetDp: Int = 0,
 +    val quoteOuterDecor: QuoteOuterDecor = QuoteOuterDecor.NONE,
 +    val quoteOuterDecorSpace: Int = 0,
 +    val quoteOuterDecorFollowHighlight: Boolean = true,
@@ -1812,7 +1812,7 @@ index 0000000..4710e1d
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..b18d58b 100644
+index 205e822..6d23007 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -144,6 +144,8 @@ class SettingsStore(
@@ -1990,7 +1990,7 @@ index 205e822..b18d58b 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +757,168 @@ data class DisplaySetting(
+@@ -642,8 +757,169 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -2061,8 +2061,9 @@ index 205e822..b18d58b 100644
 +    // 对白样式·行首竖线粗细（dp，0.1..8，滑块 0.01 一档）：drawRoundRect 的 width，
 +    // 圆角仍然 1dp，默认 2f（= 老版本行为）。用 Float 是为了能落在 1 和 2 中间那档
 +    val quoteBarWidthDp: Float = 2f,
-+    // 下划线左右两端比底色块再往里收多少（dp），越大越缩进
-+    val quoteUnderlineInsetDp: Int = 2,
++    // 下划线左右两端再往里收多少（dp）：0（默认）下划线严格贴着文字轮廓，
++    // 既与文字两端对齐、也不会越出引号；值调大只是额外收紧
++    val quoteUnderlineInsetDp: Int = 0,
 +    // 对白样式·外层符号：在引号内的对白外面再套一层符号（「“你好。”」/『“你好。”』），
 +    // 只是在渲染时插字符，消息原文不变（复制 / 导出仍然是原始文本）；默认 NONE = 与老版本逐像素一致
 +    val quoteOuterDecor: QuoteOuterDecor = QuoteOuterDecor.NONE,
@@ -4823,10 +4824,10 @@ index a316327..35a40f9 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..e1fb1f4
+index 0000000..8ff779b
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1038 @@
+@@ -0,0 +1,1052 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -5704,15 +5705,24 @@ index 0000000..e1fb1f4
 +                // 绝不退化成 getLineLeft..getLineRight 铺满整行（那就是「下划线超出引号」的元凶）。
 +                var lineLeft = 0f
 +                var lineRight = 0f
++                // 字形级的左右界：只取字符自己的轮廓（getBoundingBox），不用光标位置。
++                // 光标位置（getHorizontalPosition）会带上字符间距，画出来的线就比文字宽一截，
++                // 于是「线跑到引号外面」—— 底色的宽松界用它，下划线必须用这个紧界。
++                var glyphLeft = 0f
++                var glyphRight = 0f
 +                var hasCharSpan = false
 +                if (segEnd > segStart) {
 +                    val headX = layoutResult.getHorizontalPosition(segStart, usePrimaryDirection = false)
 +                    val tailX = layoutResult.getHorizontalPosition(
 +                        segEnd.coerceAtMost(textLength), usePrimaryDirection = false
 +                    )
++                    val headBox = layoutResult.getBoundingBox(segStart)
 +                    val tailBox = layoutResult.getBoundingBox(segEnd - 1)
 +                    lineLeft = minOf(headX, tailBox.left)
 +                    lineRight = maxOf(tailX, tailBox.right)
++                    // 空字形（空格 / 某些标点）的包围盒宽度是 0，这时退回光标位置，绝不画成一个点
++                    glyphLeft = if (headBox.width > 0f) headBox.left else lineLeft
++                    glyphRight = if (tailBox.width > 0f) tailBox.right else lineRight
 +                    hasCharSpan = lineRight > lineLeft
 +                }
 +
@@ -5742,6 +5752,11 @@ index 0000000..e1fb1f4
 +                    continue
 +                }
 +
++                if (!hasCharSpan) {
++                    glyphLeft = bgLeft
++                    glyphRight = bgRight
++                }
++
 +                // 行与行之间仍然留白：每行上下各内缩 backgroundGap / 2（默认 2dp）；
 +                // 同一行里引号和正文已经合并（见 mergeTouchingRanges），所以这一行只画一块
 +                val rowTop = lineTop + halfGapPx
@@ -5766,14 +5781,14 @@ index 0000000..e1fb1f4
 +                //    算出来长度 <= 0 的行这一行不画。
 +                //    y 起点 = baseline + 「下划线与文字的距离」滑块值，之后每条再往下错 2dp。
 +                if (solidPath != null || dashedPath != null || dottedPath != null) {
-+                    // 下划线直接复用这一行底色的左右界：与底色块严格同宽，
-+                    // 既不会长出引号，也不会像用行/字符端点那样在某些行算不出长度而漏画。
-+                    // 再比底色块往里收 2dp：底色的边缘会吃进「引号与相邻文字之间的空白」，
-+                    // 线要是贴着底色边缘，就会看起来盖住了引号外侧的空白（用户截图那个现象）
++                    // 下划线用自己的「字形紧界」，不再复用底色块（底色左右各内缩 2dp 留白，
++                    // 复用会把线收得比文字还窄，用户看到「线跟文字没对齐」就是这里）。
 +                    val underlineInsetPx =
 +                        with(density) { style.underlineInsetDp.coerceIn(0, 12).dp.toPx() }
-+                    val underlineLeft = spanLeft + underlineInsetPx
-+                    val underlineRight = spanRight - underlineInsetPx
++                    // 起点 / 终点取**字形**左右界（不含字符间距），0dp 时线正好跟文字两端对齐、
++                    // 不会再越出引号；要更收紧再靠这个滑块往里收
++                    val underlineLeft = glyphLeft + underlineInsetPx
++                    val underlineRight = glyphRight - underlineInsetPx
 +                    run {
 +                        if (underlineRight - underlineLeft > 0f) {
 +                            val baseY = layoutResult.getLineBaseline(line) + underlineOffsetPx
@@ -10568,7 +10583,7 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..241da17
+index 0000000..2197ed9
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 @@ -0,0 +1,963 @@
@@ -11271,7 +11286,7 @@ index 0000000..241da17
 +                        headlineContent = { Text("下划线左右内缩") },
 +                        supportingContent = {
 +                            Column {
-+                                Text("下划线两端比底色块再往里收多少（0–12dp），觉得线盖到引号外侧就调大")
++                                Text("0 = 严格贴着文字轮廓（推荐）；觉得还想再收紧一点就往大调（0–12dp）")
 +                                Row(
 +                                    modifier = Modifier.fillMaxWidth(),
 +                                    verticalAlignment = Alignment.CenterVertically,
@@ -11293,7 +11308,7 @@ index 0000000..241da17
 +                                TextButton(
 +                                    onClick = {
 +                                        applyDisplaySetting {
-+                                            it.copy(quoteUnderlineInsetDp = 2)
++                                            it.copy(quoteUnderlineInsetDp = 0)
 +                                        }
 +                                    },
 +                                    modifier = Modifier.align(Alignment.End),
