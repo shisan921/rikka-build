@@ -72,7 +72,7 @@ index bef7871..5088a03 100644
      data object SettingPreferencesNetwork : Screen
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..33c8fa8 100644
+index 205e822..a16d7f9 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -595,6 +595,16 @@ enum class ChatFontFamily {
@@ -206,7 +206,7 @@ index 205e822..33c8fa8 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +748,161 @@ data class DisplaySetting(
+@@ -642,8 +748,167 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -293,6 +293,12 @@ index 205e822..33c8fa8 100644
 +    val chatParagraphSpacingDp: Int = 0,
 +    // 字间距（em 倍数，0 = 原样；负数更紧、正数更松）
 +    val chatLetterSpacingEm: Float = 0f,
++    // 段首缩进（小说排版）：每段第一行空出 N 个全角字的宽度。
++    // 只在**渲染层**生效（TextStyle.textIndent），消息原文、复制内容、导出文本都不变；
++    // 默认 false = 顶格，与改动前逐像素一致。只作用于 AI 消息（用户自己的话不缩进）。
++    val chatFirstLineIndentEnabled: Boolean = false,
++    // 段首缩进的格数（1..3），一格 = 一个全角字符宽度（em）
++    val chatFirstLineIndentUnits: Int = 2,
 +    // 消息正文的**自定义字号百分比**（0 = 关闭）：0 表示沿用上面 fontSizeRatio 的那几个档位，
 +    // 10..200 表示直接覆盖正文的字号倍率（只影响消息正文，设置界面自身排版不受影响）
 +    val chatFontSizePercent: Int = 0,
@@ -1080,7 +1086,7 @@ index 45c3d83..1bd85a2 100644
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
-index a18dd69..b12afcb 100644
+index a18dd69..b8ac956 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt
 @@ -10,6 +10,7 @@ import androidx.compose.animation.slideOutVertically
@@ -1463,7 +1469,7 @@ index a18dd69..b12afcb 100644
  @OptIn(FlowPreview::class)
  @Composable
  private fun MessagePartsBlock(
-@@ -280,7 +498,22 @@ private fun MessagePartsBlock(
+@@ -280,7 +498,35 @@ private fun MessagePartsBlock(
      // 消息输出HapticFeedback
      val hapticFeedback = LocalHapticFeedback.current
      val settings = LocalSettings.current
@@ -1480,13 +1486,26 @@ index a18dd69..b12afcb 100644
 +            paragraphSpacingDp = settings.displaySetting.chatParagraphSpacingDp.coerceIn(-8, 24),
 +        )
 +    }
++    // 段首缩进（小说排版）：只给 AI 消息用，用户自己发的话照样顶格。
++    // 走的是渲染层的 TextStyle.textIndent，消息原文 / 复制 / 导出都不受影响，开关一关就回到顶格。
++    val assistantParagraphStyle = remember(
++        chatParagraphStyle,
++        settings.displaySetting.chatFirstLineIndentEnabled,
++        settings.displaySetting.chatFirstLineIndentUnits,
++    ) {
++        chatParagraphStyle.copy(
++            firstLineIndentEm = if (settings.displaySetting.chatFirstLineIndentEnabled) {
++                settings.displaySetting.chatFirstLineIndentUnits.coerceIn(1, 3).toFloat()
++            } else 0f
++        )
++    }
      val partsState by rememberUpdatedState(parts)
 +    // 气泡实时模糊：默认关闭。haze 源拿不到时也不挂（见 bubbleMaterialModifier 的性能护栏）
 +    val chatHazeState = LocalChatHazeState.current
  
      val handleClickCitation: (String) -> Unit = remember {
          handler@{ citationId ->
-@@ -324,7 +557,11 @@ private fun MessagePartsBlock(
+@@ -324,7 +570,11 @@ private fun MessagePartsBlock(
                          steps = block.steps,
                          collapsedAdaptiveWidth = isReasoningOnlyBlock,
                          cardColors = CardDefaults.cardColors(
@@ -1499,7 +1518,7 @@ index a18dd69..b12afcb 100644
                          ),
                      ) { step ->
                          when (step) {
-@@ -365,41 +602,85 @@ private fun MessagePartsBlock(
+@@ -365,52 +615,108 @@ private fun MessagePartsBlock(
                      is UIMessagePart.Text -> {
                          val textContent = @Composable {
                              if (role == MessageRole.USER) {
@@ -1562,6 +1581,14 @@ index a18dd69..b12afcb 100644
                                              )
                                          }
                                      }
+-                                } else {
+-                                    MarkdownBlock(
+-                                        content = part.text.replaceRegexes(
+-                                            assistant = assistant,
+-                                            scope = AssistantAffectScope.ASSISTANT,
+-                                            visual = true,
+-                                        ),
+-                                        onClickCitation = handleClickCitation,
 +                                }
 +                            } else {
 +                                if (settings.displaySetting.showAssistantBubble) {
@@ -1575,8 +1602,9 @@ index a18dd69..b12afcb 100644
 +                                        tint = assistantBubbleColor,
 +                                    )
 +                                    Surface(
-+                                        modifier = Modifier
-+                                            .animateContentSize()
+                                         modifier = Modifier
+                                             .animateContentSize()
+-                                    )
 +                                            .then(assistantBubbleMaterial),
 +                                        shape = assistantBubbleShape,
 +                                        color = assistantBubbleColor,
@@ -1590,32 +1618,46 @@ index a18dd69..b12afcb 100644
 +                                                tint = settings.displaySetting.backgroundImageTint,
 +                                            )
 +                                            Column(modifier = Modifier.padding(8.dp)) {
-+                                                MarkdownBlock(
-+                                                    content = part.text.replaceRegexes(
-+                                                        assistant = assistant,
-+                                                        scope = AssistantAffectScope.ASSISTANT,
-+                                                        visual = true,
-+                                                    ),
-+                                                    onClickCitation = handleClickCitation,
-+                                                    // 只有 AI 消息吃「对白样式」
-+                                                    enableQuoteStyle = role == MessageRole.ASSISTANT,
-+                                                )
++                                                // AI 气泡：段首缩进挂在这里（用户气泡不包这层，保持顶格）
++                                                CompositionLocalProvider(
++                                                    LocalChatParagraphStyle provides assistantParagraphStyle
++                                                ) {
++                                                    MarkdownBlock(
++                                                        content = part.text.replaceRegexes(
++                                                            assistant = assistant,
++                                                            scope = AssistantAffectScope.ASSISTANT,
++                                                            visual = true,
++                                                        ),
++                                                        onClickCitation = handleClickCitation,
++                                                        // 只有 AI 消息吃「对白样式」
++                                                        enableQuoteStyle = role == MessageRole.ASSISTANT,
++                                                    )
++                                                }
 +                                            }
 +                                        }
 +                                    }
-                                 } else {
-                                     MarkdownBlock(
-                                         content = part.text.replaceRegexes(
-@@ -408,6 +689,8 @@ private fun MessagePartsBlock(
-                                             visual = true,
-                                         ),
-                                         onClickCitation = handleClickCitation,
-+                                        // 只有 AI 消息吃「对白样式」
-+                                        enableQuoteStyle = role == MessageRole.ASSISTANT,
-                                         modifier = Modifier
-                                             .animateContentSize()
-                                     )
-@@ -420,10 +703,18 @@ private fun MessagePartsBlock(
++                                } else {
++                                    // 无气泡的 AI 消息：同样只在这里给段首缩进
++                                    CompositionLocalProvider(
++                                        LocalChatParagraphStyle provides assistantParagraphStyle
++                                    ) {
++                                        MarkdownBlock(
++                                            content = part.text.replaceRegexes(
++                                                assistant = assistant,
++                                                scope = AssistantAffectScope.ASSISTANT,
++                                                visual = true,
++                                            ),
++                                            onClickCitation = handleClickCitation,
++                                            // 只有 AI 消息吃「对白样式」
++                                            enableQuoteStyle = role == MessageRole.ASSISTANT,
++                                            modifier = Modifier
++                                                .animateContentSize()
++                                        )
++                                    }
+                                 }
+                             }
+                         }
+@@ -420,10 +726,18 @@ private fun MessagePartsBlock(
                          // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
                          // 生成结束后内容稳定，再启用文本选择。
                          if (loading) {
@@ -1858,7 +1900,7 @@ index b66320e..58ab1e3 100644
 +    )
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
-index 3d21e9f..4f1ca81 100644
+index 3d21e9f..ddb6513 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/Markdown.kt
 @@ -39,6 +39,7 @@ import androidx.compose.material3.Text
@@ -1869,7 +1911,13 @@ index 3d21e9f..4f1ca81 100644
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateMapOf
  import androidx.compose.runtime.mutableStateOf
-@@ -75,7 +76,9 @@ import androidx.compose.ui.text.withLink
+@@ -70,12 +71,15 @@ import androidx.compose.ui.text.font.FontFamily
+ import androidx.compose.ui.text.font.FontStyle
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextDecoration
++import androidx.compose.ui.text.style.TextIndent
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.text.withLink
  import androidx.compose.ui.text.withStyle
  import androidx.compose.ui.tooling.preview.Preview
  import androidx.compose.ui.unit.Density
@@ -1879,7 +1927,7 @@ index 3d21e9f..4f1ca81 100644
  import androidx.compose.ui.unit.dp
  import androidx.compose.ui.unit.em
  import androidx.compose.ui.unit.sp
-@@ -230,12 +233,76 @@ private fun parseMarkdown(content: String): MarkdownParseResult {
+@@ -230,12 +234,86 @@ private fun parseMarkdown(content: String): MarkdownParseResult {
      return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
  }
  
@@ -1901,6 +1949,16 @@ index 3d21e9f..4f1ca81 100644
 +internal data class ChatParagraphStyle(
 +    val lineHeightScale: Float = 1f,
 +    val paragraphSpacingDp: Int = 0,
++    /**
++     * 段首缩进的格数（em，0f = 不缩进）。一格 = 一个全角字的宽度，所以 2f 就是「空两格」。
++     *
++     * 只走到 `TextStyle.textIndent` 上，**不动字符串本身**：复制、选中、导出、搜索拿到的都还是原文，
++     * markdown 的换行符也没有被改写。默认 0f，不缩进，与改动前逐像素一致。
++     *
++     * 这里是「渲染层」而不是给 AI 加提示词：同一条消息开关一开一关就能来回切，
++     * 老消息也会立刻跟着变。
++     */
++    val firstLineIndentEm: Float = 0f,
 +)
 +
 +/**
@@ -1957,7 +2015,7 @@ index 3d21e9f..4f1ca81 100644
  ) {
      var (data, setData) = remember { mutableStateOf(parseMarkdown(content)) }
  
-@@ -251,22 +318,26 @@ fun MarkdownBlock(
+@@ -251,22 +329,26 @@ fun MarkdownBlock(
              .collect { setData(it) }
      }
  
@@ -2000,7 +2058,7 @@ index 3d21e9f..4f1ca81 100644
                  }
              }
          }
-@@ -365,7 +436,9 @@ private fun MarkdownNode(
+@@ -365,7 +447,9 @@ private fun MarkdownNode(
          MarkdownElementTypes.ATX_1, MarkdownElementTypes.ATX_2, MarkdownElementTypes.ATX_3, MarkdownElementTypes.ATX_4, MarkdownElementTypes.ATX_5, MarkdownElementTypes.ATX_6 -> {
              val style = HeaderStyle.fromMarkdownType(
                  type = node.type,
@@ -2011,7 +2069,7 @@ index 3d21e9f..4f1ca81 100644
              )
              val headingPadding = HeaderStyle.verticalPadding(node.type)
              ProvideTextStyle(value = LocalTextStyle.current.merge(style)) {
-@@ -610,11 +683,14 @@ private fun MarkdownNode(
+@@ -610,11 +694,14 @@ private fun MarkdownNode(
                  node.findChildOfTypeRecursive(MarkdownTokenTypes.FENCE_LANG)?.getTextInNode(content) ?: "plaintext"
              val hasEnd = node.findChildOfTypeRecursive(MarkdownTokenTypes.CODE_FENCE_END) != null
  
@@ -2027,7 +2085,7 @@ index 3d21e9f..4f1ca81 100644
                      .fillMaxWidth(),
                  completeCodeBlock = hasEnd
              )
-@@ -623,7 +699,7 @@ private fun MarkdownNode(
+@@ -623,7 +710,7 @@ private fun MarkdownNode(
          MarkdownTokenTypes.TEXT -> {
              val text = node.getTextInNode(content)
              Text(
@@ -2036,7 +2094,7 @@ index 3d21e9f..4f1ca81 100644
                  modifier = modifier,
              )
          }
-@@ -790,17 +866,33 @@ private fun Paragraph(
+@@ -790,17 +877,33 @@ private fun Paragraph(
          node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
      }
      val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
@@ -2072,7 +2130,7 @@ index 3d21e9f..4f1ca81 100644
              buildAnnotatedString {
                  node.children.fastForEach { child ->
                      appendMarkdownNodeContent(
-@@ -814,18 +906,43 @@ private fun Paragraph(
+@@ -814,18 +917,50 @@ private fun Paragraph(
                          trim = trim,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2114,11 +2172,18 @@ index 3d21e9f..4f1ca81 100644
 +                // 行高：「正文行距」倍数乘进来；倍数为 1f 时 scaledLineHeight 原样返回现有行高，
 +                // 所以默认状态下这一行与改动前完全等效。行内公式仍然强制 Unspecified（公式自己带高度）。
 +                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified
-+                else scaledLineHeight(LocalTextStyle.current, paragraphStyle.lineHeightScale)
++                else scaledLineHeight(LocalTextStyle.current, paragraphStyle.lineHeightScale),
++                // 段首缩进：0f（默认）时传 null，等于完全不设置这个字段，行为与改动前一致。
++                // 每个 markdown 段落是一个独立的 Text，所以「缩进」正好落在每段第一行；
++                // 段落内部的软换行属于「续行」，不会被缩进 —— 就是小说排版的语义。
++                // 不缩进时把原来的 textIndent 原样传回去（而不是 null），免得把上层 style 里的值清掉
++                textIndent = if (paragraphStyle.firstLineIndentEm > 0f)
++                    TextIndent(firstLine = paragraphStyle.firstLineIndentEm.em)
++                else LocalTextStyle.current.textIndent
              )
          )
      }
-@@ -999,6 +1116,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -999,6 +1134,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
      enableLatexRendering: Boolean = true,
      latexColorArgb: Int = 0,
      onClickCitation: (String) -> Unit = {},
@@ -2127,7 +2192,7 @@ index 3d21e9f..4f1ca81 100644
  ) {
      when {
          node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
-@@ -1020,9 +1139,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1020,9 +1157,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      it
                  }.replace(BREAK_LINE_REGEX, "\n")
              }
@@ -2140,7 +2205,7 @@ index 3d21e9f..4f1ca81 100644
          }
  
          node.type == MarkdownElementTypes.EMPH -> {
-@@ -1037,7 +1156,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1037,7 +1174,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2150,7 +2215,7 @@ index 3d21e9f..4f1ca81 100644
                      )
                  }
              }
-@@ -1055,7 +1175,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1055,7 +1193,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2160,7 +2225,7 @@ index 3d21e9f..4f1ca81 100644
                      )
                  }
              }
-@@ -1073,7 +1194,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1073,7 +1212,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                          style = style,
                          enableLatexRendering = enableLatexRendering,
                          latexColorArgb = latexColorArgb,
@@ -2170,7 +2235,7 @@ index 3d21e9f..4f1ca81 100644
                      )
                  }
              }
-@@ -1240,7 +1362,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
+@@ -1240,7 +1380,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                      style = style,
                      enableLatexRendering = enableLatexRendering,
                      latexColorArgb = latexColorArgb,
@@ -2181,10 +2246,18 @@ index 3d21e9f..4f1ca81 100644
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
-index a316327..6ea5bdc 100644
+index a316327..7cc17aa 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt
-@@ -188,7 +188,7 @@ private fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
+@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontStyle
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextDecoration
++import androidx.compose.ui.text.style.TextIndent
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.text.withLink
+ import androidx.compose.ui.text.withStyle
+@@ -188,7 +189,7 @@ private fun HtmlBodyNode(node: Node, onClickCitation: (String) -> Unit) {
          is Element -> HtmlBlockElement(element = node, onClickCitation = onClickCitation)
          is TextNode -> {
              val text = node.text().trim()
@@ -2193,7 +2266,7 @@ index a316327..6ea5bdc 100644
          }
      }
  }
-@@ -345,6 +345,8 @@ private fun HtmlParagraphContent(
+@@ -345,6 +346,8 @@ private fun HtmlParagraphContent(
      val hasInlineMath = element.select("span.math").any { it.attr("inline") == "true" }
      val colorScheme = MaterialTheme.colorScheme
      val textStyle = LocalTextStyle.current
@@ -2202,7 +2275,7 @@ index a316327..6ea5bdc 100644
  
      val (annotatedString, inlineContents) = remember(
          element.outerHtml(),
-@@ -353,6 +355,7 @@ private fun HtmlParagraphContent(
+@@ -353,6 +356,7 @@ private fun HtmlParagraphContent(
          density,
          textStyle,
          onClickCitation,
@@ -2210,7 +2283,7 @@ index a316327..6ea5bdc 100644
      ) {
          val contents = mutableMapOf<String, InlineTextContent>()
          val text = buildAnnotatedString {
-@@ -365,6 +368,7 @@ private fun HtmlParagraphContent(
+@@ -365,6 +369,7 @@ private fun HtmlParagraphContent(
                      style = textStyle,
                      enableLatexRendering = enableLatexRendering,
                      onClickCitation = onClickCitation,
@@ -2218,7 +2291,20 @@ index a316327..6ea5bdc 100644
                  )
              }
          }
-@@ -391,7 +395,9 @@ private fun HtmlHeading(element: Element, onClickCitation: (String) -> Unit) {
+@@ -382,6 +387,12 @@ private fun HtmlParagraphContent(
+                 TextUnit.Unspecified
+             else
+                 textStyle.lineHeight,
++            // 段首缩进：和 Markdown.kt 的 Paragraph 走同一个 Local，
++            // 所以带 HTML 的消息（走这条兜底渲染路径）也跟着缩进，两种正文排版一致
++            textIndent = LocalChatParagraphStyle.current.firstLineIndentEm
++                .takeIf { it > 0f }
++                ?.let { TextIndent(firstLine = it.em) }
++                ?: textStyle.textIndent,
+         ),
+     )
+ }
+@@ -391,7 +402,9 @@ private fun HtmlHeading(element: Element, onClickCitation: (String) -> Unit) {
      val level = element.tagName().removePrefix("h").toIntOrNull() ?: 1
      val headingStyle = HeaderStyle.fromLevel(
          level = level,
@@ -2229,7 +2315,7 @@ index a316327..6ea5bdc 100644
      )
      val verticalPadding = HeaderStyle.verticalPadding(level)
      ProvideTextStyle(LocalTextStyle.current.merge(headingStyle)) {
-@@ -700,6 +706,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -700,6 +713,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
      val colorScheme = MaterialTheme.colorScheme
      val textStyle = LocalTextStyle.current
      val density = LocalDensity.current
@@ -2237,7 +2323,7 @@ index a316327..6ea5bdc 100644
  
      val key = remember(nodes) { nodes.joinToString("") { if (it is Element) it.outerHtml() else it.toString() } }
      val (annotatedString, inlineContents) = remember(
-@@ -709,6 +716,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -709,6 +723,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
          density,
          textStyle,
          onClickCitation,
@@ -2245,7 +2331,7 @@ index a316327..6ea5bdc 100644
      ) {
          val contents = mutableMapOf<String, InlineTextContent>()
          val text = buildAnnotatedString {
-@@ -721,6 +729,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
+@@ -721,6 +736,7 @@ private fun HtmlInlineGroup(nodes: List<Node>, onClickCitation: (String) -> Unit
                      style = textStyle,
                      enableLatexRendering = enableLatexRendering,
                      onClickCitation = onClickCitation,
@@ -2253,7 +2339,7 @@ index a316327..6ea5bdc 100644
                  )
              }
          }
-@@ -743,7 +752,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
+@@ -743,7 +759,7 @@ private fun HtmlInlineAsComposable(node: Node, onClickCitation: (String) -> Unit
      when (node) {
          is TextNode -> {
              val text = node.text()
@@ -2262,7 +2348,7 @@ index a316327..6ea5bdc 100644
          }
  
          is Element -> {
-@@ -817,9 +826,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+@@ -817,9 +833,11 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
@@ -2275,7 +2361,7 @@ index a316327..6ea5bdc 100644
          is Element -> appendHtmlInlineElement(
              element = node,
              colorScheme = colorScheme,
-@@ -828,6 +839,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
+@@ -828,6 +846,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineNode(
              style = style,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
@@ -2283,7 +2369,7 @@ index a316327..6ea5bdc 100644
          )
      }
  }
-@@ -840,6 +852,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+@@ -840,6 +859,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
      style: TextStyle,
      enableLatexRendering: Boolean,
      onClickCitation: (String) -> Unit,
@@ -2291,7 +2377,7 @@ index a316327..6ea5bdc 100644
  ) {
      val cssStyle = element.attr("style").takeIf { it.isNotBlank() }?.let {
          parseInlineSpanStyle(
-@@ -858,6 +871,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
+@@ -858,6 +878,7 @@ private fun AnnotatedString.Builder.appendHtmlInlineElement(
              style = inheritedStyle,
              enableLatexRendering = enableLatexRendering,
              onClickCitation = onClickCitation,
@@ -5479,10 +5565,10 @@ index 0000000..0e59adf
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesFontPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesFontPage.kt
 new file mode 100644
-index 0000000..b5d3346
+index 0000000..1009668
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesFontPage.kt
-@@ -0,0 +1,817 @@
+@@ -0,0 +1,871 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import android.content.Context
@@ -5506,6 +5592,7 @@ index 0000000..b5d3346
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Scaffold
 +import androidx.compose.material3.Slider
++import androidx.compose.material3.Switch
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
 +import androidx.compose.material3.TopAppBarDefaults
@@ -5580,6 +5667,9 @@ index 0000000..b5d3346
 +    // 自定义字号百分比（0 = 跟随档位，50–140% 覆盖正文倍率）
 +    val chatFontSizePercent = displaySetting.chatFontSizePercent
 +    val chatLetterSpacingEm = displaySetting.chatLetterSpacingEm.coerceIn(-0.05f, 0.30f)
++    // 段首缩进（小说排版）：开关 + 1..3 格，只作用在 AI 消息正文的段落第一行
++    val chatFirstLineIndentEnabled = displaySetting.chatFirstLineIndentEnabled
++    val chatFirstLineIndentUnits = displaySetting.chatFirstLineIndentUnits.coerceIn(1, 3)
 +    // 预览用：当前生效的正文自定义字体（非空）与界面自定义字体（可能为 null）
 +    val chatFontFamily = rememberChatFontFamily(displaySetting)
 +    val uiCustomFontFamily = rememberCustomFontFamily(displaySetting.uiCustomFontPath)
@@ -6052,6 +6142,56 @@ index 0000000..b5d3346
 +                                    Text("恢复默认")
 +                                }
 +                            }
++                        },
++                    )
++                    // 段首缩进（小说排版）：纯渲染层，不改 AI 原文，只影响 AI 消息
++                    item(
++                        headlineContent = { Text("段首缩进") },
++                        supportingContent = {
++                            Column {
++                                Text("每段开头空出几格，像小说那样排。只在显示上加留白，AI 的原文不变，复制出去还是干净的原文；只对 AI 消息生效，你自己发的话保持顶格")
++                                Row(
++                                    modifier = Modifier.fillMaxWidth(),
++                                    verticalAlignment = Alignment.CenterVertically,
++                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                                ) {
++                                    Slider(
++                                        value = chatFirstLineIndentUnits.toFloat(),
++                                        onValueChange = { value ->
++                                            updateDisplaySetting(
++                                                displaySetting.copy(
++                                                    chatFirstLineIndentUnits = value.roundToInt()
++                                                )
++                                            )
++                                        },
++                                        valueRange = 1f..3f,
++                                        steps = 1,
++                                        modifier = Modifier.weight(1f)
++                                    )
++                                    Text(text = "${chatFirstLineIndentUnits} 格")
++                                }
++                                TextButton(
++                                    onClick = {
++                                        updateDisplaySetting(
++                                            displaySetting.copy(
++                                                chatFirstLineIndentEnabled = false,
++                                                chatFirstLineIndentUnits = 2,
++                                            )
++                                        )
++                                    },
++                                    modifier = Modifier.align(Alignment.End),
++                                ) {
++                                    Text("恢复默认")
++                                }
++                            }
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = chatFirstLineIndentEnabled,
++                                onCheckedChange = {
++                                    updateDisplaySetting(displaySetting.copy(chatFirstLineIndentEnabled = it))
++                                },
++                            )
 +                        },
 +                    )
 +                }
