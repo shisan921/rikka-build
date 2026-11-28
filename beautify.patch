@@ -6693,10 +6693,18 @@ index 0000000..806957f
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
-index f9383da..531df42 100644
+index f9383da..bebb34d 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
-@@ -210,6 +210,66 @@ private fun AssistantPromptContent(
+@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+ import androidx.compose.foundation.layout.imePadding
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
+@@ -210,6 +211,66 @@ private fun AssistantPromptContent(
              }
          }
  
