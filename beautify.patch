@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..32262fd 100644
+index 9606588..ba41c58 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,12 @@
@@ -9062,7 +9062,7 @@ index 9606588..32262fd 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,24 +285,48 @@ private fun ModeInjectionTab(
+@@ -233,25 +285,48 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9079,55 +9079,56 @@ index 9606588..32262fd 100644
 -                                    if (isDragging) {
 -                                        scaleX = 1.05f
 -                                        scaleY = 1.05f
-+                items(rows, key = { it.key }) { row ->
-+                    val entryId = row.entryId
-+                    if (entryId == null) {
-+                        PromptFolderHeader(
-+                            label = row.folder.ifBlank { "未分组" },
-+                            count = row.count,
-+                            collapsed = row.folder !in expandedFolders,
-+                            onToggle = {
-+                                onExpandedFoldersChange(
-+                                    if (row.folder in expandedFolders) {
-+                                        expandedFolders - row.folder
-+                                    } else {
-+                                        expandedFolders + row.folder
-                                     }
+-                                    }
 -                                },
 -                            onEdit = { editState.open(injection) },
 -                            onDelete = { onUpdate(modeInjections - injection) }
++                // 结构跟原版一致：组头是独立的 item，组内条目才是真正的 items(list, key = 条目 id)。
++                // 之前把所有行拍平成一串，条目在库里认不出自己，拖动就一直在错位 / 回弹。
++                val groups = workingList.groupBy { it.folder }
++                val orderedFolders = groups.keys.sortedBy { if (it.isBlank()) 1 else 0 }
++                orderedFolders.forEach { folder ->
++                    val groupItems = groups[folder].orEmpty()
++                    item(key = "header:$folder") {
++                        PromptFolderHeader(
++                            label = folder.ifBlank { "未分组" },
++                            count = groupItems.size,
++                            collapsed = folder !in expandedFolders,
++                            onToggle = {
++                                onExpandedFoldersChange(
++                                    if (folder in expandedFolders) expandedFolders - folder
++                                    else expandedFolders + folder
 +                                )
 +                            },
-+                            onRename = { renameTarget = row.folder },
++                            onRename = { renameTarget = folder },
                          )
-+                    } else {
-+                        val injection = workingList.firstOrNull { it.id == entryId }
-+                        if (injection != null) {
-+                            ReorderableItem(
-+                                state = reorderableState,
-+                                key = row.key
-+                            ) { isDragging ->
-+                                ModeInjectionCard(
-+                                    injection = injection,
-+                                    // 手势放在最外层、缩进放最后：拖动热区覆盖整行，缩进只影响视觉
-+                                    modifier = Modifier
-+                                        .longPressDraggableHandle()
-+                                        .graphicsLayer {
-+                                            if (isDragging) {
-+                                                scaleX = 1.05f
-+                                                scaleY = 1.05f
-+                                            }
-+                                        }
-+                                        .padding(start = 12.dp),
-+                                    onEdit = { editState.open(injection) },
-+                                    onDelete = { onUpdate(workingList - injection) }
-+                                )
-+                            }
-+                        }
                      }
++                    if (folder !in expandedFolders) return@forEach
++                    items(groupItems, key = { it.id }) { injection ->
++                        ReorderableItem(
++                            state = reorderableState,
++                            key = injection.id
++                        ) { isDragging ->
++                            ModeInjectionCard(
++                                injection = injection,
++                                modifier = Modifier
++                                    .longPressDraggableHandle()
++                                    .graphicsLayer {
++                                        if (isDragging) {
++                                            scaleX = 1.05f
++                                            scaleY = 1.05f
++                                        }
++                                    }
++                                    .padding(start = 12.dp),
++                                onEdit = { editState.open(injection) },
++                                onDelete = { onUpdate(workingList - injection) }
++                            )
++                        }
++                    }
                  }
              }
-@@ -294,6 +370,45 @@ private fun ModeInjectionTab(
+         }
+@@ -294,6 +369,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9173,7 +9174,7 @@ index 9606588..32262fd 100644
  }
  
  @Composable
-@@ -441,6 +556,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +555,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9189,7 +9190,7 @@ index 9606588..32262fd 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +703,56 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +702,56 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9254,7 +9255,7 @@ index 9606588..32262fd 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,24 +801,48 @@ private fun LorebookTab(
+@@ -645,25 +800,47 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9271,55 +9272,55 @@ index 9606588..32262fd 100644
 -                                    if (isDragging) {
 -                                        scaleX = 1.05f
 -                                        scaleY = 1.05f
-+                items(rows, key = { it.key }) { row ->
-+                    val entryId = row.entryId
-+                    if (entryId == null) {
-+                        PromptFolderHeader(
-+                            label = row.folder.ifBlank { "未分组" },
-+                            count = row.count,
-+                            collapsed = row.folder !in expandedFolders,
-+                            onToggle = {
-+                                onExpandedFoldersChange(
-+                                    if (row.folder in expandedFolders) {
-+                                        expandedFolders - row.folder
-+                                    } else {
-+                                        expandedFolders + row.folder
-                                     }
+-                                    }
 -                                },
 -                            onEdit = { editState.open(book) },
 -                            onDelete = { onUpdate(lorebooks - book) }
++                // 跟「模式注入」同一套结构：组头独立 item，组内条目才是真正的 items(list, key = id)
++                val groups = workingList.groupBy { it.folder }
++                val orderedFolders = groups.keys.sortedBy { if (it.isBlank()) 1 else 0 }
++                orderedFolders.forEach { folder ->
++                    val groupItems = groups[folder].orEmpty()
++                    item(key = "header:$folder") {
++                        PromptFolderHeader(
++                            label = folder.ifBlank { "未分组" },
++                            count = groupItems.size,
++                            collapsed = folder !in expandedFolders,
++                            onToggle = {
++                                onExpandedFoldersChange(
++                                    if (folder in expandedFolders) expandedFolders - folder
++                                    else expandedFolders + folder
 +                                )
 +                            },
-+                            onRename = { renameTarget = row.folder },
++                            onRename = { renameTarget = folder },
                          )
-+                    } else {
-+                        val book = workingList.firstOrNull { it.id == entryId }
-+                        if (book != null) {
-+                            ReorderableItem(
-+                                state = reorderableState,
-+                                key = row.key
-+                            ) { isDragging ->
-+                                LorebookCard(
-+                                    book = book,
-+                                    // 手势放在最外层、缩进放最后：拖动热区覆盖整行，缩进只影响视觉
-+                                    modifier = Modifier
-+                                        .longPressDraggableHandle()
-+                                        .graphicsLayer {
-+                                            if (isDragging) {
-+                                                scaleX = 1.05f
-+                                                scaleY = 1.05f
-+                                            }
-+                                        }
-+                                        .padding(start = 12.dp),
-+                                    onEdit = { editState.open(book) },
-+                                    onDelete = { onUpdate(workingList - book) }
-+                                )
-+                            }
-+                        }
                      }
++                    if (folder !in expandedFolders) return@forEach
++                    items(groupItems, key = { it.id }) { book ->
++                        ReorderableItem(
++                            state = reorderableState,
++                            key = book.id
++                        ) { isDragging ->
++                            LorebookCard(
++                                book = book,
++                                modifier = Modifier
++                                    .longPressDraggableHandle()
++                                    .graphicsLayer {
++                                        if (isDragging) {
++                                            scaleX = 1.05f
++                                            scaleY = 1.05f
++                                        }
++                                    }
++                                    .padding(start = 12.dp),
++                                onEdit = { editState.open(book) },
++                                onDelete = { onUpdate(workingList - book) }
++                            )
++                        }
++                    }
                  }
              }
-@@ -706,6 +886,45 @@ private fun LorebookTab(
+         }
+@@ -706,6 +883,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9365,7 +9366,7 @@ index 9606588..32262fd 100644
  }
  
  @Composable
-@@ -872,6 +1091,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1088,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9381,7 +9382,7 @@ index 9606588..32262fd 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1420,56 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1417,56 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
