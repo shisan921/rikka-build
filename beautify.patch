@@ -8917,14 +8917,13 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..ba41c58 100644
+index 9606588..73b9018 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-@@ -1,8 +1,12 @@
+@@ -1,8 +1,11 @@
  package me.rerere.rikkahub.ui.pages.extensions
  
  import me.rerere.hugeicons.HugeIcons
-+import me.rerere.rikkahub.ui.components.ui.buildFolderRows
 +import kotlin.uuid.Uuid
  import me.rerere.hugeicons.stroke.Book01
  import me.rerere.hugeicons.stroke.ArrowDown01
@@ -8933,7 +8932,7 @@ index 9606588..ba41c58 100644
  import me.rerere.hugeicons.stroke.Download01
  import me.rerere.hugeicons.stroke.FileDownload
  import me.rerere.hugeicons.stroke.FileImport
-@@ -27,11 +31,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -27,11 +30,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
  import androidx.compose.foundation.layout.height
  import androidx.compose.foundation.layout.imePadding
  import androidx.compose.foundation.layout.offset
@@ -8947,7 +8946,7 @@ index 9606588..ba41c58 100644
  import androidx.compose.foundation.pager.HorizontalPager
  import androidx.compose.foundation.pager.rememberPagerState
  import androidx.compose.foundation.rememberScrollState
-@@ -64,6 +70,7 @@ import androidx.compose.material3.SheetValue
+@@ -64,6 +69,7 @@ import androidx.compose.material3.SheetValue
  import androidx.compose.material3.rememberBottomSheetState
  import androidx.compose.material3.rememberSwipeToDismissBoxState
  import androidx.compose.runtime.Composable
@@ -8955,7 +8954,7 @@ index 9606588..ba41c58 100644
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateOf
  import androidx.compose.runtime.remember
-@@ -73,6 +80,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -73,6 +79,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
  import androidx.compose.runtime.setValue
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
@@ -8963,7 +8962,7 @@ index 9606588..ba41c58 100644
  import androidx.compose.ui.graphics.graphicsLayer
  import androidx.compose.ui.input.nestedscroll.nestedScroll
  import androidx.compose.ui.res.stringResource
-@@ -81,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
+@@ -81,6 +88,7 @@ import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.dp
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import kotlinx.coroutines.launch
@@ -8971,7 +8970,7 @@ index 9606588..ba41c58 100644
  import me.rerere.ai.core.MessageRole
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.export.LorebookSerializer
-@@ -152,12 +161,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -152,12 +160,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
              when (page) {
                  0 -> ModeInjectionTab(
                      modeInjections = settings.modeInjections,
@@ -8994,7 +8993,7 @@ index 9606588..ba41c58 100644
                  )
              }
          }
-@@ -167,24 +184,59 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +183,44 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9012,41 +9011,26 @@ index 9606588..ba41c58 100644
 +    // 展开着的分组由调用方持久化传进来（初始空 = 全收起）
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
 +    val workingList = modeInjections
-+    val rows = remember(workingList, expandedFolders) {
-+        buildFolderRows(
-+            items = workingList,
-+            folderOf = { it.folder },
-+            idOf = { it.id },
-+            isCollapsed = { it !in expandedFolders },
-+        )
++    // 分组结果缓存起来：以前是在 LazyListScope 里每次重组都 groupBy 一遍，
++    // 拖动时每帧都要重算，跟原版比就是白白多出来的开销
++    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
++    val orderedFolders = remember(grouped) {
++        grouped.keys.sortedBy { if (it.isBlank()) 1 else 0 }
 +    }
-+    val rowsState by rememberUpdatedState(rows)
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = modeInjections.toMutableList()
 -        val item = newList.removeAt(from.index)
 -        newList.add(to.index, item)
 -        onUpdate(newList)
-+        // from/to 是「可见行」的索引（组头也算一行），先换算回条目 id 再在完整列表里挪
-+        val fromRow = rowsState.getOrNull(from.index)
-+        val toRow = rowsState.getOrNull(to.index)
-+        if (fromRow == null || toRow == null) return@rememberReorderableLazyListState
-+
-+        if (fromRow.isHeader && toRow.isHeader) {
-+            // 拖组头 = 整组换位置：把这一组所有条目搬到目标组前面
-+            val movingGroup = workingList.filter { it.folder == fromRow.folder }
-+            val rest = workingList.filterNot { it.folder == fromRow.folder }
-+            val targetIndex = rest.indexOfFirst { it.folder == toRow.folder }
-+            val insertAt = if (targetIndex >= 0) targetIndex else rest.size
-+            onUpdate(rest.toMutableList().apply { addAll(insertAt, movingGroup) })
-+            return@rememberReorderableLazyListState
-+        }
-+
-+        if (fromRow.entryId == null || toRow.entryId == null) return@rememberReorderableLazyListState
++        // 直接用列表项的 key（条目就是它自己的 Uuid，组头是 String）——
++        // 不再经过「拍平行号 → 条目 id」的换算，跟原版一样一帧到位
++        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
++        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
 +        val list = workingList.toMutableList()
-+        val moving = list.firstOrNull { it.id == fromRow.entryId }
++        val moving = list.firstOrNull { it.id == fromId }
 +            ?: return@rememberReorderableLazyListState
 +        list.remove(moving)
-+        val target = list.indexOfFirst { it.id == toRow.entryId }
++        val target = list.indexOfFirst { it.id == toId }
 +        if (target >= 0) list.add(target, moving) else list.add(moving)
 +        onUpdate(list)
      }
@@ -9062,7 +9046,7 @@ index 9606588..ba41c58 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +285,48 @@ private fun ModeInjectionTab(
+@@ -233,25 +269,45 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9085,10 +9069,8 @@ index 9606588..ba41c58 100644
 -                            onDelete = { onUpdate(modeInjections - injection) }
 +                // 结构跟原版一致：组头是独立的 item，组内条目才是真正的 items(list, key = 条目 id)。
 +                // 之前把所有行拍平成一串，条目在库里认不出自己，拖动就一直在错位 / 回弹。
-+                val groups = workingList.groupBy { it.folder }
-+                val orderedFolders = groups.keys.sortedBy { if (it.isBlank()) 1 else 0 }
 +                orderedFolders.forEach { folder ->
-+                    val groupItems = groups[folder].orEmpty()
++                    val groupItems = grouped[folder].orEmpty()
 +                    item(key = "header:$folder") {
 +                        PromptFolderHeader(
 +                            label = folder.ifBlank { "未分组" },
@@ -9118,8 +9100,7 @@ index 9606588..ba41c58 100644
 +                                            scaleX = 1.05f
 +                                            scaleY = 1.05f
 +                                        }
-+                                    }
-+                                    .padding(start = 12.dp),
++                                    },
 +                                onEdit = { editState.open(injection) },
 +                                onDelete = { onUpdate(workingList - injection) }
 +                            )
@@ -9128,7 +9109,7 @@ index 9606588..ba41c58 100644
                  }
              }
          }
-@@ -294,6 +369,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +350,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9174,7 +9155,7 @@ index 9606588..ba41c58 100644
  }
  
  @Composable
-@@ -441,6 +555,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +536,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9190,7 +9171,7 @@ index 9606588..ba41c58 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +702,56 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +683,39 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9207,39 +9188,22 @@ index 9606588..ba41c58 100644
 +    // ---- 分组：跟「模式注入」同一套逻辑（组头折叠 + 长按改名）----
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
 +    val workingList = lorebooks
-+    val rows = remember(workingList, expandedFolders) {
-+        buildFolderRows(
-+            items = workingList,
-+            folderOf = { it.folder },
-+            idOf = { it.id },
-+            isCollapsed = { it !in expandedFolders },
-+        )
++    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
++    val orderedFolders = remember(grouped) {
++        grouped.keys.sortedBy { if (it.isBlank()) 1 else 0 }
 +    }
-+    val rowsState by rememberUpdatedState(rows)
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = lorebooks.toMutableList()
 -        val item = newList.removeAt(from.index)
 -        newList.add(to.index, item)
 -        onUpdate(newList)
-+        val fromRow = rowsState.getOrNull(from.index)
-+        val toRow = rowsState.getOrNull(to.index)
-+        if (fromRow == null || toRow == null) return@rememberReorderableLazyListState
-+
-+        if (fromRow.isHeader && toRow.isHeader) {
-+            val movingGroup = workingList.filter { it.folder == fromRow.folder }
-+            val rest = workingList.filterNot { it.folder == fromRow.folder }
-+            val targetIndex = rest.indexOfFirst { it.folder == toRow.folder }
-+            val insertAt = if (targetIndex >= 0) targetIndex else rest.size
-+            onUpdate(rest.toMutableList().apply { addAll(insertAt, movingGroup) })
-+            return@rememberReorderableLazyListState
-+        }
-+
-+        if (fromRow.entryId == null || toRow.entryId == null) return@rememberReorderableLazyListState
++        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
++        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
 +        val list = workingList.toMutableList()
-+        val moving = list.firstOrNull { it.id == fromRow.entryId }
++        val moving = list.firstOrNull { it.id == fromId }
 +            ?: return@rememberReorderableLazyListState
 +        list.remove(moving)
-+        val target = list.indexOfFirst { it.id == toRow.entryId }
++        val target = list.indexOfFirst { it.id == toId }
 +        if (target >= 0) list.add(target, moving) else list.add(moving)
 +        onUpdate(list)
      }
@@ -9255,7 +9219,7 @@ index 9606588..ba41c58 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +800,47 @@ private fun LorebookTab(
+@@ -645,25 +764,44 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9277,10 +9241,8 @@ index 9606588..ba41c58 100644
 -                            onEdit = { editState.open(book) },
 -                            onDelete = { onUpdate(lorebooks - book) }
 +                // 跟「模式注入」同一套结构：组头独立 item，组内条目才是真正的 items(list, key = id)
-+                val groups = workingList.groupBy { it.folder }
-+                val orderedFolders = groups.keys.sortedBy { if (it.isBlank()) 1 else 0 }
 +                orderedFolders.forEach { folder ->
-+                    val groupItems = groups[folder].orEmpty()
++                    val groupItems = grouped[folder].orEmpty()
 +                    item(key = "header:$folder") {
 +                        PromptFolderHeader(
 +                            label = folder.ifBlank { "未分组" },
@@ -9310,8 +9272,7 @@ index 9606588..ba41c58 100644
 +                                            scaleX = 1.05f
 +                                            scaleY = 1.05f
 +                                        }
-+                                    }
-+                                    .padding(start = 12.dp),
++                                    },
 +                                onEdit = { editState.open(book) },
 +                                onDelete = { onUpdate(workingList - book) }
 +                            )
@@ -9320,7 +9281,7 @@ index 9606588..ba41c58 100644
                  }
              }
          }
-@@ -706,6 +883,45 @@ private fun LorebookTab(
+@@ -706,6 +844,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9366,7 +9327,7 @@ index 9606588..ba41c58 100644
  }
  
  @Composable
-@@ -872,6 +1088,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1049,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9382,7 +9343,7 @@ index 9606588..ba41c58 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1417,56 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1378,56 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9409,7 +9370,7 @@ index 9606588..ba41c58 100644
 +            // 点一下收起/展开；长按留给「拖动整组」（由外面的 longPressDraggableHandle 接管），
 +            // 所以改名改成右边那个小铅笔，避免两个长按手势打架
 +            .clickable(onClick = onToggle)
-+            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
++            .padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 6.dp),
 +        verticalAlignment = Alignment.CenterVertically,
 +        horizontalArrangement = Arrangement.spacedBy(8.dp),
 +    ) {
