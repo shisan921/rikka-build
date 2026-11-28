@@ -1478,10 +1478,10 @@ index bef7871..c53466b 100644
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 new file mode 100644
-index 0000000..5eaf12d
+index 0000000..cfc3049
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,360 @@
 +package me.rerere.rikkahub.data.datastore
 +
 +import kotlinx.serialization.Serializable
@@ -1570,6 +1570,7 @@ index 0000000..5eaf12d
 +    val quoteOuterDecorSpace: Int = 0,
 +    val quoteOuterDecorFollowHighlight: Boolean = true,
 +    val quoteOuterDecorScale: Float = 1f,
++    val quoteOuterDecorSystemFont: Boolean = false,
 +    val chatLineHeightScale: Float = 1f,
 +    val chatParagraphSpacingDp: Int = 0,
 +    val chatLetterSpacingEm: Float = 0f,
@@ -1663,6 +1664,7 @@ index 0000000..5eaf12d
 +        quoteOuterDecorSpace = quoteOuterDecorSpace,
 +        quoteOuterDecorFollowHighlight = quoteOuterDecorFollowHighlight,
 +        quoteOuterDecorScale = quoteOuterDecorScale,
++        quoteOuterDecorSystemFont = quoteOuterDecorSystemFont,
 +        chatLineHeightScale = chatLineHeightScale,
 +        chatParagraphSpacingDp = chatParagraphSpacingDp,
 +        chatLetterSpacingEm = chatLetterSpacingEm,
@@ -1801,6 +1803,7 @@ index 0000000..5eaf12d
 +            quoteOuterDecorSpace = from.quoteOuterDecorSpace,
 +            quoteOuterDecorFollowHighlight = from.quoteOuterDecorFollowHighlight,
 +            quoteOuterDecorScale = from.quoteOuterDecorScale,
++            quoteOuterDecorSystemFont = from.quoteOuterDecorSystemFont,
 +            chatLineHeightScale = from.chatLineHeightScale,
 +            chatParagraphSpacingDp = from.chatParagraphSpacingDp,
 +            chatLetterSpacingEm = from.chatLetterSpacingEm,
@@ -1840,7 +1843,7 @@ index 0000000..5eaf12d
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..acf633b 100644
+index 205e822..85fd499 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 @@ -144,6 +144,8 @@ class SettingsStore(
@@ -2018,7 +2021,7 @@ index 205e822..acf633b 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +757,169 @@ data class DisplaySetting(
+@@ -642,8 +757,174 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -2102,6 +2105,11 @@ index 205e822..acf633b 100644
 +    // 对白样式·外层符号的大小倍数（0.7f..1.5f，步进 0.05）：只放大 / 缩小符号本身，
 +    // 实现是给符号套 SpanStyle(fontSize = 正文字号 * 这个倍数)，对白内容与 range 完全不受影响
 +    val quoteOuterDecorScale: Float = 1f,
++    // 外层符号是否改用「系统默认字体」画：true 时「」不跟正文自定义字体走。
++    // 起因：很多中文自定义字体（宋体、圆体…）里没有 U+300C / U+300D 字形，
++    // 系统会偷偷借一个别的字体来补，结果符号跟正文字体完全不是一个风格（笔画细、转角圆）。
++    // 打开这个开关就用 FontFamily.Default 渲染符号，跟手机上原生那个「」一致。
++    val quoteOuterDecorSystemFont: Boolean = false,
 +    // 消息正文行高（0.8f..2.0f，步进 0.05）：乘在正文行高上，1f = 与原来逐像素一致
 +    val chatLineHeightScale: Float = 1f,
 +    // 消息正文的段落 / 块间距**增量**（dp，-8..24）：0 = 沿用原来按字号算的间距（原样），
@@ -5012,10 +5020,10 @@ index a316327..35a40f9 100644
  
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
 new file mode 100644
-index 0000000..6e28372
+index 0000000..cef82a0
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/richtext/QuoteHighlight.kt
-@@ -0,0 +1,1073 @@
+@@ -0,0 +1,1083 @@
 +package me.rerere.rikkahub.ui.components.richtext
 +
 +import androidx.compose.material3.LocalTextStyle
@@ -5039,6 +5047,7 @@ index 0000000..6e28372
 +import androidx.compose.ui.platform.LocalDensity
 +import androidx.compose.ui.text.AnnotatedString
 +import androidx.compose.ui.text.SpanStyle
++import androidx.compose.ui.text.font.FontFamily
 +import androidx.compose.ui.text.TextLayoutResult
 +import androidx.compose.ui.text.buildAnnotatedString
 +import androidx.compose.ui.text.style.TextDecoration
@@ -5264,6 +5273,12 @@ index 0000000..6e28372
 +     * 所以符号调大也不会让装饰范围跟着变宽。
 +     */
 +    val outerFontSize: TextUnit = TextUnit.Unspecified,
++    /**
++     * 符号自己用的字体。null = 不设（跟随正文样式，默认行为）；
++     * 非 null 时给符号单独套一个字体——用来解决「自定义中文字体缺 U+300C 字形、
++     * 系统借来的字体跟正文不搭」的问题。
++     */
++    val outerFontFamily: FontFamily? = null,
 +    val selfDrawn: Boolean = false,
 +) {
 +    /** 有没有要画的下划线（实线 / 虚线 / 点线随便开一个都算，全开就是三条线） */
@@ -5383,6 +5398,7 @@ index 0000000..6e28372
 +            color = if (quoteStyle.outerFollowHighlight) quoteStyle.color else Color.Unspecified,
 +            fontSize = quoteStyle.outerFontSize,
 +            letterSpacing = pullLetterSpacing,
++            fontFamily = quoteStyle.outerFontFamily,
 +        )
 +    } else {
 +        null
@@ -5607,6 +5623,8 @@ index 0000000..6e28372
 +        // 「符号大小」倍率 × 正文字号 = 符号自己的字号；倍率 1.0x（或拿不到正文字号）时给
 +        // Unspecified，等价于「不给符号设字号」，默认状态下与老版本逐像素一致。
 +        outerFontSize = resolveOuterFontSize(displaySetting.quoteOuterDecorScale, baseFontSize),
++        // 外层符号单独指定字体：打开就用系统默认字体（≈ 手机原生的「」），否则跟随正文
++        outerFontFamily = if (displaySetting.quoteOuterDecorSystemFont) FontFamily.Default else null,
 +        selfDrawn = selfDrawn,
 +    )
 +}
@@ -11059,10 +11077,10 @@ index c296a24..7c5b3b4 100644
                          leadingContent = { Icon(HugeIcons.Notification01, null) },
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
 new file mode 100644
-index 0000000..bf62739
+index 0000000..91ec317
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPreferencesQuotePage.kt
-@@ -0,0 +1,968 @@
+@@ -0,0 +1,986 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -11588,6 +11606,24 @@ index 0000000..bf62739
 +                                    Text("恢复默认")
 +                                }
 +                            }
++                        },
++                    )
++                    // 符号用哪个字体画：很多自定义中文字体缺 U+300C 字形，
++                    // 系统会借一个别的字体来补，符号就跟正文完全不是一个风格
++                    item(
++                        headlineContent = { Text("符号用系统字体") },
++                        supportingContent = {
++                            Text("「」这些符号笔画细、转角圆，多半是你的字体里没这两个字形、系统借了一个来补。打开就用手机原生的字体画符号")
++                        },
++                        trailingContent = {
++                            Switch(
++                                checked = displaySetting.quoteOuterDecorSystemFont,
++                                onCheckedChange = { checked ->
++                                    applyDisplaySetting {
++                                        it.copy(quoteOuterDecorSystemFont = checked)
++                                    }
++                                },
++                            )
 +                        },
 +                    )
 +                    // 符号颜色：跟随引号高亮色 or 正文色
