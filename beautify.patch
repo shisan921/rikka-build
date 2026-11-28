@@ -1478,10 +1478,10 @@ index bef7871..c53466b 100644
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 new file mode 100644
-index 0000000..cfc3049
+index 0000000..95153bc
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,359 @@
 +package me.rerere.rikkahub.data.datastore
 +
 +import kotlinx.serialization.Serializable
@@ -1709,17 +1709,16 @@ index 0000000..cfc3049
 +     * 但「主题预设 / 动态取色」挂在 [Settings] 上，两处都要写才算是真换了一套。
 +     */
 +    fun applyToSettings(base: Settings): Settings {
-+        // 背景图只写「当前助手」：别的助手一个字节都不动
++        // 背景图写给**所有**助手。
++        // 原因：装扮里的界面部分是全局的（颜色 / 材质 / 字体一换全变），
++        // 只有背景图是每个助手各存一份。如果只写当前助手，切到别的助手就会出现
++        // 「粉色界面 + 蓝色背景」这种割裂。既然用户存的是「一整套外观」，那就一整套铺开。
 +        val assistantsWithBackground = if (assistantBackgroundImage.isNotBlank()) {
 +            base.assistants.map { assistant ->
-+                if (assistant.id == base.assistantId) {
-+                    assistant.copy(
-+                        background = assistantBackgroundImage,
-+                        backgroundOpacity = assistantBackgroundOpacity.coerceIn(0f, 1f),
-+                    )
-+                } else {
-+                    assistant
-+                }
++                assistant.copy(
++                    background = assistantBackgroundImage,
++                    backgroundOpacity = assistantBackgroundOpacity.coerceIn(0f, 1f),
++                )
 +            }
 +        } else {
 +            base.assistants
