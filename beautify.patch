@@ -1478,10 +1478,10 @@ index bef7871..c53466b 100644
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
 new file mode 100644
-index 0000000..8080ef6
+index 0000000..5eaf12d
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DecorPreset.kt
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,357 @@
 +package me.rerere.rikkahub.data.datastore
 +
 +import kotlinx.serialization.Serializable
@@ -1509,6 +1509,12 @@ index 0000000..8080ef6
 +    // null = 这套没记录（老数据），应用时保持当前值不动。
 +    val themeId: String? = null,
 +    val dynamicColor: Boolean? = null,
++    // 助手聊天背景图 + 不透明度：这两项挂在**助手**身上，不在 DisplaySetting 里。
++    // 装扮本身不记「是谁的图」，应用时一律写到当前正在用的那个助手上，
++    // 所以同一套装扮换到哪个助手都能用（跨助手应用）。
++    // 空字符串 = 这套没存背景图，应用时不动助手原来的图。
++    val assistantBackgroundImage: String = "",
++    val assistantBackgroundOpacity: Float = 1f,
 +
 +    val showAssistantBubble: Boolean = false,
 +    val bubbleOpacity: Float = 1.0f,
@@ -1700,11 +1706,29 @@ index 0000000..8080ef6
 +     * 界面上的颜色、字体、材质、输入框这些挂在 [DisplaySetting] 上，
 +     * 但「主题预设 / 动态取色」挂在 [Settings] 上，两处都要写才算是真换了一套。
 +     */
-+    fun applyToSettings(base: Settings): Settings = base.copy(
-+        displaySetting = applyTo(base.displaySetting),
-+        themeId = themeId ?: base.themeId,
-+        dynamicColor = dynamicColor ?: base.dynamicColor,
-+    )
++    fun applyToSettings(base: Settings): Settings {
++        // 背景图只写「当前助手」：别的助手一个字节都不动
++        val assistantsWithBackground = if (assistantBackgroundImage.isNotBlank()) {
++            base.assistants.map { assistant ->
++                if (assistant.id == base.assistantId) {
++                    assistant.copy(
++                        background = assistantBackgroundImage,
++                        backgroundOpacity = assistantBackgroundOpacity.coerceIn(0f, 1f),
++                    )
++                } else {
++                    assistant
++                }
++            }
++        } else {
++            base.assistants
++        }
++        return base.copy(
++            displaySetting = applyTo(base.displaySetting),
++            themeId = themeId ?: base.themeId,
++            dynamicColor = dynamicColor ?: base.dynamicColor,
++            assistants = assistantsWithBackground,
++        )
++    }
 +
 +    companion object {
 +        /** 从当前 [DisplaySetting] 抓一份快照。 */
@@ -1713,12 +1737,16 @@ index 0000000..8080ef6
 +            name: String,
 +            themeId: String? = null,
 +            dynamicColor: Boolean? = null,
++            assistantBackground: String? = null,
++            assistantBackgroundOpacity: Float = 1f,
 +        ): DecorPreset = DecorPreset(
 +            id = UUID.randomUUID().toString(),
 +            name = name,
 +            createdAt = System.currentTimeMillis(),
 +            themeId = themeId,
 +            dynamicColor = dynamicColor,
++            assistantBackgroundImage = assistantBackground.orEmpty(),
++            assistantBackgroundOpacity = assistantBackgroundOpacity,
 +            showAssistantBubble = from.showAssistantBubble,
 +            bubbleOpacity = from.bubbleOpacity,
 +            showModelIcon = from.showModelIcon,
@@ -2162,10 +2190,10 @@ index 205e822..acf633b 100644
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
 new file mode 100644
-index 0000000..ffffb35
+index 0000000..301fa11
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,80 @@
 +package me.rerere.rikkahub.data.files
 +
 +import android.content.Context
@@ -2186,12 +2214,13 @@ index 0000000..ffffb35
 + */
 +private const val DECOR_IMAGE_DIR = "decor"
 +
-+/** 装扮里最多这么多个图片槽位：输入框 / 侧边栏 / 用户气泡 / AI 气泡 / 全屏编辑页 */
++/** 装扮里的图片槽位：输入框 / 侧边栏 / 用户气泡 / AI 气泡 / 全屏编辑页 / 助手聊天背景 */
 +private const val SLOT_INPUT = "input"
 +private const val SLOT_DRAWER = "drawer"
 +private const val SLOT_USER_BUBBLE = "userBubble"
 +private const val SLOT_ASSISTANT_BUBBLE = "assistantBubble"
 +private const val SLOT_FULL_SCREEN = "fullScreen"
++private const val SLOT_ASSISTANT_BG = "assistantBg"
 +
 +/**
 + * 把 [preset] 里引用的图片全部落成本套装扮自己的副本，返回一份改好路径的新快照。
@@ -2228,6 +2257,7 @@ index 0000000..ffffb35
 +        userBubbleImage = copySlot(preset.userBubbleImage, SLOT_USER_BUBBLE),
 +        assistantBubbleImage = copySlot(preset.assistantBubbleImage, SLOT_ASSISTANT_BUBBLE),
 +        fullScreenEditorBgImage = copySlot(preset.fullScreenEditorBgImage, SLOT_FULL_SCREEN),
++        assistantBackgroundImage = copySlot(preset.assistantBackgroundImage, SLOT_ASSISTANT_BG),
 +    )
 +}
 +
@@ -2244,6 +2274,47 @@ index 0000000..ffffb35
 +            ?.forEach { it.delete() }
 +    }
 +}
+diff --git a/app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt b/app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt
+index e49be76..235c301 100644
+--- a/app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt
+@@ -43,6 +43,9 @@ data class Assistant(
+     val workspaceId: Uuid? = null,
+     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
+     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
++    // 这个助手专用的上下文压缩提示词：null / 空白 = 用「模型设置 → 提示词 → 上下文压缩」里那份全局的。
++    // 这样玩角色扮演的助手和聊剧情的助手可以各用各的压缩策略，切助手就自动切提示词，不用手动改
++    val compressPrompt: String? = null,
+     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景
+     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
+     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
+diff --git a/app/src/main/java/me/rerere/rikkahub/service/ChatService.kt b/app/src/main/java/me/rerere/rikkahub/service/ChatService.kt
+index 22abacc..48e1c54 100644
+--- a/app/src/main/java/me/rerere/rikkahub/service/ChatService.kt
++++ b/app/src/main/java/me/rerere/rikkahub/service/ChatService.kt
+@@ -933,6 +933,13 @@ class ChatService(
+ 
+         val providerHandler = providerManager.getProviderByType(provider)
+ 
++        // 压缩提示词：优先用这个会话所属助手自己那份，没设才退回全局那份
++        val assistantCompressPrompt = settings.assistants
++            .firstOrNull { it.id == conversation.assistantId }
++            ?.compressPrompt
++            ?.takeIf { it.isNotBlank() }
++        val effectiveCompressPrompt = assistantCompressPrompt ?: settings.compressPrompt
++
+         val maxMessagesPerChunk = 256
+         val allMessages = conversation.currentMessages
+ 
+@@ -961,7 +968,7 @@ class ChatService(
+ 
+         suspend fun compressMessages(messages: List<UIMessage>): String {
+             val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText(maxLength = 2000) }
+-            val prompt = settings.compressPrompt.applyPlaceholders(
++            val prompt = effectiveCompressPrompt.applyPlaceholders(
+                 "content" to contentToCompress,
+                 "target_tokens" to targetTokens.toString(),
+                 "additional_context" to if (additionalPrompt.isNotBlank()) {
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
 index 45c3d83..1bd85a2 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt
@@ -6496,6 +6567,112 @@ index 0000000..9619dfa
 +    ).toLong() and 0xFFFFFFL
 +    return (alphaInt shl 24) or rgb
 +}
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
+index 6b188d3..1d1f289 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
+@@ -81,26 +81,27 @@ fun ExtensionSelector(
+             modifier = Modifier.fillMaxWidth(),
+             edgePadding = 4.dp,
+         ) {
++            // 顺序按「用得最多的排前面」：模式注入 → 世界书 → 快捷消息 → Skills
+             Tab(
+                 selected = pagerState.currentPage == 0,
+                 onClick = {
+                     scope.launch { pagerState.animateScrollToPage(0) }
+                 },
+-                text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
++                text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
+             )
+             Tab(
+                 selected = pagerState.currentPage == 1,
+                 onClick = {
+                     scope.launch { pagerState.animateScrollToPage(1) }
+                 },
+-                text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
++                text = { Text(stringResource(R.string.extension_selector_tab_lorebooks)) }
+             )
+             Tab(
+                 selected = pagerState.currentPage == 2,
+                 onClick = {
+                     scope.launch { pagerState.animateScrollToPage(2) }
+                 },
+-                text = { Text(stringResource(R.string.extension_selector_tab_lorebooks)) }
++                text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
+             )
+             Tab(
+                 selected = pagerState.currentPage == 3,
+@@ -119,30 +120,6 @@ fun ExtensionSelector(
+         ) { page ->
+             when (page) {
+                 0 -> {
+-                    if (settings.quickMessages.isNotEmpty()) {
+-                        QuickMessagesContent(
+-                            quickMessages = settings.quickMessages,
+-                            selectedIds = assistant.quickMessageIds,
+-                            onToggle = { id, checked ->
+-                                val newIds = if (checked) {
+-                                    assistant.quickMessageIds + id
+-                                } else {
+-                                    assistant.quickMessageIds - id
+-                                }
+-                                onUpdate(assistant.copy(quickMessageIds = newIds))
+-                            },
+-                            onManage = onNavigateToQuickMessages,
+-                        )
+-                    } else {
+-                        ExtensionEmptyState(
+-                            message = stringResource(R.string.extension_selector_quick_messages_empty),
+-                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+-                            onAction = onNavigateToQuickMessages,
+-                        )
+-                    }
+-                }
+-
+-                1 -> {
+                     if (settings.modeInjections.isNotEmpty()) {
+                         ModeInjectionsContent(
+                             modeInjections = settings.modeInjections,
+@@ -170,7 +147,7 @@ fun ExtensionSelector(
+                     }
+                 }
+ 
+-                2 -> {
++                1 -> {
+                     if (settings.lorebooks.isNotEmpty()) {
+                         LorebooksContent(
+                             lorebooks = settings.lorebooks,
+@@ -198,6 +175,30 @@ fun ExtensionSelector(
+                     }
+                 }
+ 
++                2 -> {
++                    if (settings.quickMessages.isNotEmpty()) {
++                        QuickMessagesContent(
++                            quickMessages = settings.quickMessages,
++                            selectedIds = assistant.quickMessageIds,
++                            onToggle = { id, checked ->
++                                val newIds = if (checked) {
++                                    assistant.quickMessageIds + id
++                                } else {
++                                    assistant.quickMessageIds - id
++                                }
++                                onUpdate(assistant.copy(quickMessageIds = newIds))
++                            },
++                            onManage = onNavigateToQuickMessages,
++                        )
++                    } else {
++                        ExtensionEmptyState(
++                            message = stringResource(R.string.extension_selector_quick_messages_empty),
++                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
++                            onAction = onNavigateToQuickMessages,
++                        )
++                    }
++                }
++
+                 3 -> {
+                     if (skills.isNotEmpty()) {
+                         SkillsContent(
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt b/app/src/main/java/me/rerere/rikkahub/ui/context/LocalChatHazeState.kt
 new file mode 100644
 index 0000000..806957f
@@ -6515,6 +6692,77 @@ index 0000000..806957f
 + * 用到它的地方会自己跳过模糊。
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
+index f9383da..531df42 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
+@@ -210,6 +210,66 @@ private fun AssistantPromptContent(
+             }
+         }
+ 
++        // 上下文压缩提示词：这个助手可以有自己的那一份。
++        // 玩角色扮演的助手要的是「保住人设和关系进度」，聊剧情的助手要的是「保住时间线和大纲」，
++        // 两种策略完全不一样，所以按助手分开存，切助手就自动跟着换。
++        Card(
++            colors = CustomColors.cardColorsOnSurfaceContainer
++        ) {
++            Column(
++                modifier = Modifier.padding(16.dp),
++                verticalArrangement = Arrangement.spacedBy(8.dp)
++            ) {
++                val compressPromptValue = rememberTextFieldState(
++                    initialText = assistant.compressPrompt.orEmpty(),
++                )
++                LaunchedEffect(Unit) {
++                    snapshotFlow { compressPromptValue.text }.collect {
++                        val text = it.toString()
++                        onUpdate(
++                            assistant.copy(
++                                compressPrompt = text.ifBlank { null }
++                            )
++                        )
++                    }
++                }
++
++                Text(
++                    text = "上下文压缩提示词",
++                    style = MaterialTheme.typography.titleSmall,
++                )
++                Text(
++                    text = "留空就用「模型设置 → 提示词 → 上下文压缩」里那份全局的；填了之后只有这个助手用它，切助手自动换。",
++                    style = MaterialTheme.typography.labelSmall,
++                )
++                TextArea(
++                    state = compressPromptValue,
++                    label = "这个助手专用的压缩提示词",
++                    minLines = 6,
++                    maxLines = 16,
++                )
++                Row(
++                    modifier = Modifier.fillMaxWidth(),
++                    horizontalArrangement = Arrangement.End,
++                ) {
++                    TextButton(
++                        onClick = {
++                            compressPromptValue.setTextAndPlaceCursorAtEnd(settings.compressPrompt)
++                        }
++                    ) {
++                        Text("载入全局那份")
++                    }
++                    TextButton(
++                        onClick = {
++                            compressPromptValue.setTextAndPlaceCursorAtEnd("")
++                        }
++                    ) {
++                        Text("清空（用全局）")
++                    }
++                }
++            }
++        }
++
+         Card(
+             colors = CustomColors.cardColorsOnSurfaceContainer
+         ) {
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 index 86fcdcf..150eff6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
@@ -8053,10 +8301,10 @@ index 370fcc5..2901a13 100644
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
 new file mode 100644
-index 0000000..8b45c24
+index 0000000..f711850
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,332 @@
 +package me.rerere.rikkahub.ui.pages.setting
 +
 +import androidx.compose.foundation.background
@@ -8270,11 +8518,15 @@ index 0000000..8b45c24
 +                                                onClick = {
 +                                                    expanded = false
 +                                                    scope.launch {
++                                                        val currentAssistant = settings.assistants
++                                                            .firstOrNull { it.id == settings.assistantId }
 +                                                        val captured = DecorPreset.capture(
 +                                                            from = current,
 +                                                            name = preset.name,
 +                                                            themeId = settings.themeId,
 +                                                            dynamicColor = settings.dynamicColor,
++                                                            assistantBackground = currentAssistant?.background,
++                                                            assistantBackgroundOpacity = currentAssistant?.backgroundOpacity ?: 1f,
 +                                                        ).copy(id = preset.id, createdAt = preset.createdAt)
 +                                                        val updated = withContext(Dispatchers.IO) {
 +                                                            snapshotDecorImages(context, captured)
@@ -8333,11 +8585,15 @@ index 0000000..8b45c24
 +                        if (target == null) {
 +                            // 图片先落成这套装扮自己的副本，之后再换图也不会把它带走
 +                            scope.launch {
++                                val currentAssistant = settings.assistants
++                                    .firstOrNull { it.id == settings.assistantId }
 +                                val captured = DecorPreset.capture(
 +                                    from = current,
 +                                    name = name,
 +                                    themeId = settings.themeId,
 +                                    dynamicColor = settings.dynamicColor,
++                                    assistantBackground = currentAssistant?.background,
++                                    assistantBackgroundOpacity = currentAssistant?.backgroundOpacity ?: 1f,
 +                                )
 +                                val withImages = withContext(Dispatchers.IO) {
 +                                    snapshotDecorImages(context, captured)
