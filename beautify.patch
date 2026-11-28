@@ -7214,10 +7214,26 @@ index 2d8b556..db324c2 100644
          viewModelScope.launch {
              val settings = settings.value
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
-index 989e2dc..1369ae8 100644
+index 989e2dc..028f1a0 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
-@@ -44,6 +44,8 @@ fun AssistantExtensionsPage(id: String) {
+@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.res.stringResource
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import me.rerere.rikkahub.data.datastore.SettingsStore
+ import me.rerere.rikkahub.R
+ import kotlinx.coroutines.launch
+ import me.rerere.rikkahub.Screen
+@@ -33,6 +34,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
+ import me.rerere.rikkahub.ui.context.LocalNavController
+ import me.rerere.rikkahub.ui.theme.CustomColors
+ import org.koin.androidx.compose.koinViewModel
++import org.koin.compose.koinInject
+ import org.koin.core.parameter.parametersOf
+ 
+ @Composable
+@@ -44,6 +46,8 @@ fun AssistantExtensionsPage(id: String) {
      val navController = LocalNavController.current
      val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
      val scope = rememberCoroutineScope()
@@ -7226,7 +7242,7 @@ index 989e2dc..1369ae8 100644
      val pagerState = rememberPagerState { 4 }
  
      Scaffold(
-@@ -143,6 +145,19 @@ fun AssistantExtensionsPage(id: String) {
+@@ -143,6 +147,19 @@ fun AssistantExtensionsPage(id: String) {
                                          else assistant.modeInjectionIds - injId
                                          vm.update(assistant.copy(modeInjectionIds = newIds))
                                      },
@@ -7246,7 +7262,7 @@ index 989e2dc..1369ae8 100644
                                  )
                                  TextButton(
                                      onClick = { navController.navigate(Screen.Prompts) },
-@@ -172,6 +187,19 @@ fun AssistantExtensionsPage(id: String) {
+@@ -172,6 +189,19 @@ fun AssistantExtensionsPage(id: String) {
                                          else assistant.lorebookIds - injId
                                          vm.update(assistant.copy(lorebookIds = newIds))
                                      },
