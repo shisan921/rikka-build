@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..056f2c9 100644
+index 9606588..94aeb05 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,12 @@
@@ -8994,7 +8994,7 @@ index 9606588..056f2c9 100644
                  )
              }
          }
-@@ -167,24 +184,52 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +184,60 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9021,7 +9021,15 @@ index 9606588..056f2c9 100644
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
 +    // 组的先后就是数据里的先后。以前强制「未分组垫底」，
 +    // 结果最后一组的 ↓ 和未分组的 ↑ 都被丢掉，看着就像"点了没反应"
-+    val orderedFolders = remember(grouped) { grouped.keys.toList() }
++    // 点箭头时先在本地换一下顺序让界面立刻动起来，
++    // 不然要等设置流回灌才有反应（过去表现为"点了半天没变化，切走再回来才对"）
++    var folderOrderOverride by remember { mutableStateOf<List<String>?>(null) }
++    val orderedFolders = remember(grouped, folderOrderOverride) {
++        folderOrderOverride
++            ?.filter { it in grouped.keys }
++            ?.takeIf { it.isNotEmpty() && it.size == grouped.keys.size }
++            ?: grouped.keys.toList()
++    }
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = modeInjections.toMutableList()
 -        val item = newList.removeAt(from.index)
@@ -9055,7 +9063,7 @@ index 9606588..056f2c9 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +278,74 @@ private fun ModeInjectionTab(
+@@ -233,25 +286,82 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9094,6 +9102,10 @@ index 9606588..056f2c9 100644
 +                            onRename = { renameTarget = folder },
 +                            onMoveGroupUp = if (orderedFolders.indexOf(folder) > 0) {
 +                                {
++                                    folderOrderOverride = orderedFolders.withSwapped(
++                                        orderedFolders.indexOf(folder),
++                                        orderedFolders.indexOf(folder) - 1,
++                                    )
 +                                    onUpdate(
 +                                        swapFolderBlocks(
 +                                            items = workingList,
@@ -9110,6 +9122,10 @@ index 9606588..056f2c9 100644
 +                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex
 +                            ) {
 +                                {
++                                    folderOrderOverride = orderedFolders.withSwapped(
++                                        orderedFolders.indexOf(folder),
++                                        orderedFolders.indexOf(folder) + 1,
++                                    )
 +                                    onUpdate(
 +                                        swapFolderBlocks(
 +                                            items = workingList,
@@ -9147,7 +9163,7 @@ index 9606588..056f2c9 100644
                  }
              }
          }
-@@ -294,6 +388,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +404,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9193,7 +9209,7 @@ index 9606588..056f2c9 100644
  }
  
  @Composable
-@@ -441,6 +574,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +590,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9209,7 +9225,7 @@ index 9606588..056f2c9 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +721,46 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +737,54 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9230,7 +9246,15 @@ index 9606588..056f2c9 100644
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
 +    // 组的先后就是数据里的先后。以前强制「未分组垫底」，
 +    // 结果最后一组的 ↓ 和未分组的 ↑ 都被丢掉，看着就像"点了没反应"
-+    val orderedFolders = remember(grouped) { grouped.keys.toList() }
++    // 点箭头时先在本地换一下顺序让界面立刻动起来，
++    // 不然要等设置流回灌才有反应（过去表现为"点了半天没变化，切走再回来才对"）
++    var folderOrderOverride by remember { mutableStateOf<List<String>?>(null) }
++    val orderedFolders = remember(grouped, folderOrderOverride) {
++        folderOrderOverride
++            ?.filter { it in grouped.keys }
++            ?.takeIf { it.isNotEmpty() && it.size == grouped.keys.size }
++            ?: grouped.keys.toList()
++    }
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = lorebooks.toMutableList()
 -        val item = newList.removeAt(from.index)
@@ -9264,7 +9288,7 @@ index 9606588..056f2c9 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +809,73 @@ private fun LorebookTab(
+@@ -645,25 +833,81 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9302,6 +9326,10 @@ index 9606588..056f2c9 100644
 +                            onRename = { renameTarget = folder },
 +                            onMoveGroupUp = if (orderedFolders.indexOf(folder) > 0) {
 +                                {
++                                    folderOrderOverride = orderedFolders.withSwapped(
++                                        orderedFolders.indexOf(folder),
++                                        orderedFolders.indexOf(folder) - 1,
++                                    )
 +                                    onUpdate(
 +                                        swapFolderBlocks(
 +                                            items = workingList,
@@ -9318,6 +9346,10 @@ index 9606588..056f2c9 100644
 +                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex
 +                            ) {
 +                                {
++                                    folderOrderOverride = orderedFolders.withSwapped(
++                                        orderedFolders.indexOf(folder),
++                                        orderedFolders.indexOf(folder) + 1,
++                                    )
 +                                    onUpdate(
 +                                        swapFolderBlocks(
 +                                            items = workingList,
@@ -9355,7 +9387,7 @@ index 9606588..056f2c9 100644
                  }
              }
          }
-@@ -706,6 +918,45 @@ private fun LorebookTab(
+@@ -706,6 +950,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9401,7 +9433,7 @@ index 9606588..056f2c9 100644
  }
  
  @Composable
-@@ -872,6 +1123,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1155,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9417,7 +9449,7 @@ index 9606588..056f2c9 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1452,102 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1484,111 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9456,19 +9488,18 @@ index 9606588..056f2c9 100644
 +            modifier = Modifier.size(18.dp),
 +            tint = MaterialTheme.colorScheme.onSurfaceVariant,
 +        )
++        // 名字和数量合成一个 Text 并让它吃掉剩余宽度，
++        // 否则「名字 + 数量 + 上移 + 下移 + 铅笔」五样挤一行，右边两个按钮会被挤出屏幕、点不到
 +        Text(
-+            text = label,
++            text = if (count > 0) "$label  ·  $count" else label,
 +            style = MaterialTheme.typography.titleSmall,
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis,
 +            modifier = Modifier.weight(1f),
-+        )
-+        Text(
-+            text = "$count",
-+            style = MaterialTheme.typography.labelMedium,
-+            color = MaterialTheme.colorScheme.onSurfaceVariant,
 +        )
 +        // 整组上下挪：组头不参与拖动（一参与就把拖动坐标算乱），改用这两个小箭头
 +        if (onMoveGroupUp != null) {
-+            IconButton(onClick = onMoveGroupUp, modifier = Modifier.size(32.dp)) {
++            IconButton(onClick = onMoveGroupUp, modifier = Modifier.size(30.dp)) {
 +                Icon(
 +                    imageVector = HugeIcons.ArrowUp01,
 +                    contentDescription = "整组上移",
@@ -9478,7 +9509,7 @@ index 9606588..056f2c9 100644
 +            }
 +        }
 +        if (onMoveGroupDown != null) {
-+            IconButton(onClick = onMoveGroupDown, modifier = Modifier.size(32.dp)) {
++            IconButton(onClick = onMoveGroupDown, modifier = Modifier.size(30.dp)) {
 +                Icon(
 +                    imageVector = HugeIcons.ArrowDown01,
 +                    contentDescription = "整组下移",
@@ -9487,7 +9518,7 @@ index 9606588..056f2c9 100644
 +                )
 +            }
 +        }
-+        IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
++        IconButton(onClick = onRename, modifier = Modifier.size(30.dp)) {
 +            Icon(
 +                imageVector = HugeIcons.PencilEdit01,
 +                contentDescription = "改组名",
@@ -9519,6 +9550,16 @@ index 9606588..056f2c9 100644
 +    order[from] = order[to]
 +    order[to] = tmp
 +    return order.flatMap { f -> items.filter { folderOf(it) == f } }
++}
++
++/** 交换列表里两个下标，返回新列表（越界时原样返回） */
++private fun List<String>.withSwapped(a: Int, b: Int): List<String> {
++    if (a !in indices || b !in indices || a == b) return this
++    return toMutableList().apply {
++        val tmp = this[a]
++        this[a] = this[b]
++        this[b] = tmp
++    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
 new file mode 100644
