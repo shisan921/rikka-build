@@ -1843,37 +1843,48 @@ index 0000000..cfc3049
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-index 205e822..85fd499 100644
+index 205e822..351721c 100644
 --- a/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt
-@@ -144,6 +144,8 @@ class SettingsStore(
+@@ -144,6 +144,11 @@ class SettingsStore(
          val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
          val LOREBOOKS = stringPreferencesKey("lorebooks")
          val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
++        // 提示词注入 / 世界书列表里「哪些分组是展开的」：纯 UI 记忆，跟着设置一起存
++        val EXPANDED_MODE_INJECTION_FOLDERS = stringPreferencesKey("expanded_mode_injection_folders")
++        val EXPANDED_LOREBOOK_FOLDERS = stringPreferencesKey("expanded_lorebook_folders")
 +        // 装扮：用户自己保存的一整套视觉快照（设置 · 装扮）
 +        val DECOR_PRESETS = stringPreferencesKey("decor_presets")
  
          // 备份提醒
          val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
-@@ -210,6 +212,7 @@ class SettingsStore(
+@@ -210,6 +215,9 @@ class SettingsStore(
                  preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
                  preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
                  preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
 +                preferences[DECOR_PRESETS] = JsonInstant.encodeToString(settings.decorPresets)
++                preferences[EXPANDED_MODE_INJECTION_FOLDERS] = JsonInstant.encodeToString(settings.expandedModeInjectionFolders)
++                preferences[EXPANDED_LOREBOOK_FOLDERS] = JsonInstant.encodeToString(settings.expandedLorebookFolders)
                  preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
                  preferences[WEB_SERVER_PORT] = settings.webServerPort
                  preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-@@ -305,6 +308,9 @@ class SettingsStore(
+@@ -305,6 +313,15 @@ class SettingsStore(
                  quickMessages = preferences[QUICK_MESSAGES]?.let {
                      JsonInstant.decodeFromString(it)
                  } ?: emptyList(),
 +                decorPresets = preferences[DECOR_PRESETS]?.let {
 +                    JsonInstant.decodeFromString(it)
 +                } ?: emptyList(),
++                expandedModeInjectionFolders = preferences[EXPANDED_MODE_INJECTION_FOLDERS]?.let {
++                    JsonInstant.decodeFromString(it)
++                } ?: emptyList(),
++                expandedLorebookFolders = preferences[EXPANDED_LOREBOOK_FOLDERS]?.let {
++                    JsonInstant.decodeFromString(it)
++                } ?: emptyList(),
                  webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                  webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                  webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
-@@ -406,6 +412,7 @@ class SettingsStore(
+@@ -406,6 +423,7 @@ class SettingsStore(
                  modeInjections = settings.modeInjections.distinctBy { it.id },
                  lorebooks = settings.lorebooks.distinctBy { it.id },
                  quickMessages = settings.quickMessages.distinctBy { it.id },
@@ -1881,16 +1892,19 @@ index 205e822..85fd499 100644
              )
          }
          .onEach {
-@@ -558,6 +565,8 @@ data class Settings(
+@@ -558,6 +576,11 @@ data class Settings(
      val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
      val lorebooks: List<Lorebook> = emptyList(),
      val quickMessages: List<QuickMessage> = emptyList(),
 +    // 装扮：用户保存的一整套视觉快照
 +    val decorPresets: List<DecorPreset> = emptyList(),
++    // 提示词注入 / 世界书列表里展开着的分组名（纯 UI 记忆，跟外观无关）
++    val expandedModeInjectionFolders: List<String> = emptyList(),
++    val expandedLorebookFolders: List<String> = emptyList(),
      val webServerEnabled: Boolean = false,
      val webServerPort: Int = 8080,
      val webServerJwtEnabled: Boolean = false,
-@@ -595,6 +604,16 @@ enum class ChatFontFamily {
+@@ -595,6 +618,16 @@ enum class ChatFontFamily {
      CUSTOM,
  }
  
@@ -1907,7 +1921,7 @@ index 205e822..85fd499 100644
  @Serializable
  enum class BackgroundEffectType {
      @SerialName("blur")
-@@ -604,17 +623,113 @@ enum class BackgroundEffectType {
+@@ -604,17 +637,113 @@ enum class BackgroundEffectType {
      GLASS,
  }
  
@@ -2021,7 +2035,7 @@ index 205e822..85fd499 100644
      val showTokenUsage: Boolean = true,
      val showThinkingContent: Boolean = true,
      val autoCloseThinking: Boolean = true,
-@@ -642,8 +757,174 @@ data class DisplaySetting(
+@@ -642,8 +771,174 @@ data class DisplaySetting(
      val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
      val chatCustomFontPath: String = "",
      val chatCustomFontName: String = "",
@@ -3077,7 +3091,7 @@ index 45c3d83..1bd85a2 100644
              }
          }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ExtensionContent.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ExtensionContent.kt
-index 15d793d..45b2cec 100644
+index 15d793d..1b90f93 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ExtensionContent.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ai/ExtensionContent.kt
 @@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ai
@@ -3116,16 +3130,17 @@ index 15d793d..45b2cec 100644
  
  @Composable
  fun ModeInjectionsContent(
-@@ -38,25 +47,68 @@ fun ModeInjectionsContent(
+@@ -38,25 +47,71 @@ fun ModeInjectionsContent(
      selectedIds: Set<kotlin.uuid.Uuid>,
      onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
      modifier: Modifier = Modifier,
 +    /** 整组开关：一次写完全组，避免一条条设置互相覆盖 */
 +    onToggleMany: ((Set<kotlin.uuid.Uuid>, Boolean) -> Unit)? = null,
++    /** 哪些分组是展开的（由调用方持久化，进来时就是上次的样子） */
++    expandedFolders: Set<String> = emptySet(),
++    onExpandedFoldersChange: (Set<String>) -> Unit = {},
      onManage: (() -> Unit)? = null,
  ) {
-+    // 分组折叠：进来时全部收起，点组头开哪个看哪个
-+    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
 +    val rows = remember(modeInjections, expandedFolders) {
 +        buildFolderRows(
 +            items = modeInjections,
@@ -3158,11 +3173,13 @@ index 15d793d..45b2cec 100644
 +                    selectedCount = chosen,
 +                    collapsed = row.folder !in expandedFolders,
 +                    onToggleCollapse = {
-+                        expandedFolders = if (row.folder in expandedFolders) {
-+                            expandedFolders - row.folder
-+                        } else {
-+                            expandedFolders + row.folder
-+                        }
++                        onExpandedFoldersChange(
++                            if (row.folder in expandedFolders) {
++                                expandedFolders - row.folder
++                            } else {
++                                expandedFolders + row.folder
++                            }
++                        )
 +                    },
 +                    onToggleAll = { checked ->
 +                        // 没有批量回调就一条条点（调用方没提供时也能用，只是多写几次设置）
@@ -3197,15 +3214,17 @@ index 15d793d..45b2cec 100644
          }
          if (onManage != null) {
              item {
-@@ -72,34 +124,75 @@ fun LorebooksContent(
+@@ -72,34 +127,79 @@ fun LorebooksContent(
      selectedIds: Set<kotlin.uuid.Uuid>,
      onToggle: (kotlin.uuid.Uuid, Boolean) -> Unit,
      modifier: Modifier = Modifier,
 +    /** 整组开关：一次写完全组 */
 +    onToggleMany: ((Set<kotlin.uuid.Uuid>, Boolean) -> Unit)? = null,
++    /** 哪些分组是展开的（由调用方持久化） */
++    expandedFolders: Set<String> = emptySet(),
++    onExpandedFoldersChange: (Set<String>) -> Unit = {},
      onManage: (() -> Unit)? = null,
  ) {
-+    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
 +    val rows = remember(lorebooks, expandedFolders) {
 +        buildFolderRows(
 +            items = lorebooks,
@@ -3230,13 +3249,6 @@ index 15d793d..45b2cec 100644
 -                            text = lorebook.description,
 -                            style = MaterialTheme.typography.bodySmall,
 -                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
--                        )
--                    }
--                } else null,
--                trailingContent = {
--                    Switch(
--                        checked = selectedIds.contains(lorebook.id),
--                        onCheckedChange = { checked -> onToggle(lorebook.id, checked) }
 +        items(rows, key = { it.key }) { row ->
 +            if (row.isHeader) {
 +                val groupItems = lorebooks.filter { it.folder == row.folder }
@@ -3247,11 +3259,19 @@ index 15d793d..45b2cec 100644
 +                    selectedCount = chosen,
 +                    collapsed = row.folder !in expandedFolders,
 +                    onToggleCollapse = {
-+                        expandedFolders = if (row.folder in expandedFolders) {
-+                            expandedFolders - row.folder
-+                        } else {
-+                            expandedFolders + row.folder
-+                        }
++                        onExpandedFoldersChange(
++                            if (row.folder in expandedFolders) {
++                                expandedFolders - row.folder
++                            } else {
++                                expandedFolders + row.folder
++                            }
+                         )
+-                    }
+-                } else null,
+-                trailingContent = {
+-                    Switch(
+-                        checked = selectedIds.contains(lorebook.id),
+-                        onCheckedChange = { checked -> onToggle(lorebook.id, checked) }
 +                    },
 +                    onToggleAll = { checked ->
 +                        val ids = groupItems.map { it.id }.toSet()
@@ -3294,7 +3314,7 @@ index 15d793d..45b2cec 100644
          }
          if (onManage != null) {
              item {
-@@ -234,3 +327,49 @@ fun ExtensionEmptyState(
+@@ -234,3 +334,49 @@ fun ExtensionEmptyState(
          }
      }
  }
@@ -6905,10 +6925,28 @@ index 0000000..9619dfa
 +    return (alphaInt shl 24) or rgb
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
-index 6b188d3..8444d60 100644
+index 6b188d3..587d19c 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/ui/ExtensionSelector.kt
-@@ -81,26 +81,27 @@ fun ExtensionSelector(
+@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
+ import kotlinx.coroutines.launch
+ import me.rerere.rikkahub.R
+ import me.rerere.rikkahub.data.datastore.Settings
++import me.rerere.rikkahub.data.datastore.SettingsStore
+ import me.rerere.rikkahub.data.files.SkillManager
+ import me.rerere.rikkahub.data.files.SkillMetadata
+ import me.rerere.rikkahub.data.model.Assistant
+@@ -48,6 +49,9 @@ fun ExtensionSelector(
+     onNavigateToSkills: () -> Unit = {},
+ ) {
+     val skillManager: SkillManager = koinInject()
++    // 分组展开状态存进设置里：点开一次，下次进来还是那个样子
++    val settingsStore: SettingsStore = koinInject()
++    val folderScope = rememberCoroutineScope()
+     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
+ 
+     LaunchedEffect(Unit) {
+@@ -81,26 +85,27 @@ fun ExtensionSelector(
              modifier = Modifier.fillMaxWidth(),
              edgePadding = 4.dp,
          ) {
@@ -6939,7 +6977,7 @@ index 6b188d3..8444d60 100644
              )
              Tab(
                  selected = pagerState.currentPage == 3,
-@@ -119,30 +120,6 @@ fun ExtensionSelector(
+@@ -119,30 +124,6 @@ fun ExtensionSelector(
          ) { page ->
              when (page) {
                  0 -> {
@@ -6970,10 +7008,18 @@ index 6b188d3..8444d60 100644
                      if (settings.modeInjections.isNotEmpty()) {
                          ModeInjectionsContent(
                              modeInjections = settings.modeInjections,
-@@ -159,6 +136,19 @@ fun ExtensionSelector(
+@@ -159,6 +140,27 @@ fun ExtensionSelector(
                                      onUpdate(assistant.copy(modeInjectionIds = newIds))
                                  }
                              },
++                            expandedFolders = settings.expandedModeInjectionFolders.toSet(),
++                            onExpandedFoldersChange = { names ->
++                                folderScope.launch {
++                                    settingsStore.update {
++                                        it.copy(expandedModeInjectionFolders = names.toList())
++                                    }
++                                }
++                            },
 +                            onToggleMany = { ids, checked ->
 +                                // 整组一次写完：一条条调会把前一次的结果覆盖掉
 +                                val newIds = if (checked) {
@@ -6990,7 +7036,7 @@ index 6b188d3..8444d60 100644
                              onManage = onNavigateToPrompts,
                          )
                      } else {
-@@ -170,7 +160,7 @@ fun ExtensionSelector(
+@@ -170,7 +172,7 @@ fun ExtensionSelector(
                      }
                  }
  
@@ -6999,10 +7045,18 @@ index 6b188d3..8444d60 100644
                      if (settings.lorebooks.isNotEmpty()) {
                          LorebooksContent(
                              lorebooks = settings.lorebooks,
-@@ -187,6 +177,18 @@ fun ExtensionSelector(
+@@ -187,6 +189,26 @@ fun ExtensionSelector(
                                      onUpdate(assistant.copy(lorebookIds = newIds))
                                  }
                              },
++                            expandedFolders = settings.expandedLorebookFolders.toSet(),
++                            onExpandedFoldersChange = { names ->
++                                folderScope.launch {
++                                    settingsStore.update {
++                                        it.copy(expandedLorebookFolders = names.toList())
++                                    }
++                                }
++                            },
 +                            onToggleMany = { ids, checked ->
 +                                val newIds = if (checked) {
 +                                    selectedLorebookIds + ids
@@ -7018,7 +7072,7 @@ index 6b188d3..8444d60 100644
                              onManage = onNavigateToPrompts,
                          )
                      } else {
-@@ -198,6 +200,30 @@ fun ExtensionSelector(
+@@ -198,6 +220,30 @@ fun ExtensionSelector(
                      }
                  }
  
@@ -7160,13 +7214,30 @@ index 2d8b556..db324c2 100644
          viewModelScope.launch {
              val settings = settings.value
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
-index 989e2dc..4247929 100644
+index 989e2dc..1369ae8 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantExtensionsPage.kt
-@@ -143,6 +143,11 @@ fun AssistantExtensionsPage(id: String) {
+@@ -44,6 +44,8 @@ fun AssistantExtensionsPage(id: String) {
+     val navController = LocalNavController.current
+     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+     val scope = rememberCoroutineScope()
++    // 分组展开状态存进设置，下次进来保持一致
++    val settingsStore: SettingsStore = koinInject()
+     val pagerState = rememberPagerState { 4 }
+ 
+     Scaffold(
+@@ -143,6 +145,19 @@ fun AssistantExtensionsPage(id: String) {
                                          else assistant.modeInjectionIds - injId
                                          vm.update(assistant.copy(modeInjectionIds = newIds))
                                      },
++                                    expandedFolders = settings.expandedModeInjectionFolders.toSet(),
++                                    onExpandedFoldersChange = { names ->
++                                        scope.launch {
++                                            settingsStore.update {
++                                                it.copy(expandedModeInjectionFolders = names.toList())
++                                            }
++                                        }
++                                    },
 +                                    onToggleMany = { injIds, checked ->
 +                                        val newIds = if (checked) assistant.modeInjectionIds + injIds
 +                                        else assistant.modeInjectionIds - injIds
@@ -7175,10 +7246,18 @@ index 989e2dc..4247929 100644
                                  )
                                  TextButton(
                                      onClick = { navController.navigate(Screen.Prompts) },
-@@ -172,6 +177,11 @@ fun AssistantExtensionsPage(id: String) {
+@@ -172,6 +187,19 @@ fun AssistantExtensionsPage(id: String) {
                                          else assistant.lorebookIds - injId
                                          vm.update(assistant.copy(lorebookIds = newIds))
                                      },
++                                    expandedFolders = settings.expandedLorebookFolders.toSet(),
++                                    onExpandedFoldersChange = { names ->
++                                        scope.launch {
++                                            settingsStore.update {
++                                                it.copy(expandedLorebookFolders = names.toList())
++                                            }
++                                        }
++                                    },
 +                                    onToggleMany = { injIds, checked ->
 +                                        val newIds = if (checked) assistant.lorebookIds + injIds
 +                                        else assistant.lorebookIds - injIds
@@ -8822,7 +8901,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..ddc0dac 100644
+index 9606588..0ed9e29 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,11 @@
@@ -8859,14 +8938,45 @@ index 9606588..ddc0dac 100644
  import androidx.compose.ui.graphics.graphicsLayer
  import androidx.compose.ui.input.nestedscroll.nestedScroll
  import androidx.compose.ui.res.stringResource
-@@ -173,11 +179,32 @@ private fun ModeInjectionTab(
+@@ -152,12 +158,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+             when (page) {
+                 0 -> ModeInjectionTab(
+                     modeInjections = settings.modeInjections,
+-                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) }
++                    onUpdate = { vm.updateSettings(settings.copy(modeInjections = it)) },
++                    expandedFolders = settings.expandedModeInjectionFolders.toSet(),
++                    onExpandedFoldersChange = { names ->
++                        vm.updateSettings(settings.copy(expandedModeInjectionFolders = names.toList()))
++                    },
+                 )
+ 
+                 1 -> LorebookTab(
+                     lorebooks = settings.lorebooks,
+-                    onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) }
++                    onUpdate = { vm.updateSettings(settings.copy(lorebooks = it)) },
++                    expandedFolders = settings.expandedLorebookFolders.toSet(),
++                    onExpandedFoldersChange = { names ->
++                        vm.updateSettings(settings.copy(expandedLorebookFolders = names.toList()))
++                    },
+                 )
+             }
+         }
+@@ -167,17 +181,52 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+ @Composable
+ private fun ModeInjectionTab(
+     modeInjections: List<PromptInjection.ModeInjection>,
+-    onUpdate: (List<PromptInjection.ModeInjection>) -> Unit
++    onUpdate: (List<PromptInjection.ModeInjection>) -> Unit,
++    expandedFolders: Set<String> = emptySet(),
++    onExpandedFoldersChange: (Set<String>) -> Unit = {},
+ ) {
+     var expanded by rememberSaveable { mutableStateOf(true) }
      val lazyListState = rememberLazyListState()
      val toaster = LocalToaster.current
      val currentModeInjections by rememberUpdatedState(modeInjections)
 +
 +    // ---- 分组：按「分组名」折叠，组头点一下收起/展开，长按改组名 ----
-+    // 存的是「已展开」的组名：初始空集合 = 进来时全部折叠，这正是分组的意义
-+    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
++    // 展开着的分组由调用方持久化传进来（初始空 = 全收起）
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
 +    val rows = remember(modeInjections, expandedFolders) {
 +        buildFolderRows(
@@ -8885,7 +8995,20 @@ index 9606588..ddc0dac 100644
 +        // from/to 是「可见行」的索引（组头也算一行），先换算回条目 id 再在完整列表里挪
 +        val fromRow = rowsState.getOrNull(from.index)
 +        val toRow = rowsState.getOrNull(to.index)
-+        if (fromRow?.entryId == null || toRow?.entryId == null) return@rememberReorderableLazyListState
++        if (fromRow == null || toRow == null) return@rememberReorderableLazyListState
++
++        if (fromRow.isHeader && toRow.isHeader) {
++            // 拖组头 = 整组换位置：把这一组所有条目搬到目标组前面
++            val movingGroup = modeInjections.filter { it.folder == fromRow.folder }
++            val rest = modeInjections.filterNot { it.folder == fromRow.folder }
++            val targetIndex = rest.indexOfFirst { it.folder == toRow.folder }
++            val insertAt = if (targetIndex >= 0) targetIndex else rest.size
++            val newList = rest.toMutableList().apply { addAll(insertAt, movingGroup) }
++            onUpdate(newList)
++            return@rememberReorderableLazyListState
++        }
++
++        if (fromRow.entryId == null || toRow.entryId == null) return@rememberReorderableLazyListState
 +        val list = modeInjections.toMutableList()
 +        val moving = list.firstOrNull { it.id == fromRow.entryId }
 +            ?: return@rememberReorderableLazyListState
@@ -8896,7 +9019,7 @@ index 9606588..ddc0dac 100644
      }
      val editState = useEditState<PromptInjection.ModeInjection> { edited ->
          val index = modeInjections.indexOfFirst { it.id == edited.id }
-@@ -233,24 +260,45 @@ private fun ModeInjectionTab(
+@@ -233,24 +282,60 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -8907,32 +9030,41 @@ index 9606588..ddc0dac 100644
 -                    ) { isDragging ->
 -                        ModeInjectionCard(
 -                            injection = injection,
--                            modifier = Modifier
--                                .longPressDraggableHandle()
--                                .graphicsLayer {
--                                    if (isDragging) {
--                                        scaleX = 1.05f
--                                        scaleY = 1.05f
--                                    }
--                                },
--                            onEdit = { editState.open(injection) },
--                            onDelete = { onUpdate(modeInjections - injection) }
 +                items(rows, key = { it.key }) { row ->
 +                    val entryId = row.entryId
 +                    if (entryId == null) {
++                        ReorderableItem(
++                            state = reorderableState,
++                            key = row.key
++                        ) { isDragging ->
 +                        PromptFolderHeader(
+                             modifier = Modifier
+                                 .longPressDraggableHandle()
+                                 .graphicsLayer {
+                                     if (isDragging) {
+-                                        scaleX = 1.05f
+-                                        scaleY = 1.05f
++                                        scaleX = 1.02f
++                                        scaleY = 1.02f
+                                     }
+                                 },
+-                            onEdit = { editState.open(injection) },
+-                            onDelete = { onUpdate(modeInjections - injection) }
 +                            label = row.folder.ifBlank { "未分组" },
 +                            count = row.count,
 +                            collapsed = row.folder !in expandedFolders,
 +                            onToggle = {
-+                                expandedFolders = if (row.folder in expandedFolders) {
-+                                    expandedFolders - row.folder
-+                                } else {
-+                                    expandedFolders + row.folder
-+                                }
++                                onExpandedFoldersChange(
++                                    if (row.folder in expandedFolders) {
++                                        expandedFolders - row.folder
++                                    } else {
++                                        expandedFolders + row.folder
++                                    }
++                                )
 +                            },
 +                            onRename = { renameTarget = row.folder },
                          )
++                        }
 +                    } else {
 +                        val injection = modeInjections.firstOrNull { it.id == entryId }
 +                        if (injection != null) {
@@ -8959,7 +9091,7 @@ index 9606588..ddc0dac 100644
                      }
                  }
              }
-@@ -294,6 +342,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +379,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9005,7 +9137,7 @@ index 9606588..ddc0dac 100644
  }
  
  @Composable
-@@ -441,6 +528,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +565,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9021,14 +9153,21 @@ index 9606588..ddc0dac 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -585,11 +681,31 @@ private fun LorebookTab(
+@@ -579,17 +712,49 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+ @Composable
+ private fun LorebookTab(
+     lorebooks: List<Lorebook>,
+-    onUpdate: (List<Lorebook>) -> Unit
++    onUpdate: (List<Lorebook>) -> Unit,
++    expandedFolders: Set<String> = emptySet(),
++    onExpandedFoldersChange: (Set<String>) -> Unit = {},
+ ) {
+     var expanded by rememberSaveable { mutableStateOf(true) }
      val lazyListState = rememberLazyListState()
      val toaster = LocalToaster.current
      val currentLorebooks by rememberUpdatedState(lorebooks)
 +
 +    // ---- 分组：跟「模式注入」同一套逻辑（组头折叠 + 长按改名）----
-+    // 存「已展开」的组名，初始空 = 全部折叠
-+    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
 +    val rows = remember(lorebooks, expandedFolders) {
 +        buildFolderRows(
@@ -9046,7 +9185,19 @@ index 9606588..ddc0dac 100644
 -        onUpdate(newList)
 +        val fromRow = rowsState.getOrNull(from.index)
 +        val toRow = rowsState.getOrNull(to.index)
-+        if (fromRow?.entryId == null || toRow?.entryId == null) return@rememberReorderableLazyListState
++        if (fromRow == null || toRow == null) return@rememberReorderableLazyListState
++
++        if (fromRow.isHeader && toRow.isHeader) {
++            val movingGroup = lorebooks.filter { it.folder == fromRow.folder }
++            val rest = lorebooks.filterNot { it.folder == fromRow.folder }
++            val targetIndex = rest.indexOfFirst { it.folder == toRow.folder }
++            val insertAt = if (targetIndex >= 0) targetIndex else rest.size
++            val newList = rest.toMutableList().apply { addAll(insertAt, movingGroup) }
++            onUpdate(newList)
++            return@rememberReorderableLazyListState
++        }
++
++        if (fromRow.entryId == null || toRow.entryId == null) return@rememberReorderableLazyListState
 +        val list = lorebooks.toMutableList()
 +        val moving = list.firstOrNull { it.id == fromRow.entryId }
 +            ?: return@rememberReorderableLazyListState
@@ -9057,7 +9208,7 @@ index 9606588..ddc0dac 100644
      }
      val editState = useEditState<Lorebook> { edited ->
          val index = lorebooks.indexOfFirst { it.id == edited.id }
-@@ -645,24 +761,45 @@ private fun LorebookTab(
+@@ -645,24 +810,60 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9068,32 +9219,41 @@ index 9606588..ddc0dac 100644
 -                    ) { isDragging ->
 -                        LorebookCard(
 -                            book = book,
--                            modifier = Modifier
--                                .longPressDraggableHandle()
--                                .graphicsLayer {
--                                    if (isDragging) {
--                                        scaleX = 1.05f
--                                        scaleY = 1.05f
--                                    }
--                                },
--                            onEdit = { editState.open(book) },
--                            onDelete = { onUpdate(lorebooks - book) }
 +                items(rows, key = { it.key }) { row ->
 +                    val entryId = row.entryId
 +                    if (entryId == null) {
++                        ReorderableItem(
++                            state = reorderableState,
++                            key = row.key
++                        ) { isDragging ->
 +                        PromptFolderHeader(
+                             modifier = Modifier
+                                 .longPressDraggableHandle()
+                                 .graphicsLayer {
+                                     if (isDragging) {
+-                                        scaleX = 1.05f
+-                                        scaleY = 1.05f
++                                        scaleX = 1.02f
++                                        scaleY = 1.02f
+                                     }
+                                 },
+-                            onEdit = { editState.open(book) },
+-                            onDelete = { onUpdate(lorebooks - book) }
 +                            label = row.folder.ifBlank { "未分组" },
 +                            count = row.count,
 +                            collapsed = row.folder !in expandedFolders,
 +                            onToggle = {
-+                                expandedFolders = if (row.folder in expandedFolders) {
-+                                    expandedFolders - row.folder
-+                                } else {
-+                                    expandedFolders + row.folder
-+                                }
++                                onExpandedFoldersChange(
++                                    if (row.folder in expandedFolders) {
++                                        expandedFolders - row.folder
++                                    } else {
++                                        expandedFolders + row.folder
++                                    }
++                                )
 +                            },
 +                            onRename = { renameTarget = row.folder },
                          )
++                        }
 +                    } else {
 +                        val book = lorebooks.firstOrNull { it.id == entryId }
 +                        if (book != null) {
@@ -9120,7 +9280,7 @@ index 9606588..ddc0dac 100644
                      }
                  }
              }
-@@ -706,6 +843,45 @@ private fun LorebookTab(
+@@ -706,6 +907,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9166,7 +9326,7 @@ index 9606588..ddc0dac 100644
  }
  
  @Composable
-@@ -872,6 +1048,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1112,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9182,7 +9342,7 @@ index 9606588..ddc0dac 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1377,46 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1441,47 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9201,9 +9361,10 @@ index 9606588..ddc0dac 100644
 +    collapsed: Boolean,
 +    onToggle: () -> Unit,
 +    onRename: () -> Unit,
++    modifier: Modifier = Modifier,
 +) {
 +    Row(
-+        modifier = Modifier
++        modifier = modifier
 +            .fillMaxWidth()
 +            .clip(RoundedCornerShape(12.dp))
 +            .combinedClickable(onClick = onToggle, onLongClick = onRename)
