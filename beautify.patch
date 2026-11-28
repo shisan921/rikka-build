@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..94aeb05 100644
+index 9606588..f37530a 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,12 @@
@@ -8955,15 +8955,18 @@ index 9606588..94aeb05 100644
  import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateOf
  import androidx.compose.runtime.remember
-@@ -73,6 +80,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -71,8 +78,10 @@ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.runtime.saveable.rememberSaveable
  import androidx.compose.runtime.setValue
++import androidx.compose.runtime.snapshotFlow
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
 +import androidx.compose.ui.draw.clip
  import androidx.compose.ui.graphics.graphicsLayer
  import androidx.compose.ui.input.nestedscroll.nestedScroll
  import androidx.compose.ui.res.stringResource
-@@ -81,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
+@@ -81,6 +90,7 @@ import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.dp
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import kotlinx.coroutines.launch
@@ -8971,7 +8974,7 @@ index 9606588..94aeb05 100644
  import me.rerere.ai.core.MessageRole
  import me.rerere.rikkahub.R
  import me.rerere.rikkahub.data.export.LorebookSerializer
-@@ -152,12 +161,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -152,12 +162,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
              when (page) {
                  0 -> ModeInjectionTab(
                      modeInjections = settings.modeInjections,
@@ -8994,7 +8997,7 @@ index 9606588..94aeb05 100644
                  )
              }
          }
-@@ -167,24 +184,60 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +185,77 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9005,6 +9008,23 @@ index 9606588..94aeb05 100644
  ) {
      var expanded by rememberSaveable { mutableStateOf(true) }
      val lazyListState = rememberLazyListState()
++    // 记住滚到哪儿了：离开页面再进来，还停在原来那段
++    LaunchedEffect(Unit) {
++        if (PromptScrollMemo.modeIndex > 0 || PromptScrollMemo.modeOffset > 0) {
++            lazyListState.scrollToItem(
++                PromptScrollMemo.modeIndex,
++                PromptScrollMemo.modeOffset,
++            )
++        }
++    }
++    LaunchedEffect(lazyListState) {
++        snapshotFlow {
++            lazyListState.firstVisibleItemIndex to lazyListState.firstVisibleItemScrollOffset
++        }.collect { (i, o) ->
++            PromptScrollMemo.modeIndex = i
++            PromptScrollMemo.modeOffset = o
++        }
++    }
      val toaster = LocalToaster.current
      val currentModeInjections by rememberUpdatedState(modeInjections)
 +
@@ -9063,7 +9083,7 @@ index 9606588..94aeb05 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +286,82 @@ private fun ModeInjectionTab(
+@@ -233,25 +304,82 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9163,7 +9183,7 @@ index 9606588..94aeb05 100644
                  }
              }
          }
-@@ -294,6 +404,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +422,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9209,7 +9229,7 @@ index 9606588..94aeb05 100644
  }
  
  @Composable
-@@ -441,6 +590,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +608,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9225,7 +9245,7 @@ index 9606588..94aeb05 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +737,54 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +755,70 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9236,6 +9256,22 @@ index 9606588..94aeb05 100644
  ) {
      var expanded by rememberSaveable { mutableStateOf(true) }
      val lazyListState = rememberLazyListState()
++    LaunchedEffect(Unit) {
++        if (PromptScrollMemo.loreIndex > 0 || PromptScrollMemo.loreOffset > 0) {
++            lazyListState.scrollToItem(
++                PromptScrollMemo.loreIndex,
++                PromptScrollMemo.loreOffset,
++            )
++        }
++    }
++    LaunchedEffect(lazyListState) {
++        snapshotFlow {
++            lazyListState.firstVisibleItemIndex to lazyListState.firstVisibleItemScrollOffset
++        }.collect { (i, o) ->
++            PromptScrollMemo.loreIndex = i
++            PromptScrollMemo.loreOffset = o
++        }
++    }
      val toaster = LocalToaster.current
      val currentLorebooks by rememberUpdatedState(lorebooks)
 +
@@ -9288,7 +9324,7 @@ index 9606588..94aeb05 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +833,81 @@ private fun LorebookTab(
+@@ -645,25 +867,81 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9387,7 +9423,7 @@ index 9606588..94aeb05 100644
                  }
              }
          }
-@@ -706,6 +950,45 @@ private fun LorebookTab(
+@@ -706,6 +984,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9433,7 +9469,7 @@ index 9606588..94aeb05 100644
  }
  
  @Composable
-@@ -872,6 +1155,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1189,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9449,7 +9485,7 @@ index 9606588..94aeb05 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1484,111 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1518,124 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9560,6 +9596,19 @@ index 9606588..94aeb05 100644
 +        this[a] = this[b]
 +        this[b] = tmp
 +    }
++}
++
++/**
++ * 提示词注入 / 世界书两个列表各自的滚动位置。
++ *
++ * 只放内存里（进程内有效）：离开页面再进来会回到原处，App 重启后归零——
++ * 后者反而合理，重启通常就是"重新找东西"。
++ */
++private object PromptScrollMemo {
++    var modeIndex = 0
++    var modeOffset = 0
++    var loreIndex = 0
++    var loreOffset = 0
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
 new file mode 100644
