@@ -2190,13 +2190,14 @@ index 205e822..acf633b 100644
  @Serializable
 diff --git a/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
 new file mode 100644
-index 0000000..301fa11
+index 0000000..ef4ca31
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/data/files/DecorImageStore.kt
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,104 @@
 +package me.rerere.rikkahub.data.files
 +
 +import android.content.Context
++import android.net.Uri
 +import me.rerere.rikkahub.data.datastore.DecorPreset
 +import java.io.File
 +
@@ -2232,23 +2233,42 @@ index 0000000..301fa11
 +    if (preset.id.isBlank()) return preset
 +    val dir = File(context.filesDir, DECOR_IMAGE_DIR)
 +
-+    fun copySlot(path: String, slot: String): String {
++    // [keepNonFile] = true 时，非文件路径（content:// 、https:// 这类外链）原样保留，
++    // 交给 Coil 自己去解析；否则视为失效，置空。助手背景图必须是 true——
++    // 它存的本来就是「本地文件 URI 或网络 URL」，不是 App 内部目录里的绝对路径。
++    fun target(slot: String): File = File(dir, "${preset.id}-$slot.jpg")
++
++    fun copySlot(path: String, slot: String, keepNonFile: Boolean = false): String {
 +        if (path.isBlank()) return ""
 +        val source = File(path)
-+        if (!source.isFile) return ""
-+        return runCatching {
-+            if (!dir.exists()) dir.mkdirs()
-+            val target = File(dir, "${preset.id}-$slot.jpg")
-+            // 覆盖写：同一套装扮重复保存时只留最新那张，不会越攒越多
-+            if (target.absolutePath == source.absolutePath) {
-+                // 已经是本套装扮的副本（重复保存），不用再拷一次
-+                target.absolutePath
-+            } else {
-+                if (target.exists()) target.delete()
-+                source.copyTo(target, overwrite = true)
-+                target.absolutePath
-+            }
-+        }.getOrElse { "" }
++        // ① 普通文件路径（设置里那些插图素材就是这么存的）
++        if (source.isFile) {
++            return runCatching {
++                if (!dir.exists()) dir.mkdirs()
++                val out = target(slot)
++                if (out.absolutePath == source.absolutePath) return out.absolutePath
++                if (out.exists()) out.delete()
++                source.copyTo(out, overwrite = true)
++                out.absolutePath
++            }.getOrElse { "" }
++        }
++        // ② URI 形式（相册选的助手背景图走的是 content:// 或 file://，不是绝对路径）
++        if (path.startsWith("content://") || path.startsWith("file://")) {
++            return runCatching {
++                if (!dir.exists()) dir.mkdirs()
++                val out = target(slot)
++                val input = context.contentResolver.openInputStream(Uri.parse(path))
++                if (input == null) {
++                    // 打不开（权限失效 / 文件没了）→ 退回原串，让 Coil 自己再试一次
++                    if (keepNonFile) path else ""
++                } else {
++                    input.use { source -> out.outputStream().use { source.copyTo(it) } }
++                    out.absolutePath
++                }
++            }.getOrElse { if (keepNonFile) path else "" }
++        }
++        // ③ 网络链接之类：复制不了，原样留着
++        return if (keepNonFile) path else ""
 +    }
 +
 +    return preset.copy(
@@ -2257,7 +2277,11 @@ index 0000000..301fa11
 +        userBubbleImage = copySlot(preset.userBubbleImage, SLOT_USER_BUBBLE),
 +        assistantBubbleImage = copySlot(preset.assistantBubbleImage, SLOT_ASSISTANT_BUBBLE),
 +        fullScreenEditorBgImage = copySlot(preset.fullScreenEditorBgImage, SLOT_FULL_SCREEN),
-+        assistantBackgroundImage = copySlot(preset.assistantBackgroundImage, SLOT_ASSISTANT_BG),
++        assistantBackgroundImage = copySlot(
++            preset.assistantBackgroundImage,
++            SLOT_ASSISTANT_BG,
++            keepNonFile = true,
++        ),
 +    )
 +}
 +
@@ -3200,10 +3224,10 @@ index 354c7b8..5946274 100644
      modifier: Modifier = Modifier,
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt
 new file mode 100644
-index 0000000..5e21207
+index 0000000..915d1cd
 --- /dev/null
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/components/decor/DecorPresetCard.kt
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,254 @@
 +package me.rerere.rikkahub.ui.components.decor
 +
 +import androidx.compose.foundation.background
@@ -3265,8 +3289,17 @@ index 0000000..5e21207
 + * 89 个字段的 equals，开销可以忽略，比另存一个「当前 id」更不容易出错
 + * （用户手改设置后也能立刻反映出来）。
 + */
-+fun DecorPreset.matchesCurrent(current: Settings): Boolean =
-+    applyToSettings(current) == current
++fun DecorPreset.matchesCurrent(current: Settings): Boolean {
++    // 只比真正会变的那几样，不构造新的 Settings ——
++    // 装扮面板横滑时每张卡都要算一次，applyToSettings 会复制整份 assistants 列表，那样太浪费
++    val assistant = current.assistants.firstOrNull { it.id == current.assistantId }
++    val displayMatches = applyTo(current.displaySetting) == current.displaySetting
++    val themeMatches = (themeId == null || themeId == current.themeId) &&
++        (dynamicColor == null || dynamicColor == current.dynamicColor)
++    val backgroundMatches = assistantBackgroundImage.isBlank() ||
++        assistantBackgroundImage == assistant?.background
++    return displayMatches && themeMatches && backgroundMatches
++}
 +
 +/**
 + * 装扮卡片：左边一块配色样板（主色 / 气泡色 / 输入框色叠在一起），右边名字 + 摘要。
@@ -7596,7 +7629,7 @@ index 6f7f137..2dfc8a1 100644
                          Row(
                              modifier = Modifier
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
-index 5460f45..e8f863e 100644
+index 5460f45..2476a4c 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt
 @@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
@@ -7706,7 +7739,7 @@ index 5460f45..e8f863e 100644
      val attachmentPickerActions = rememberChatAttachmentPickerActions(
          inputState = inputState,
          setting = setting,
-@@ -307,218 +322,252 @@ private fun ChatPageContent(
+@@ -307,218 +322,251 @@ private fun ChatPageContent(
  
      TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
  
@@ -7982,10 +8015,10 @@ index 5460f45..e8f863e 100644
 +                            vm.deleteMessage(it)
                          }
 -                        inputState.clearInput()
--                    },
+                     },
 -                    onUpdateChatModel = {
 -                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
-                     },
+-                    },
 -                    onUpdateAssistant = {
 -                        vm.updateSettings(
 -                            setting.copy(
@@ -8029,12 +8062,12 @@ index 5460f45..e8f863e 100644
 +                        scope.launch {
 +                            chatListState.requestScrollToItem(index)
 +                        }
-+                    },
-+                    onToolApproval = { toolCallId, approved, reason ->
-+                        vm.handleToolApproval(toolCallId, approved, reason)
                      },
 -                    onMoreClick = {
 -                        showFilesSheet = true
++                    onToolApproval = { toolCallId, approved, reason ->
++                        vm.handleToolApproval(toolCallId, approved, reason)
++                    },
 +                    onToolAnswer = { toolCallId, answer ->
 +                        vm.handleToolAnswer(toolCallId, answer)
 +                    },
@@ -8126,10 +8159,9 @@ index 5460f45..e8f863e 100644
 +            DecorPresetPickerSheet(
 +                setting = setting,
 +                onApply = { preset ->
-+                    vm.updateSettings(
-+                        preset.applyToSettings(setting)
-+                    )
++                    // 先把面板关掉再写设置：面板退场和整页重组分两帧，切换时不会一顿
 +                    showDecorSheet = false
++                    vm.updateSettings(preset.applyToSettings(setting))
                  },
 -                onConversationSystemPromptChange = { newPrompt ->
 -                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
@@ -8142,7 +8174,7 @@ index 5460f45..e8f863e 100644
              )
          }
  
-@@ -531,6 +580,8 @@ private fun ChatPageContent(
+@@ -531,6 +579,8 @@ private fun ChatPageContent(
                  vm = vm,
                  attachmentPickerActions = attachmentPickerActions,
                  onStartVoiceMode = onStartVoiceMode,
@@ -8151,7 +8183,7 @@ index 5460f45..e8f863e 100644
                  onDismiss = { showFilesSheet = false },
              )
          }
-@@ -546,6 +597,9 @@ private fun ChatFilesPickerSheet(
+@@ -546,6 +596,9 @@ private fun ChatFilesPickerSheet(
      vm: ChatVM,
      attachmentPickerActions: ChatAttachmentPickerActions,
      onStartVoiceMode: () -> Unit,
@@ -8161,7 +8193,7 @@ index 5460f45..e8f863e 100644
      onDismiss: () -> Unit,
  ) {
      val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
-@@ -593,6 +647,8 @@ private fun ChatFilesPickerSheet(
+@@ -593,6 +646,8 @@ private fun ChatFilesPickerSheet(
                  vm.updateConversation(it)
                  vm.saveConversationAsync()
              },
@@ -8170,7 +8202,7 @@ index 5460f45..e8f863e 100644
              showInjectionSheet = showInjectionSheet,
              onShowInjectionSheetChange = { showInjectionSheet = it },
              showCompressDialog = showCompressDialog,
-@@ -622,6 +678,7 @@ private fun ChatFilesPickerSheet(
+@@ -622,6 +677,7 @@ private fun ChatFilesPickerSheet(
  private fun TopBar(
      settings: Settings,
      conversation: Conversation,
@@ -8178,7 +8210,7 @@ index 5460f45..e8f863e 100644
      drawerState: DrawerState,
      bigScreen: Boolean,
      previewMode: Boolean,
-@@ -636,6 +693,13 @@ private fun TopBar(
+@@ -636,6 +692,13 @@ private fun TopBar(
      }
  
      TopAppBar(
