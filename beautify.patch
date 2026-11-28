@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..d11dc7c 100644
+index 9606588..60e7994 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,11 @@
@@ -8993,7 +8993,7 @@ index 9606588..d11dc7c 100644
                  )
              }
          }
-@@ -167,24 +183,49 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +183,79 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9027,16 +9027,46 @@ index 9606588..d11dc7c 100644
 -        newList.add(to.index, item)
 -        onUpdate(newList)
 +        val current = latestList
-+        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
-+        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
-+        val fromIndex = current.indexOfFirst { it.id == fromId }
-+        val toIndex = current.indexOfFirst { it.id == toId }
-+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) {
++        val fromFolder = (from.key as? String)?.removePrefix("header:")
++        if (fromFolder != null) {
++            // 拖的是组头 = 整组换位置：把这一组所有条目搬到目标组的前面
++            val targetFolder = (to.key as? String)?.removePrefix("header:")
++                ?: (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id }?.folder }
++                ?: return@rememberReorderableLazyListState
++            if (targetFolder == fromFolder) return@rememberReorderableLazyListState
++            val movingGroup = current.filter { it.folder == fromFolder }
++            val rest = current.filterNot { it.folder == fromFolder }
++            val insertAt = rest.indexOfFirst { it.folder == targetFolder }
++            val newList = rest.toMutableList()
++                .apply { addAll(if (insertAt >= 0) insertAt else size, movingGroup) }
++            onUpdate(newList)
 +            return@rememberReorderableLazyListState
 +        }
++        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
++        val fromIndex = current.indexOfFirst { it.id == fromId }
++        if (fromIndex < 0) return@rememberReorderableLazyListState
++
++        // 目标可能落在某个条目上，也可能落在**组头**上（拖到别组的地盘）。
++        // 落在组头上就归到那个组；落在条目上就跟着那条走（跨组时同样把分组改过去），
++        // 否则下一帧重新分组又会把它拉回原来那组。
++        val toEntry = (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id } }
++        val targetFolder = toEntry?.folder
++            ?: (to.key as? String)?.removePrefix("header:")
++            ?: return@rememberReorderableLazyListState
++
 +        val list = current.toMutableList()
-+        val moving = list.removeAt(fromIndex)
-+        list.add(toIndex, moving)
++        val original = list.removeAt(fromIndex)
++        val moving = if (original.folder != targetFolder) {
++            original.copy(folder = targetFolder)
++        } else {
++            original
++        }
++        val insertAt = if (toEntry != null) {
++            list.indexOfFirst { it.id == toEntry.id }
++        } else {
++            list.indexOfFirst { it.folder == targetFolder }
++        }
++        if (insertAt >= 0) list.add(insertAt, moving) else list.add(list.size, moving)
 +        onUpdate(list)
      }
      val editState = useEditState<PromptInjection.ModeInjection> { edited ->
@@ -9051,7 +9081,7 @@ index 9606588..d11dc7c 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +274,45 @@ private fun ModeInjectionTab(
+@@ -233,24 +304,54 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9062,22 +9092,25 @@ index 9606588..d11dc7c 100644
 -                    ) { isDragging ->
 -                        ModeInjectionCard(
 -                            injection = injection,
--                            modifier = Modifier
--                                .longPressDraggableHandle()
--                                .graphicsLayer {
--                                    if (isDragging) {
--                                        scaleX = 1.05f
--                                        scaleY = 1.05f
--                                    }
--                                },
--                            onEdit = { editState.open(injection) },
--                            onDelete = { onUpdate(modeInjections - injection) }
 +                // 结构跟原版一致：组头是独立的 item，组内条目才是真正的 items(list, key = 条目 id)。
 +                // 之前把所有行拍平成一串，条目在库里认不出自己，拖动就一直在错位 / 回弹。
 +                orderedFolders.forEach { folder ->
 +                    val groupItems = grouped[folder].orEmpty()
 +                    item(key = "header:$folder") {
++                        ReorderableItem(state = reorderableState, key = "header:$folder") { isDragging ->
 +                        PromptFolderHeader(
+                             modifier = Modifier
+                                 .longPressDraggableHandle()
+                                 .graphicsLayer {
+                                     if (isDragging) {
+-                                        scaleX = 1.05f
+-                                        scaleY = 1.05f
++                                        scaleX = 1.02f
++                                        scaleY = 1.02f
+                                     }
+                                 },
+-                            onEdit = { editState.open(injection) },
+-                            onDelete = { onUpdate(modeInjections - injection) }
 +                            label = folder.ifBlank { "未分组" },
 +                            count = groupItems.size,
 +                            collapsed = folder !in expandedFolders,
@@ -9089,7 +9122,8 @@ index 9606588..d11dc7c 100644
 +                            },
 +                            onRename = { renameTarget = folder },
                          )
-                     }
++                        }
++                    }
 +                    if (folder !in expandedFolders) return@forEach
 +                    items(groupItems, key = { it.id }) { injection ->
 +                        ReorderableItem(
@@ -9110,11 +9144,10 @@ index 9606588..d11dc7c 100644
 +                                onDelete = { onUpdate(workingList - injection) }
 +                            )
 +                        }
-+                    }
+                     }
                  }
              }
-         }
-@@ -294,6 +355,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +395,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9160,7 +9193,7 @@ index 9606588..d11dc7c 100644
  }
  
  @Composable
-@@ -441,6 +541,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +581,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9176,7 +9209,7 @@ index 9606588..d11dc7c 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +688,43 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +728,73 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9204,16 +9237,46 @@ index 9606588..d11dc7c 100644
 -        newList.add(to.index, item)
 -        onUpdate(newList)
 +        val current = latestList
-+        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
-+        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
-+        val fromIndex = current.indexOfFirst { it.id == fromId }
-+        val toIndex = current.indexOfFirst { it.id == toId }
-+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) {
++        val fromFolder = (from.key as? String)?.removePrefix("header:")
++        if (fromFolder != null) {
++            // 拖的是组头 = 整组换位置：把这一组所有条目搬到目标组的前面
++            val targetFolder = (to.key as? String)?.removePrefix("header:")
++                ?: (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id }?.folder }
++                ?: return@rememberReorderableLazyListState
++            if (targetFolder == fromFolder) return@rememberReorderableLazyListState
++            val movingGroup = current.filter { it.folder == fromFolder }
++            val rest = current.filterNot { it.folder == fromFolder }
++            val insertAt = rest.indexOfFirst { it.folder == targetFolder }
++            val newList = rest.toMutableList()
++                .apply { addAll(if (insertAt >= 0) insertAt else size, movingGroup) }
++            onUpdate(newList)
 +            return@rememberReorderableLazyListState
 +        }
++        val fromId = from.key as? Uuid ?: return@rememberReorderableLazyListState
++        val fromIndex = current.indexOfFirst { it.id == fromId }
++        if (fromIndex < 0) return@rememberReorderableLazyListState
++
++        // 目标可能落在某个条目上，也可能落在**组头**上（拖到别组的地盘）。
++        // 落在组头上就归到那个组；落在条目上就跟着那条走（跨组时同样把分组改过去），
++        // 否则下一帧重新分组又会把它拉回原来那组。
++        val toEntry = (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id } }
++        val targetFolder = toEntry?.folder
++            ?: (to.key as? String)?.removePrefix("header:")
++            ?: return@rememberReorderableLazyListState
++
 +        val list = current.toMutableList()
-+        val moving = list.removeAt(fromIndex)
-+        list.add(toIndex, moving)
++        val original = list.removeAt(fromIndex)
++        val moving = if (original.folder != targetFolder) {
++            original.copy(folder = targetFolder)
++        } else {
++            original
++        }
++        val insertAt = if (toEntry != null) {
++            list.indexOfFirst { it.id == toEntry.id }
++        } else {
++            list.indexOfFirst { it.folder == targetFolder }
++        }
++        if (insertAt >= 0) list.add(insertAt, moving) else list.add(list.size, moving)
 +        onUpdate(list)
      }
      val editState = useEditState<Lorebook> { edited ->
@@ -9228,7 +9291,7 @@ index 9606588..d11dc7c 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +773,44 @@ private fun LorebookTab(
+@@ -645,24 +843,53 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9239,21 +9302,24 @@ index 9606588..d11dc7c 100644
 -                    ) { isDragging ->
 -                        LorebookCard(
 -                            book = book,
--                            modifier = Modifier
--                                .longPressDraggableHandle()
--                                .graphicsLayer {
--                                    if (isDragging) {
--                                        scaleX = 1.05f
--                                        scaleY = 1.05f
--                                    }
--                                },
--                            onEdit = { editState.open(book) },
--                            onDelete = { onUpdate(lorebooks - book) }
 +                // 跟「模式注入」同一套结构：组头独立 item，组内条目才是真正的 items(list, key = id)
 +                orderedFolders.forEach { folder ->
 +                    val groupItems = grouped[folder].orEmpty()
 +                    item(key = "header:$folder") {
++                        ReorderableItem(state = reorderableState, key = "header:$folder") { isDragging ->
 +                        PromptFolderHeader(
+                             modifier = Modifier
+                                 .longPressDraggableHandle()
+                                 .graphicsLayer {
+                                     if (isDragging) {
+-                                        scaleX = 1.05f
+-                                        scaleY = 1.05f
++                                        scaleX = 1.02f
++                                        scaleY = 1.02f
+                                     }
+                                 },
+-                            onEdit = { editState.open(book) },
+-                            onDelete = { onUpdate(lorebooks - book) }
 +                            label = folder.ifBlank { "未分组" },
 +                            count = groupItems.size,
 +                            collapsed = folder !in expandedFolders,
@@ -9265,7 +9331,8 @@ index 9606588..d11dc7c 100644
 +                            },
 +                            onRename = { renameTarget = folder },
                          )
-                     }
++                        }
++                    }
 +                    if (folder !in expandedFolders) return@forEach
 +                    items(groupItems, key = { it.id }) { book ->
 +                        ReorderableItem(
@@ -9286,11 +9353,10 @@ index 9606588..d11dc7c 100644
 +                                onDelete = { onUpdate(workingList - book) }
 +                            )
 +                        }
-+                    }
+                     }
                  }
              }
-         }
-@@ -706,6 +853,45 @@ private fun LorebookTab(
+@@ -706,6 +933,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9336,7 +9402,7 @@ index 9606588..d11dc7c 100644
  }
  
  @Composable
-@@ -872,6 +1058,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1138,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9352,7 +9418,7 @@ index 9606588..d11dc7c 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1387,56 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1467,56 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
