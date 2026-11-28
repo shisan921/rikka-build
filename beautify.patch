@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..1211e63 100644
+index 9606588..056f2c9 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,12 @@
@@ -8994,7 +8994,7 @@ index 9606588..1211e63 100644
                  )
              }
          }
-@@ -167,24 +184,58 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +184,52 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9019,9 +9019,9 @@ index 9606588..1211e63 100644
 +    // 分组结果缓存起来：以前是在 LazyListScope 里每次重组都 groupBy 一遍，
 +    // 拖动时每帧都要重算，跟原版比就是白白多出来的开销
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
-+    val orderedFolders = remember(grouped) {
-+        grouped.keys.sortedBy { if (it.isBlank()) 1 else 0 }
-+    }
++    // 组的先后就是数据里的先后。以前强制「未分组垫底」，
++    // 结果最后一组的 ↓ 和未分组的 ↑ 都被丢掉，看着就像"点了没反应"
++    val orderedFolders = remember(grouped) { grouped.keys.toList() }
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = modeInjections.toMutableList()
 -        val item = newList.removeAt(from.index)
@@ -9035,18 +9035,12 @@ index 9606588..1211e63 100644
 +        // 目标可能落在某个条目上，也可能落在**组头**上（拖到别组的地盘）。
 +        // 落在组头上就归到那个组；落在条目上就跟着那条走（跨组时同样把分组改过去），
 +        // 否则下一帧重新分组又会把它拉回原来那组。
-+        // 只允许**同一组内**换位置。跨组会把条目搬到别的组、触发重新分组，
-+        // 布局一变拖动就容易抖，所以这里直接不接受。
-+        // 想换组：条目编辑里改「分组」，或者拖组名那行的铅笔。
-+        val toEntry = (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id } }
-+            ?: return@rememberReorderableLazyListState
-+        if (toEntry.folder != current[fromIndex].folder) {
-+            return@rememberReorderableLazyListState
-+        }
++        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
++        val toIndex = current.indexOfFirst { it.id == toId }
++        if (toIndex < 0 || fromIndex == toIndex) return@rememberReorderableLazyListState
 +        val list = current.toMutableList()
 +        val moving = list.removeAt(fromIndex)
-+        val insertAt = list.indexOfFirst { it.id == toEntry.id }
-+        if (insertAt >= 0) list.add(insertAt, moving) else list.add(moving)
++        list.add(toIndex, moving)
 +        onUpdate(list)
      }
      val editState = useEditState<PromptInjection.ModeInjection> { edited ->
@@ -9061,7 +9055,7 @@ index 9606588..1211e63 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +284,75 @@ private fun ModeInjectionTab(
+@@ -233,25 +278,74 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9113,8 +9107,7 @@ index 9606588..1211e63 100644
 +                            } else null,
 +                            onMoveGroupDown = if (
 +                                orderedFolders.indexOf(folder) >= 0 &&
-+                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex &&
-+                                folder.isNotBlank()
++                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex
 +                            ) {
 +                                {
 +                                    onUpdate(
@@ -9154,7 +9147,7 @@ index 9606588..1211e63 100644
                  }
              }
          }
-@@ -294,6 +395,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +388,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9200,7 +9193,7 @@ index 9606588..1211e63 100644
  }
  
  @Composable
-@@ -441,6 +581,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +574,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9216,7 +9209,7 @@ index 9606588..1211e63 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +728,52 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +721,46 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9235,9 +9228,9 @@ index 9606588..1211e63 100644
 +    val workingList = lorebooks
 +    val latestList by rememberUpdatedState(lorebooks)
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
-+    val orderedFolders = remember(grouped) {
-+        grouped.keys.sortedBy { if (it.isBlank()) 1 else 0 }
-+    }
++    // 组的先后就是数据里的先后。以前强制「未分组垫底」，
++    // 结果最后一组的 ↓ 和未分组的 ↑ 都被丢掉，看着就像"点了没反应"
++    val orderedFolders = remember(grouped) { grouped.keys.toList() }
      val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
 -        val newList = lorebooks.toMutableList()
 -        val item = newList.removeAt(from.index)
@@ -9251,18 +9244,12 @@ index 9606588..1211e63 100644
 +        // 目标可能落在某个条目上，也可能落在**组头**上（拖到别组的地盘）。
 +        // 落在组头上就归到那个组；落在条目上就跟着那条走（跨组时同样把分组改过去），
 +        // 否则下一帧重新分组又会把它拉回原来那组。
-+        // 只允许**同一组内**换位置。跨组会把条目搬到别的组、触发重新分组，
-+        // 布局一变拖动就容易抖，所以这里直接不接受。
-+        // 想换组：条目编辑里改「分组」，或者拖组名那行的铅笔。
-+        val toEntry = (to.key as? Uuid)?.let { id -> current.firstOrNull { it.id == id } }
-+            ?: return@rememberReorderableLazyListState
-+        if (toEntry.folder != current[fromIndex].folder) {
-+            return@rememberReorderableLazyListState
-+        }
++        val toId = to.key as? Uuid ?: return@rememberReorderableLazyListState
++        val toIndex = current.indexOfFirst { it.id == toId }
++        if (toIndex < 0 || fromIndex == toIndex) return@rememberReorderableLazyListState
 +        val list = current.toMutableList()
 +        val moving = list.removeAt(fromIndex)
-+        val insertAt = list.indexOfFirst { it.id == toEntry.id }
-+        if (insertAt >= 0) list.add(insertAt, moving) else list.add(moving)
++        list.add(toIndex, moving)
 +        onUpdate(list)
      }
      val editState = useEditState<Lorebook> { edited ->
@@ -9277,7 +9264,7 @@ index 9606588..1211e63 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +822,74 @@ private fun LorebookTab(
+@@ -645,25 +809,73 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9328,8 +9315,7 @@ index 9606588..1211e63 100644
 +                            } else null,
 +                            onMoveGroupDown = if (
 +                                orderedFolders.indexOf(folder) >= 0 &&
-+                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex &&
-+                                folder.isNotBlank()
++                                orderedFolders.indexOf(folder) < orderedFolders.lastIndex
 +                            ) {
 +                                {
 +                                    onUpdate(
@@ -9369,7 +9355,7 @@ index 9606588..1211e63 100644
                  }
              }
          }
-@@ -706,6 +932,45 @@ private fun LorebookTab(
+@@ -706,6 +918,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9415,7 +9401,7 @@ index 9606588..1211e63 100644
  }
  
  @Composable
-@@ -872,6 +1137,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1123,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9431,7 +9417,7 @@ index 9606588..1211e63 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1466,104 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1452,102 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9528,8 +9514,6 @@ index 9606588..1211e63 100644
 +    val from = orderedFolders.indexOf(folder)
 +    val to = from + delta
 +    if (from < 0 || to !in orderedFolders.indices) return items
-+    // 不允许把组挪到「未分组」后面（未分组固定垫底）
-+    if (orderedFolders[to].isBlank()) return items
 +    val order = orderedFolders.toMutableList()
 +    val tmp = order[from]
 +    order[from] = order[to]
