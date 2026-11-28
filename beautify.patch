@@ -8917,10 +8917,10 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..0ed9e29 100644
+index 9606588..bbf209f 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-@@ -1,8 +1,11 @@
+@@ -1,8 +1,12 @@
  package me.rerere.rikkahub.ui.pages.extensions
  
  import me.rerere.hugeicons.HugeIcons
@@ -8928,11 +8928,12 @@ index 9606588..0ed9e29 100644
 +import kotlin.uuid.Uuid
  import me.rerere.hugeicons.stroke.Book01
  import me.rerere.hugeicons.stroke.ArrowDown01
++import me.rerere.hugeicons.stroke.PencilEdit01
 +import me.rerere.hugeicons.stroke.ArrowRight01
  import me.rerere.hugeicons.stroke.Download01
  import me.rerere.hugeicons.stroke.FileDownload
  import me.rerere.hugeicons.stroke.FileImport
-@@ -27,11 +30,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -27,11 +31,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
  import androidx.compose.foundation.layout.height
  import androidx.compose.foundation.layout.imePadding
  import androidx.compose.foundation.layout.offset
@@ -8946,7 +8947,7 @@ index 9606588..0ed9e29 100644
  import androidx.compose.foundation.pager.HorizontalPager
  import androidx.compose.foundation.pager.rememberPagerState
  import androidx.compose.foundation.rememberScrollState
-@@ -73,6 +78,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -73,6 +79,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
  import androidx.compose.runtime.setValue
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
@@ -8954,7 +8955,7 @@ index 9606588..0ed9e29 100644
  import androidx.compose.ui.graphics.graphicsLayer
  import androidx.compose.ui.input.nestedscroll.nestedScroll
  import androidx.compose.ui.res.stringResource
-@@ -152,12 +158,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -152,12 +159,20 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
              when (page) {
                  0 -> ModeInjectionTab(
                      modeInjections = settings.modeInjections,
@@ -8977,7 +8978,7 @@ index 9606588..0ed9e29 100644
                  )
              }
          }
-@@ -167,17 +181,52 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,17 +182,52 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9035,7 +9036,7 @@ index 9606588..0ed9e29 100644
      }
      val editState = useEditState<PromptInjection.ModeInjection> { edited ->
          val index = modeInjections.indexOfFirst { it.id == edited.id }
-@@ -233,24 +282,60 @@ private fun ModeInjectionTab(
+@@ -233,24 +283,61 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9086,19 +9087,20 @@ index 9606588..0ed9e29 100644
 +                        if (injection != null) {
 +                            ReorderableItem(
 +                                state = reorderableState,
-+                                key = injection.id
++                                key = row.key
 +                            ) { isDragging ->
 +                                ModeInjectionCard(
 +                                    injection = injection,
++                                    // 手势放在最外层、缩进放最后：拖动热区覆盖整行，缩进只影响视觉
 +                                    modifier = Modifier
-+                                        .padding(start = 12.dp)
 +                                        .longPressDraggableHandle()
 +                                        .graphicsLayer {
 +                                            if (isDragging) {
 +                                                scaleX = 1.05f
 +                                                scaleY = 1.05f
 +                                            }
-+                                        },
++                                        }
++                                        .padding(start = 12.dp),
 +                                    onEdit = { editState.open(injection) },
 +                                    onDelete = { onUpdate(modeInjections - injection) }
 +                                )
@@ -9107,7 +9109,7 @@ index 9606588..0ed9e29 100644
                      }
                  }
              }
-@@ -294,6 +379,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +381,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9153,7 +9155,7 @@ index 9606588..0ed9e29 100644
  }
  
  @Composable
-@@ -441,6 +565,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +567,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9169,7 +9171,7 @@ index 9606588..0ed9e29 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,17 +712,49 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,17 +714,49 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9224,7 +9226,7 @@ index 9606588..0ed9e29 100644
      }
      val editState = useEditState<Lorebook> { edited ->
          val index = lorebooks.indexOfFirst { it.id == edited.id }
-@@ -645,24 +810,60 @@ private fun LorebookTab(
+@@ -645,24 +812,61 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9275,19 +9277,20 @@ index 9606588..0ed9e29 100644
 +                        if (book != null) {
 +                            ReorderableItem(
 +                                state = reorderableState,
-+                                key = book.id
++                                key = row.key
 +                            ) { isDragging ->
 +                                LorebookCard(
 +                                    book = book,
++                                    // 手势放在最外层、缩进放最后：拖动热区覆盖整行，缩进只影响视觉
 +                                    modifier = Modifier
-+                                        .padding(start = 12.dp)
 +                                        .longPressDraggableHandle()
 +                                        .graphicsLayer {
 +                                            if (isDragging) {
 +                                                scaleX = 1.05f
 +                                                scaleY = 1.05f
 +                                            }
-+                                        },
++                                        }
++                                        .padding(start = 12.dp),
 +                                    onEdit = { editState.open(book) },
 +                                    onDelete = { onUpdate(lorebooks - book) }
 +                                )
@@ -9296,7 +9299,7 @@ index 9606588..0ed9e29 100644
                      }
                  }
              }
-@@ -706,6 +907,45 @@ private fun LorebookTab(
+@@ -706,6 +910,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9342,7 +9345,7 @@ index 9606588..0ed9e29 100644
  }
  
  @Composable
-@@ -872,6 +1112,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1115,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9358,7 +9361,7 @@ index 9606588..0ed9e29 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1441,47 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1444,56 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
@@ -9369,7 +9372,6 @@ index 9606588..0ed9e29 100644
 +/**
 + * 组头：左边折叠箭头、中间组名、右边条数。点一下收起 / 展开，长按改组名。
 + */
-+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 +@Composable
 +private fun PromptFolderHeader(
 +    label: String,
@@ -9383,8 +9385,10 @@ index 9606588..0ed9e29 100644
 +        modifier = modifier
 +            .fillMaxWidth()
 +            .clip(RoundedCornerShape(12.dp))
-+            .combinedClickable(onClick = onToggle, onLongClick = onRename)
-+            .padding(horizontal = 12.dp, vertical = 10.dp),
++            // 点一下收起/展开；长按留给「拖动整组」（由外面的 longPressDraggableHandle 接管），
++            // 所以改名改成右边那个小铅笔，避免两个长按手势打架
++            .clickable(onClick = onToggle)
++            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
 +        verticalAlignment = Alignment.CenterVertically,
 +        horizontalArrangement = Arrangement.spacedBy(8.dp),
 +    ) {
@@ -9404,6 +9408,14 @@ index 9606588..0ed9e29 100644
 +            style = MaterialTheme.typography.labelMedium,
 +            color = MaterialTheme.colorScheme.onSurfaceVariant,
 +        )
++        IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
++            Icon(
++                imageVector = HugeIcons.PencilEdit01,
++                contentDescription = "改组名",
++                modifier = Modifier.size(16.dp),
++                tint = MaterialTheme.colorScheme.onSurfaceVariant,
++            )
++        }
 +    }
 +}
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDecorPresetsPage.kt
