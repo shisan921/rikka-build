@@ -6725,8 +6725,41 @@ index 0000000..806957f
 + * 用到它的地方会自己跳过模糊。
 + */
 +val LocalChatHazeState = staticCompositionLocalOf<HazeState?> { null }
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantDetailVM.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantDetailVM.kt
+index 2d8b556..db324c2 100644
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantDetailVM.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantDetailVM.kt
+@@ -160,6 +160,28 @@ class AssistantDetailVM(
+         }
+     }
+ 
++    /**
++     * 按「改一个字段」的方式更新当前助手。
++     *
++     * 页面里有好几个输入框（系统提示词、压缩提示词…）各自监听自己的文本变化，
++     * 如果都用 [update] 传整份快照，先改的那个会被后改的那个拿旧值盖回去。
++     * 这里每次都从 settings 里取最新的一份再套 transform，避免互相覆盖。
++     */
++    fun updateField(transform: (Assistant) -> Assistant) {
++        viewModelScope.launch {
++            val settings = settings.value
++            val current = settings.assistants.firstOrNull { it.id == assistantId } ?: return@launch
++            val updated = transform(current)
++            settingsStore.update(
++                settings = settings.copy(
++                    assistants = settings.assistants.map {
++                        if (it.id == updated.id) updated else it
++                    }
++                )
++            )
++        }
++    }
++
+     fun update(assistant: Assistant) {
+         viewModelScope.launch {
+             val settings = settings.value
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
-index f9383da..bebb34d 100644
+index f9383da..a77a839 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt
 @@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
@@ -6737,10 +6770,31 @@ index f9383da..bebb34d 100644
  import androidx.compose.foundation.layout.imePadding
  import androidx.compose.foundation.layout.padding
  import androidx.compose.foundation.layout.size
-@@ -210,6 +211,66 @@ private fun AssistantPromptContent(
+@@ -135,7 +136,8 @@ fun AssistantPromptPage(id: String) {
+             innerPadding = innerPadding,
+             assistant = assistant,
+             settings = settings,
+-            onUpdate = { vm.update(it) }
++            onUpdate = { vm.update(it) },
++            onUpdateField = { transform -> vm.updateField(transform) },
+         )
+     }
+ }
+@@ -145,7 +147,8 @@ private fun AssistantPromptContent(
+     innerPadding: PaddingValues,
+     assistant: Assistant,
+     settings: Settings,
+-    onUpdate: (Assistant) -> Unit
++    onUpdate: (Assistant) -> Unit,
++    onUpdateField: ((Assistant) -> Assistant) -> Unit,
+ ) {
+     val context = LocalContext.current
+     val templateTransformer = koinInject<TemplateTransformer>()
+@@ -575,6 +578,66 @@ private fun AssistantPromptContent(
+                 }
              }
          }
- 
++
 +        // 上下文压缩提示词：这个助手可以有自己的那一份。
 +        // 玩角色扮演的助手要的是「保住人设和关系进度」，聊剧情的助手要的是「保住时间线和大纲」，
 +        // 两种策略完全不一样，所以按助手分开存，切助手就自动跟着换。
@@ -6757,25 +6811,24 @@ index f9383da..bebb34d 100644
 +                LaunchedEffect(Unit) {
 +                    snapshotFlow { compressPromptValue.text }.collect {
 +                        val text = it.toString()
-+                        onUpdate(
-+                            assistant.copy(
-+                                compressPrompt = text.ifBlank { null }
-+                            )
-+                        )
++                        // 用 updateField：只改这一个字段，不会把系统提示词框里的内容盖回去
++                        onUpdateField { current ->
++                            current.copy(compressPrompt = text.ifBlank { null })
++                        }
 +                    }
 +                }
 +
 +                Text(
-+                    text = "上下文压缩提示词",
++                    text = "上下文压缩提示词（工具指令，不是人设）",
 +                    style = MaterialTheme.typography.titleSmall,
 +                )
 +                Text(
-+                    text = "留空就用「模型设置 → 提示词 → 上下文压缩」里那份全局的；填了之后只有这个助手用它，切助手自动换。",
++                    text = "这里填的是「怎么把长对话压成摘要」的指令，必须包含 {content} 用来接收对话原文。它跟上面的「系统提示词」完全无关，留空就用全局那份。",
 +                    style = MaterialTheme.typography.labelSmall,
 +                )
 +                TextArea(
 +                    state = compressPromptValue,
-+                    label = "这个助手专用的压缩提示词",
++                    label = "压缩用指令（务必含 {content}）",
 +                    minLines = 6,
 +                    maxLines = 16,
 +                )
@@ -6801,9 +6854,9 @@ index f9383da..bebb34d 100644
 +            }
 +        }
 +
-         Card(
-             colors = CustomColors.cardColorsOnSurfaceContainer
-         ) {
+     }
+ }
+ 
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
 index 86fcdcf..150eff6 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt
