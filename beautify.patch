@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..bbf209f 100644
+index 9606588..d663cf5 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,12 @@
@@ -8937,7 +8937,7 @@ index 9606588..bbf209f 100644
  import androidx.compose.foundation.layout.height
  import androidx.compose.foundation.layout.imePadding
  import androidx.compose.foundation.layout.offset
-+import androidx.compose.foundation.combinedClickable
++import androidx.compose.foundation.clickable
  import androidx.compose.foundation.layout.padding
  import androidx.compose.foundation.layout.size
  import androidx.compose.foundation.lazy.LazyColumn
