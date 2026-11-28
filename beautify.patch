@@ -8917,7 +8917,7 @@ index 370fcc5..2901a13 100644
          Color.Transparent
      }
 diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
-index 9606588..73b9018 100644
+index 9606588..b8eb843 100644
 --- a/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 +++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt
 @@ -1,8 +1,11 @@
@@ -8993,7 +8993,7 @@ index 9606588..73b9018 100644
                  )
              }
          }
-@@ -167,24 +183,44 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
+@@ -167,24 +183,53 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
  @Composable
  private fun ModeInjectionTab(
      modeInjections: List<PromptInjection.ModeInjection>,
@@ -9010,7 +9010,16 @@ index 9606588..73b9018 100644
 +    // ---- 分组：按「分组名」折叠，组头点一下收起/展开，长按改组名 ----
 +    // 展开着的分组由调用方持久化传进来（初始空 = 全收起）
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
-+    val workingList = modeInjections
++    // 拖动期间只在本地挪，**不写设置**；手停下来 700ms 才提交一次。
++    // 之前每挪一格就异步写一次设置，几次写入互相覆盖，表现就是上下乱跳。
++    var dragList by remember { mutableStateOf<List<PromptInjection.ModeInjection>?>(null) }
++    val workingList = dragList ?: modeInjections
++    LaunchedEffect(dragList) {
++        val pending = dragList ?: return@LaunchedEffect
++        delay(700)
++        onUpdate(pending)
++        dragList = null
++    }
 +    // 分组结果缓存起来：以前是在 LazyListScope 里每次重组都 groupBy 一遍，
 +    // 拖动时每帧都要重算，跟原版比就是白白多出来的开销
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
@@ -9032,7 +9041,7 @@ index 9606588..73b9018 100644
 +        list.remove(moving)
 +        val target = list.indexOfFirst { it.id == toId }
 +        if (target >= 0) list.add(target, moving) else list.add(moving)
-+        onUpdate(list)
++        dragList = list
      }
      val editState = useEditState<PromptInjection.ModeInjection> { edited ->
 -        val index = modeInjections.indexOfFirst { it.id == edited.id }
@@ -9046,7 +9055,7 @@ index 9606588..73b9018 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -233,25 +269,45 @@ private fun ModeInjectionTab(
+@@ -233,25 +278,45 @@ private fun ModeInjectionTab(
                      }
                  }
              } else {
@@ -9109,7 +9118,7 @@ index 9606588..73b9018 100644
                  }
              }
          }
-@@ -294,6 +350,45 @@ private fun ModeInjectionTab(
+@@ -294,6 +359,45 @@ private fun ModeInjectionTab(
              )
          }
      }
@@ -9155,7 +9164,7 @@ index 9606588..73b9018 100644
  }
  
  @Composable
-@@ -441,6 +536,15 @@ private fun ModeInjectionEditSheet(
+@@ -441,6 +545,15 @@ private fun ModeInjectionEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9171,7 +9180,7 @@ index 9606588..73b9018 100644
                  FormItem(
                      label = { Text(stringResource(R.string.prompt_page_enabled)) },
                      tail = {
-@@ -579,24 +683,39 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
+@@ -579,24 +692,46 @@ private fun getRoleLabel(role: MessageRole): String = when (role) {
  @Composable
  private fun LorebookTab(
      lorebooks: List<Lorebook>,
@@ -9187,7 +9196,14 @@ index 9606588..73b9018 100644
 +
 +    // ---- 分组：跟「模式注入」同一套逻辑（组头折叠 + 长按改名）----
 +    var renameTarget by remember { mutableStateOf<String?>(null) }
-+    val workingList = lorebooks
++    var dragList by remember { mutableStateOf<List<Lorebook>?>(null) }
++    val workingList = dragList ?: lorebooks
++    LaunchedEffect(dragList) {
++        val pending = dragList ?: return@LaunchedEffect
++        delay(700)
++        onUpdate(pending)
++        dragList = null
++    }
 +    val grouped = remember(workingList) { workingList.groupBy { it.folder } }
 +    val orderedFolders = remember(grouped) {
 +        grouped.keys.sortedBy { if (it.isBlank()) 1 else 0 }
@@ -9205,7 +9221,7 @@ index 9606588..73b9018 100644
 +        list.remove(moving)
 +        val target = list.indexOfFirst { it.id == toId }
 +        if (target >= 0) list.add(target, moving) else list.add(moving)
-+        onUpdate(list)
++        dragList = list
      }
      val editState = useEditState<Lorebook> { edited ->
 -        val index = lorebooks.indexOfFirst { it.id == edited.id }
@@ -9219,7 +9235,7 @@ index 9606588..73b9018 100644
          }
      }
      val importSuccessMsg = stringResource(R.string.export_import_success)
-@@ -645,25 +764,44 @@ private fun LorebookTab(
+@@ -645,25 +780,44 @@ private fun LorebookTab(
                      }
                  }
              } else {
@@ -9281,7 +9297,7 @@ index 9606588..73b9018 100644
                  }
              }
          }
-@@ -706,6 +844,45 @@ private fun LorebookTab(
+@@ -706,6 +860,45 @@ private fun LorebookTab(
              )
          }
      }
@@ -9327,7 +9343,7 @@ index 9606588..73b9018 100644
  }
  
  @Composable
-@@ -872,6 +1049,15 @@ private fun LorebookEditSheet(
+@@ -872,6 +1065,15 @@ private fun LorebookEditSheet(
                      modifier = Modifier.fillMaxWidth()
                  )
  
@@ -9343,7 +9359,7 @@ index 9606588..73b9018 100644
                  OutlinedTextField(
                      value = book.description,
                      onValueChange = { onEdit(book.copy(description = it)) },
-@@ -1192,3 +1378,56 @@ private fun RegexInjectionEditDialog(
+@@ -1192,3 +1394,56 @@ private fun RegexInjectionEditDialog(
          }
      )
  }
